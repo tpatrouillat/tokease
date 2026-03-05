@@ -14,18 +14,19 @@
 set -euo pipefail
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+BANNER="================================================"
 VENV_DIR="$SCRIPT_DIR/venv"
 LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
 LAUNCH_AGENT_PLIST="$LAUNCH_AGENT_DIR/com.claude-usage-tracker.plist"
 
-echo "================================================"
+echo "$BANNER"
 echo "   Claude Usage Tracker — Installation"
-echo "================================================"
+echo "$BANNER"
 echo ""
 
 # --- Python check -----------------------------------------------------------
 if ! command -v python3 &>/dev/null; then
-    echo "Error: Python 3 is required but not installed."
+    echo "Error: Python 3 is required but not installed." >&2
     exit 1
 fi
 echo "Found $(python3 --version)"
@@ -49,9 +50,9 @@ echo "If you haven't yet, run:  claude login"
 echo ""
 
 # --- LaunchAgent (auto-start) -----------------------------------------------
-echo "================================================"
+echo "$BANNER"
 echo "   Auto-Start Setup"
-echo "================================================"
+echo "$BANNER"
 echo ""
 read -r -p "Start the tracker automatically at login? (y/n): " auto_start
 
@@ -93,9 +94,9 @@ fi
 
 # --- Done -------------------------------------------------------------------
 echo ""
-echo "================================================"
+echo "$BANNER"
 echo "   Installation Complete"
-echo "================================================"
+echo "$BANNER"
 echo ""
 echo "To start manually:"
 echo "  \"$VENV_DIR/bin/python\" \"$SCRIPT_DIR/tracker.py\""

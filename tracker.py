@@ -44,6 +44,7 @@ INTERVALS = {
 }
 
 CENTS_PER_DOLLAR = 100
+EXTRA_DEFAULT = "Extra: --"
 
 # ---------------------------------------------------------------------------
 # Security: block HTTP redirects to prevent Bearer token leaking to other
@@ -105,7 +106,7 @@ def get_usage():
             return None, "auth"
     except subprocess.TimeoutExpired:
         return None, "error"
-    except (OSError, json.JSONDecodeError, ValueError):
+    except (OSError, json.JSONDecodeError):
         return None, "error"
 
     # --- Step 2: call the usage API ----------------------------------------
@@ -134,7 +135,7 @@ def get_usage():
         if exc.code == 403:
             return None, "plan"
         return None, "error"
-    except (urllib.error.URLError, json.JSONDecodeError, ValueError, OSError):
+    except (urllib.error.URLError, json.JSONDecodeError, OSError):
         return None, "error"
     finally:
         # Clear token and request object (which holds the Authorization header)
@@ -187,7 +188,7 @@ class App(rumps.App):
         self.m5h  = rumps.MenuItem("5-hour: ...")
         self.m7d  = rumps.MenuItem("Weekly: ...")
         self.mson = rumps.MenuItem("Sonnet: ...")
-        self.mext = rumps.MenuItem("Extra: --")
+        self.mext = rumps.MenuItem(EXTRA_DEFAULT)
         self.mupd = rumps.MenuItem("Updated: --")
 
         # Interval submenu
@@ -251,7 +252,7 @@ class App(rumps.App):
             self.m5h.title  = "Run: claude login"
             self.m7d.title  = "Weekly: --"
             self.mson.title = "Sonnet: --"
-            self.mext.title = "Extra: --"
+            self.mext.title = EXTRA_DEFAULT
             return
 
         if err == "rate":
@@ -306,7 +307,7 @@ class App(rumps.App):
             pct   = _safe_int(e.get("utilization"))
             self.mext.title = f"Extra: ${used:.2f}/${limit:.0f} ({pct}%)"
         else:
-            self.mext.title = "Extra: --"
+            self.mext.title = EXTRA_DEFAULT
 
         self.mupd.title = f"Updated: {datetime.now().strftime('%H:%M')}"
 
