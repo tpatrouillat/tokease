@@ -135,7 +135,7 @@ def get_usage():
         if exc.code == 403:
             return None, "plan"
         return None, "error"
-    except (urllib.error.URLError, json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, OSError):
         return None, "error"
     finally:
         # Clear token and request object (which holds the Authorization header)
