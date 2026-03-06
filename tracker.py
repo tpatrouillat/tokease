@@ -81,19 +81,15 @@ def _safe_int(val, default=0):
 # Data fetching
 # ---------------------------------------------------------------------------
 
-def get_usage():
+def _read_keychain_token():
     """
-    Fetch subscription usage from the Anthropic OAuth usage endpoint.
+    Read the Claude Code OAuth token from the macOS Keychain.
 
     Returns:
-        (dict, None)     on success
-        (None, "auth")   when the token is missing or expired (HTTP 401)
-        (None, "plan")   when the subscription plan lacks access (HTTP 403)
-        (None, "rate")   when rate-limited (HTTP 429)
-        (None, "error")  on any other failure
+        (str, None)      token on success
+        (None, "auth")   when the token is missing or keychain entry not found
+        (None, "error")  on timeout or OS-level failure
     """
-    # --- Step 1: read token from Keychain -----------------------------------
-    token = None
     try:
         result = subprocess.run(
             ["security", "find-generic-password",
@@ -105,7 +101,6 @@ def get_usage():
         if result.returncode != 0:
             return None, "auth"
         raw = result.stdout.strip()
-        # Immediately clear the subprocess result from this frame
         del result
         # Try full JSON parse first; fall back to regex if the keychain
         # CLI truncates the blob (macOS clips at ~2 KB).
@@ -119,21 +114,35 @@ def get_usage():
         del raw
         if not token:
             return None, "auth"
+        return token, None
     except subprocess.TimeoutExpired:
         return None, "error"
     except OSError:
         return None, "error"
 
-    # --- Step 2: call the usage API ----------------------------------------
+
+def get_usage():
+    """
+    Fetch subscription usage from the Anthropic OAuth usage endpoint.
+
+    Returns:
+        (dict, None)     on success
+        (None, "auth")   when the token is missing or expired (HTTP 401)
+        (None, "plan")   when the subscription plan lacks access (HTTP 403)
+        (None, "rate")   when rate-limited (HTTP 429)
+        (None, "error")  on any other failure
+    """
+    token, err = _read_keychain_token()
+    if err:
+        return None, err
+
     req = None
     try:
         req = urllib.request.Request(
             "https://api.anthropic.com/api/oauth/usage",
             headers={
                 "Authorization": f"Bearer {token}",
-                # Required header for this beta endpoint
                 "anthropic-beta": "oauth-2025-04-20",
-                # Matches Claude Code's own UA; required by the undocumented endpoint
                 "User-Agent": "claude-code/2.1.34",
             },
         )
@@ -153,8 +162,6 @@ def get_usage():
     except (json.JSONDecodeError, OSError):
         return None, "error"
     finally:
-        # Clear token and request object (which holds the Authorization header)
-        # from the local frame so they can't leak through tracebacks.
         token = None
         req = None
 

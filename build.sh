@@ -13,14 +13,15 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$SCRIPT_DIR"
 
 VENV_DIR="$SCRIPT_DIR/venv"
+BANNER="================================================"
 
-echo "================================================"
+echo "$BANNER"
 echo "   Claude Usage Tracker — Build"
-echo "================================================"
+echo "$BANNER"
 echo ""
 
 # --- Ensure venv exists ---
-if [ ! -d "$VENV_DIR" ]; then
+if [[ ! -d "$VENV_DIR" ]]; then
     echo "Creating virtual environment..."
     python3 -m venv "$VENV_DIR"
 fi
@@ -39,13 +40,13 @@ echo "Building .app bundle..."
 "$VENV_DIR/bin/python" setup.py py2app 2>&1 | tail -5
 
 echo ""
-echo "================================================"
+echo "$BANNER"
 echo "   Build Complete"
-echo "================================================"
+echo "$BANNER"
 echo ""
 
 APP_PATH="dist/Claude Usage Tracker.app"
-if [ -d "$APP_PATH" ]; then
+if [[ -d "$APP_PATH" ]]; then
     echo "App:  $APP_PATH"
     echo "Size: $(du -sh "$APP_PATH" | cut -f1)"
     echo ""
