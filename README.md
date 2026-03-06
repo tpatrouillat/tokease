@@ -1,0 +1,89 @@
+# Claude Usage Tracker
+
+A lightweight macOS menu bar app that shows your Claude Code API usage in real time. Know your limits before you hit them.
+
+![Claude Usage Tracker screenshot](docs/screenshot.png)
+
+## Features
+
+- **Real-time usage** — 5-hour session, weekly, and Sonnet limits at a glance
+- **Extra usage tracking** — see paid overage spend if enabled
+- **Zero config** — reads your existing Claude Code OAuth token from the macOS Keychain
+- **Lightweight** — pure Python, single dependency (`rumps`), minimal resource usage
+- **Auto-refresh** — configurable interval from 1 minute to 1 hour
+- **Secure** — token never stored in memory longer than needed, no data collection
+
+## Prerequisites
+
+- **macOS** (menu bar app using `rumps`)
+- **Python 3.10+**
+- **Claude Code** installed and logged in (`claude login`)
+- **Claude Pro or Max** subscription (the usage API requires a paid plan)
+
+## Quick Install
+
+```bash
+git clone https://github.com/tpatrouillat/claude-usage-tracker.git
+cd claude-usage-tracker
+bash install.sh
+```
+
+The install script will:
+1. Create a Python virtual environment and install dependencies
+2. Optionally set up a macOS LaunchAgent for auto-start at login
+3. Optionally launch the app immediately
+
+## Manual Install
+
+```bash
+git clone https://github.com/tpatrouillat/claude-usage-tracker.git
+cd claude-usage-tracker
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+venv/bin/python tracker.py
+```
+
+## How It Works
+
+1. Reads Claude Code's OAuth token from the macOS Keychain (`Claude Code-credentials`)
+2. Calls Anthropic's usage endpoint (`/api/oauth/usage`) with Bearer authentication
+3. Displays utilization percentages and reset countdowns in the menu bar
+
+The menu bar shows your current 5-hour session usage. Click it to see weekly limits, Sonnet limits, extra usage, and more.
+
+## Security
+
+- **No data collection** — the app runs entirely on your machine
+- **Token handling** — the OAuth token is read from the Keychain, used for a single API call, then immediately cleared from memory
+- **No redirects** — HTTP redirects are blocked to prevent the Bearer token from leaking to other domains
+- **No secrets stored** — no config files, no `.env`, no credentials on disk
+- **Open source** — audit the code yourself: it's a single `tracker.py` file
+
+## Running Tests
+
+```bash
+venv/bin/python -m pytest tests/ -v
+```
+
+Tests cover token retrieval, API response parsing, time formatting, and display logic using mocked data (no real API calls).
+
+## Contributing
+
+Contributions are welcome! Here's how:
+
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Make your changes
+4. Run the tests (`venv/bin/python -m pytest tests/ -v`)
+5. Commit and push
+6. Open a Pull Request
+
+Please keep the codebase minimal — this is intentionally a small, focused tool.
+
+## License
+
+[MIT](LICENSE) — Thibault Patrouillat
+
+## Disclaimer
+
+This project is not affiliated with, endorsed by, or sponsored by Anthropic. It uses an undocumented API endpoint that may change without notice. Use at your own risk.
