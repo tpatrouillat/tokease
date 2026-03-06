@@ -57,7 +57,7 @@ class FakeApp:
         self.menu = {}
 
     def run(self):
-        pass
+        """No-op: tests never start the rumps event loop."""
 
 
 fake_rumps = MagicMock()
@@ -244,6 +244,7 @@ class TestGetUsageKeychain(unittest.TestCase):
         data, err = tracker.get_usage()
         self.assertIsNone(data)
         self.assertEqual(err, "auth")
+        self.assertNotEqual(err, "error", "Empty token is auth, not generic error")
 
     @patch("tracker.subprocess.run", return_value=_keychain_bad_json())
     def test_bad_json_no_token(self, _):
@@ -281,6 +282,7 @@ class TestGetUsageKeychain(unittest.TestCase):
         data, err = tracker.get_usage()
         self.assertIsNone(data)
         self.assertEqual(err, "error")
+        self.assertNotEqual(err, "auth", "OSError is generic error, not auth")
 
 
 # ---------------------------------------------------------------------------
