@@ -44,6 +44,11 @@ INTERVALS = {
 }
 
 CENTS_PER_DOLLAR = 100
+
+# Default menu item text (extracted to avoid string duplication)
+FIVE_HOUR_DEFAULT = "5-hour: --"
+WEEKLY_DEFAULT = "Weekly: --"
+SONNET_DEFAULT = "Sonnet: --"
 EXTRA_DEFAULT = "Extra: --"
 
 # ---------------------------------------------------------------------------
@@ -250,8 +255,8 @@ class App(rumps.App):
         if err == "auth":
             self.title = "↩ Login"
             self.m5h.title  = "Run: claude login"
-            self.m7d.title  = "Weekly: --"
-            self.mson.title = "Sonnet: --"
+            self.m7d.title  = WEEKLY_DEFAULT
+            self.mson.title = SONNET_DEFAULT
             self.mext.title = EXTRA_DEFAULT
             return
 
@@ -271,33 +276,33 @@ class App(rumps.App):
 
         self._update_display(data)
 
+    @staticmethod
+    def _fmt_utilization(label, section):
+        """Format a utilization section as 'Label: N% (resets ...)'."""
+        pct = _safe_int(section.get("utilization"))
+        return f"{label}: {pct}% (resets {fmt_reset(section.get('resets_at'))})", pct
+
     def _update_display(self, data):
-        # 5-hour session
+        # 5-hour session (also drives the menu bar title)
         if h := data.get("five_hour"):
-            p = _safe_int(h.get("utilization"))
-            self.title     = f"{p}%"
-            self.m5h.title = f"5-hour: {p}% (resets {fmt_reset(h.get('resets_at'))})"
+            text, pct = self._fmt_utilization("5-hour", h)
+            self.title = f"{pct}%"
+            self.m5h.title = text
         else:
-            self.title     = "0%"
-            self.m5h.title = "5-hour: --"
+            self.title = "0%"
+            self.m5h.title = FIVE_HOUR_DEFAULT
 
         # 7-day
         if d := data.get("seven_day"):
-            self.m7d.title = (
-                f"Weekly: {_safe_int(d.get('utilization'))}%"
-                f" (resets {fmt_reset(d.get('resets_at'))})"
-            )
+            self.m7d.title, _ = self._fmt_utilization("Weekly", d)
         else:
-            self.m7d.title = "Weekly: --"
+            self.m7d.title = WEEKLY_DEFAULT
 
         # Sonnet weekly
         if s := data.get("seven_day_sonnet"):
-            self.mson.title = (
-                f"Sonnet: {_safe_int(s.get('utilization'))}%"
-                f" (resets {fmt_reset(s.get('resets_at'))})"
-            )
+            self.mson.title, _ = self._fmt_utilization("Sonnet", s)
         else:
-            self.mson.title = "Sonnet: --"
+            self.mson.title = SONNET_DEFAULT
 
         # Extra (paid overage)
         e = data.get("extra_usage")
