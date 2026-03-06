@@ -1,0 +1,707 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="A lightweight macOS menu bar app that shows your Claude Code API usage in real time.">
+    <title>Claude Usage Tracker — Know your limits before you hit them</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            --purple: #a855f7;
+            --purple-dim: #7c3aed;
+            --purple-deep: #6d28d9;
+            --purple-glow: rgba(168, 85, 247, 0.12);
+            --bg: #09090b;
+            --surface: #141418;
+            --surface-2: #1c1c22;
+            --border: #27272a;
+            --border-light: #3f3f46;
+            --text: #fafafa;
+            --text-dim: #a1a1aa;
+            --text-muted: #71717a;
+            --radius: 16px;
+            --radius-sm: 10px;
+            --max-w: 1080px;
+        }
+
+        html { scroll-behavior: smooth; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.6;
+            -webkit-font-smoothing: antialiased;
+            overflow-x: hidden;
+        }
+
+        a { color: var(--purple); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        a:focus-visible, button:focus-visible {
+            outline: 2px solid var(--purple);
+            outline-offset: 2px;
+        }
+
+        code {
+            font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', ui-monospace, monospace;
+            background: var(--surface-2);
+            padding: 0.15em 0.4em;
+            border-radius: 5px;
+            font-size: 0.85em;
+        }
+
+        /* --- Nav ---------------------------------------------------------- */
+        nav {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background: rgba(9, 9, 11, 0.8);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid var(--border);
+        }
+        .nav-inner {
+            max-width: var(--max-w);
+            margin: 0 auto;
+            padding: 0.75rem 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        .nav-brand {
+            font-weight: 700;
+            font-size: 1.05rem;
+            color: var(--text);
+            white-space: nowrap;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .nav-brand svg { flex-shrink: 0; }
+        .nav-links { display: flex; align-items: center; gap: 1.25rem; }
+        .nav-links a { color: var(--text-dim); font-size: 0.9rem; }
+        .nav-links a:hover { color: var(--text); text-decoration: none; }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.5rem 1.15rem;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            font-weight: 600;
+            border: none;
+            cursor: pointer;
+            transition: all 0.15s;
+            white-space: nowrap;
+            text-decoration: none;
+        }
+        .btn:hover { text-decoration: none; }
+        .btn:active { transform: scale(0.97); }
+        .btn-primary {
+            background: var(--purple);
+            color: #fff;
+            box-shadow: 0 0 20px rgba(168, 85, 247, 0.25);
+        }
+        .btn-primary:hover { background: var(--purple-dim); }
+        .btn-ghost {
+            background: transparent;
+            color: var(--text-dim);
+            border: 1px solid var(--border);
+        }
+        .btn-ghost:hover { background: var(--surface); color: var(--text); }
+
+        /* --- Hero --------------------------------------------------------- */
+        .hero-wrap {
+            position: relative;
+            overflow: hidden;
+        }
+        .hero-glow {
+            position: absolute;
+            top: -200px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 800px;
+            height: 500px;
+            background: radial-gradient(ellipse at center, rgba(168, 85, 247, 0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .hero {
+            position: relative;
+            max-width: var(--max-w);
+            margin: 0 auto;
+            padding: 6rem 1.5rem 5rem;
+            text-align: center;
+        }
+        .hero-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.35rem 0.85rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 100px;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            margin-bottom: 1.75rem;
+        }
+        .hero-badge span { color: var(--purple); font-weight: 600; }
+        .hero h1 {
+            font-size: clamp(2.25rem, 5.5vw, 3.5rem);
+            font-weight: 800;
+            line-height: 1.1;
+            letter-spacing: -0.03em;
+            margin-bottom: 1.25rem;
+        }
+        .hero h1 .highlight {
+            background: linear-gradient(135deg, var(--purple) 0%, #c084fc 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        .hero > p {
+            font-size: 1.15rem;
+            color: var(--text-dim);
+            max-width: 520px;
+            margin: 0 auto 3rem;
+            line-height: 1.7;
+        }
+
+        /* macOS-style menu bar mockup */
+        .mockup-wrapper {
+            display: inline-block;
+            position: relative;
+        }
+
+        /* The fake menu bar strip */
+        .menubar {
+            display: inline-flex;
+            align-items: center;
+            gap: 1rem;
+            padding: 0.35rem 1rem;
+            background: rgba(38, 38, 42, 0.95);
+            border-radius: 8px 8px 0 0;
+            font-size: 0.75rem;
+            color: var(--text-dim);
+            font-weight: 500;
+            letter-spacing: 0.01em;
+            user-select: none;
+            justify-content: flex-end;
+            width: 280px;
+        }
+        .menubar-active {
+            color: var(--text);
+            font-weight: 700;
+            font-size: 0.85rem;
+        }
+        .menubar-dots { letter-spacing: 0.15em; }
+
+        /* The dropdown */
+        .dropdown {
+            width: 280px;
+            background: rgba(38, 38, 42, 0.95);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border-radius: 0 0 10px 10px;
+            padding: 0.25rem 0;
+            text-align: left;
+            font-size: 0.8125rem;
+            font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+            box-shadow: 0 12px 48px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.05);
+            user-select: none;
+        }
+        .dd-item {
+            padding: 0.25rem 0.85rem;
+            color: var(--text);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+        .dd-item.muted { color: var(--text-muted); font-size: 0.75rem; }
+        .dd-sep {
+            height: 1px;
+            background: rgba(255,255,255,0.08);
+            margin: 0.25rem 0.5rem;
+        }
+        .dd-pct { color: var(--purple); font-weight: 600; }
+        .dd-shortcut { color: var(--text-muted); font-size: 0.7rem; }
+        .dd-chevron { color: var(--text-muted); font-size: 0.65rem; }
+
+        /* Glow ring behind mockup */
+        .mockup-glow {
+            position: absolute;
+            inset: -30px;
+            background: radial-gradient(ellipse at center, rgba(168, 85, 247, 0.08) 0%, transparent 60%);
+            border-radius: 50%;
+            pointer-events: none;
+            z-index: -1;
+        }
+
+        /* --- Divider ------------------------------------------------------ */
+        .divider {
+            max-width: var(--max-w);
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+        .divider hr {
+            border: none;
+            height: 1px;
+            background: var(--border);
+        }
+
+        /* --- Sections ----------------------------------------------------- */
+        section {
+            max-width: var(--max-w);
+            margin: 0 auto;
+            padding: 5rem 1.5rem;
+        }
+        .section-header {
+            text-align: center;
+            margin-bottom: 3rem;
+        }
+        .section-label {
+            display: inline-block;
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.1em;
+            color: var(--purple);
+            margin-bottom: 0.75rem;
+        }
+        .section-title {
+            font-size: 2rem;
+            font-weight: 700;
+            letter-spacing: -0.02em;
+            margin-bottom: 0.5rem;
+        }
+        .section-sub {
+            color: var(--text-dim);
+            font-size: 1.05rem;
+        }
+
+        /* --- Features ----------------------------------------------------- */
+        .features {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.25rem;
+        }
+        .card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 2rem 1.5rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+        .card:hover {
+            border-color: var(--purple-dim);
+            box-shadow: 0 0 32px rgba(168, 85, 247, 0.06);
+        }
+        .card-icon {
+            width: 44px;
+            height: 44px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--purple-glow);
+            border: 1px solid rgba(168, 85, 247, 0.15);
+            border-radius: 12px;
+            margin-bottom: 1rem;
+            color: var(--purple);
+        }
+        .card h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 0.5rem;
+        }
+        .card p {
+            color: var(--text-dim);
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+
+        /* --- Steps -------------------------------------------------------- */
+        .steps {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.25rem;
+            counter-reset: step;
+        }
+        .step {
+            position: relative;
+            padding: 2rem 1.5rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+        }
+        .step-num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 32px;
+            height: 32px;
+            background: linear-gradient(135deg, var(--purple), var(--purple-deep));
+            color: #fff;
+            border-radius: 50%;
+            font-size: 0.85rem;
+            font-weight: 700;
+            margin-bottom: 1rem;
+        }
+        .step h3 { font-size: 1.05rem; font-weight: 600; margin-bottom: 0.4rem; }
+        .step p { color: var(--text-dim); font-size: 0.9rem; line-height: 1.6; }
+
+        /* --- Install ------------------------------------------------------ */
+        #install { padding-bottom: 4rem; }
+        .install-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+            padding: 2.5rem 2rem;
+            max-width: 780px;
+            margin: 0 auto;
+            text-align: center;
+        }
+        .install-card h3 {
+            font-size: 1.15rem;
+            font-weight: 600;
+            margin-bottom: 0.4rem;
+        }
+        .install-card > p {
+            color: var(--text-dim);
+            font-size: 0.9rem;
+            margin-bottom: 1.5rem;
+        }
+        .install-box {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            padding: 1rem 1.25rem;
+            position: relative;
+        }
+        .install-lines {
+            font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+            font-size: 0.8rem;
+            line-height: 1.8;
+            color: var(--text);
+            text-align: left;
+        }
+        .install-lines .prompt {
+            color: var(--text-muted);
+            user-select: none;
+        }
+        .install-lines .cmd { color: var(--purple); }
+        .install-lines .arg { color: var(--text); }
+        .copy-btn {
+            position: absolute;
+            top: 0.75rem;
+            right: 0.75rem;
+            background: var(--surface-2);
+            color: var(--text-dim);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.3rem 0.7rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+            min-width: 50px;
+            transition: all 0.15s;
+            font-family: inherit;
+        }
+        .copy-btn:hover { background: var(--border); color: var(--text); }
+        .copy-btn.copied {
+            background: rgba(34, 197, 94, 0.15);
+            color: #22c55e;
+            border-color: rgba(34, 197, 94, 0.3);
+        }
+
+        /* --- Privacy ------------------------------------------------------ */
+        .privacy-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.25rem;
+        }
+        .privacy-item {
+            padding: 1.5rem;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: var(--radius);
+        }
+        .privacy-icon {
+            width: 36px;
+            height: 36px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: var(--surface-2);
+            border-radius: 8px;
+            margin-bottom: 0.75rem;
+            color: var(--text-dim);
+        }
+        .privacy-item h3 {
+            font-size: 1rem;
+            font-weight: 600;
+            margin-bottom: 0.35rem;
+        }
+        .privacy-item p {
+            color: var(--text-dim);
+            font-size: 0.875rem;
+            line-height: 1.6;
+        }
+
+        /* --- Footer ------------------------------------------------------- */
+        footer {
+            border-top: 1px solid var(--border);
+            padding: 2.5rem 1.5rem;
+            text-align: center;
+            color: var(--text-muted);
+            font-size: 0.825rem;
+        }
+        footer a { color: var(--text-dim); }
+        footer a:hover { color: var(--text); }
+        .footer-inner {
+            max-width: var(--max-w);
+            margin: 0 auto;
+        }
+        .footer-links {
+            display: flex;
+            justify-content: center;
+            gap: 2rem;
+            margin-bottom: 1rem;
+        }
+
+        /* --- Responsive --------------------------------------------------- */
+        @media (max-width: 768px) {
+            .hero { padding: 4rem 1.25rem 3.5rem; }
+            section { padding: 3.5rem 1.25rem; }
+            .features, .steps, .privacy-grid {
+                grid-template-columns: 1fr;
+            }
+            .menubar, .dropdown { width: 260px; }
+            .install-lines { font-size: 0.72rem; }
+            .install-box { padding-right: 1rem; }
+            .nav-links .hide-mobile { display: none; }
+        }
+
+        @media (min-width: 769px) and (max-width: 1024px) {
+            .features, .steps, .privacy-grid {
+                grid-template-columns: repeat(2, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+
+<!-- Nav -->
+<nav aria-label="Main navigation">
+    <div class="nav-inner">
+        <span class="nav-brand">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+                <rect width="20" height="20" rx="5" fill="#a855f7" fill-opacity="0.15"/>
+                <path d="M10 4.5C7 4.5 5 7 5 10s2 5.5 5 5.5 5-3 5-5.5-2-5.5-5-5.5z" stroke="#a855f7" stroke-width="1.5" fill="none"/>
+                <circle cx="10" cy="10" r="2" fill="#a855f7"/>
+            </svg>
+            Claude Usage Tracker
+        </span>
+        <div class="nav-links">
+            <a href="#features" class="hide-mobile">Features</a>
+            <a href="#how-it-works" class="hide-mobile">How it works</a>
+            <a href="https://github.com/tpatrouillat/claude-usage-tracker" class="btn btn-ghost" aria-label="View on GitHub">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.01 8.01 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+                GitHub
+            </a>
+            <a href="#install" class="btn btn-primary">Install</a>
+        </div>
+    </div>
+</nav>
+
+<!-- Hero -->
+<div class="hero-wrap">
+    <div class="hero-glow" aria-hidden="true"></div>
+    <header class="hero">
+        <div class="hero-badge">
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M7 1l1.76 3.57L12.5 5.3l-2.75 2.68.65 3.78L7 10l-3.4 1.76.65-3.78L1.5 5.3l3.74-.73L7 1z" fill="#a855f7"/></svg>
+            <span>Open source</span> &mdash; free for Claude Pro &amp; Max users
+        </div>
+        <h1>Know your Claude Code<br><span class="highlight">limits before you hit them</span></h1>
+        <p>A tiny macOS menu bar app that shows your 5-hour, weekly, and Sonnet usage in real time. Zero config, open source.</p>
+
+        <!-- macOS menu bar mockup -->
+        <div class="mockup-wrapper">
+            <div class="mockup-glow" aria-hidden="true"></div>
+            <div role="img" aria-label="Preview of the Claude Usage Tracker showing 77% usage in the macOS menu bar with a dropdown displaying session, weekly, and Sonnet limits with reset timers">
+                <div class="menubar">
+                    <span class="menubar-active">77%</span>
+                    <span>TP</span>
+                    <span class="menubar-dots">...</span>
+                    <span>68&#176;F</span>
+                    <span>100%</span>
+                </div>
+                <div class="dropdown">
+                    <div class="dd-item">5-hour: <span class="dd-pct">77%</span>&nbsp; (resets 25m)</div>
+                    <div class="dd-item">Weekly: <span class="dd-pct">35%</span>&nbsp; (resets Feb 13)</div>
+                    <div class="dd-item">Sonnet: <span class="dd-pct">16%</span>&nbsp; (resets 19h 25m)</div>
+                    <div class="dd-sep"></div>
+                    <div class="dd-item">Extra: $8.47/$20 (42%)</div>
+                    <div class="dd-sep"></div>
+                    <div class="dd-item muted">Updated: 14:34</div>
+                    <div class="dd-item">Refresh <span class="dd-shortcut">&#8984;R</span></div>
+                    <div class="dd-sep"></div>
+                    <div class="dd-item">Refresh Interval <span class="dd-chevron">&#9656;</span></div>
+                    <div class="dd-sep"></div>
+                    <div class="dd-item">Quit <span class="dd-shortcut">&#8984;Q</span></div>
+                </div>
+            </div>
+        </div>
+    </header>
+</div>
+
+<!-- Features -->
+<div class="divider" aria-hidden="true"><hr></div>
+<section id="features">
+    <div class="section-header">
+        <div class="section-label">Features</div>
+        <h2 class="section-title">Everything you need, nothing you don't</h2>
+        <p class="section-sub">Built to do one thing really well.</p>
+    </div>
+    <div class="features">
+        <article class="card">
+            <div class="card-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2v4m0 10v4m-9-9h4m10 0h4m-3.36-6.36l-2.83 2.83m-5.62 5.62l-2.83 2.83m0-11.28l2.83 2.83m5.62 5.62l2.83 2.83" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </div>
+            <h3>Real-time tracking</h3>
+            <p>See your 5-hour session, weekly, and Sonnet limits plus paid overage spend — all from the menu bar.</p>
+        </article>
+        <article class="card">
+            <div class="card-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M9 11l2 2 4-4m-4-6a9 9 0 110 18 9 9 0 010-18z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h3>Zero config</h3>
+            <p>Reads your existing Claude Code OAuth token from the macOS Keychain. No API keys, no setup files.</p>
+        </article>
+        <article class="card">
+            <div class="card-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M13 3l-2 7h6l-6 9 2-7H7l6-9z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h3>Lightweight</h3>
+            <p>Single Python file, one dependency. Minimal CPU and memory. Runs quietly in the background.</p>
+        </article>
+    </div>
+</section>
+
+<!-- How it works -->
+<div class="divider" aria-hidden="true"><hr></div>
+<section id="how-it-works">
+    <div class="section-header">
+        <div class="section-label">Setup</div>
+        <h2 class="section-title">Up and running in under a minute</h2>
+        <p class="section-sub">Three steps. No account needed.</p>
+    </div>
+    <div class="steps">
+        <div class="step">
+            <div class="step-num" aria-hidden="true">1</div>
+            <h3>Log in to Claude Code</h3>
+            <p>Run <code>claude login</code> in your terminal. This stores your OAuth token in the macOS Keychain.</p>
+        </div>
+        <div class="step">
+            <div class="step-num" aria-hidden="true">2</div>
+            <h3>Install the tracker</h3>
+            <p>Clone the repo and run <code>bash install.sh</code>. It sets up a virtualenv and optionally auto-starts at login.</p>
+        </div>
+        <div class="step">
+            <div class="step-num" aria-hidden="true">3</div>
+            <h3>See your usage</h3>
+            <p>The tracker appears in your menu bar showing your current usage percentage. Click to see the full breakdown.</p>
+        </div>
+    </div>
+</section>
+
+<!-- Install -->
+<div class="divider" aria-hidden="true"><hr></div>
+<section id="install">
+    <div class="section-header">
+        <div class="section-label">Install</div>
+        <h2 class="section-title">One command to get started</h2>
+        <p class="section-sub">Requires macOS, Python 3.10+, and Claude Code logged in.</p>
+    </div>
+    <div class="install-card">
+        <h3>Quick install</h3>
+        <p>Clone, install dependencies, and launch:</p>
+        <div class="install-box">
+            <div class="install-lines" id="install-cmd">
+                <div><span class="prompt">$ </span><span class="cmd">git clone</span> <span class="arg">https://github.com/tpatrouillat/claude-usage-tracker.git</span></div>
+                <div><span class="prompt">$ </span><span class="cmd">cd</span> <span class="arg">claude-usage-tracker</span></div>
+                <div><span class="prompt">$ </span><span class="cmd">bash</span> <span class="arg">install.sh</span></div>
+            </div>
+            <button class="copy-btn" id="copyBtn" aria-label="Copy install command to clipboard">Copy</button>
+        </div>
+    </div>
+</section>
+
+<!-- Privacy & Security -->
+<div class="divider" aria-hidden="true"><hr></div>
+<section id="privacy">
+    <div class="section-header">
+        <div class="section-label">Privacy &amp; Security</div>
+        <h2 class="section-title">Your data stays on your machine</h2>
+        <p class="section-sub">No accounts, no telemetry, no data leaves your Mac.</p>
+    </div>
+    <div class="privacy-grid">
+        <div class="privacy-item">
+            <div class="privacy-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1.5L2.25 5.25v4.5c0 3.94 2.88 7.62 6.75 8.25 3.87-.63 6.75-4.31 6.75-8.25v-4.5L9 1.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
+            </div>
+            <h3>No data collection</h3>
+            <p>The app runs 100% locally. No analytics, no telemetry, no phone home. Ever.</p>
+        </div>
+        <div class="privacy-item">
+            <div class="privacy-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M12.75 8.25V6a3.75 3.75 0 10-7.5 0v2.25m-1.5 0h10.5a1.5 1.5 0 011.5 1.5v5.25a1.5 1.5 0 01-1.5 1.5H3.75a1.5 1.5 0 01-1.5-1.5V9.75a1.5 1.5 0 011.5-1.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h3>Safe token handling</h3>
+            <p>Your OAuth token is read from the Keychain, used for one API call, then immediately cleared. HTTP redirects are blocked.</p>
+        </div>
+        <div class="privacy-item">
+            <div class="privacy-icon" aria-hidden="true">
+                <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M6 9l2 2 4-4M3 3h12a1.5 1.5 0 011.5 1.5v9A1.5 1.5 0 0115 15H3a1.5 1.5 0 01-1.5-1.5v-9A1.5 1.5 0 013 3z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+            </div>
+            <h3>Open source</h3>
+            <p>Audit every line. The entire app is a single Python file &mdash; <a href="https://github.com/tpatrouillat/claude-usage-tracker/blob/main/tracker.py">read it on GitHub</a>.</p>
+        </div>
+    </div>
+</section>
+
+<!-- Footer -->
+<footer>
+    <div class="footer-inner">
+        <div class="footer-links">
+            <a href="https://github.com/tpatrouillat/claude-usage-tracker">GitHub</a>
+            <a href="https://github.com/tpatrouillat/claude-usage-tracker/issues">Issues</a>
+            <a href="https://github.com/sponsors/tpatrouillat">Sponsor</a>
+        </div>
+        <p>MIT License &middot; Not affiliated with Anthropic</p>
+    </div>
+</footer>
+
+<script>
+    document.getElementById('copyBtn').addEventListener('click', function() {
+        const cmd = 'git clone https://github.com/tpatrouillat/claude-usage-tracker.git && cd claude-usage-tracker && bash install.sh';
+        const btn = this;
+        navigator.clipboard.writeText(cmd).then(function() {
+            btn.textContent = 'Copied!';
+            btn.classList.add('copied');
+            setTimeout(function() {
+                btn.textContent = 'Copy';
+                btn.classList.remove('copied');
+            }, 2000);
+        }).catch(function() {
+            btn.textContent = 'Failed';
+            setTimeout(function() { btn.textContent = 'Copy'; }, 2000);
+        });
+    });
+</script>
+
+</body>
+</html>

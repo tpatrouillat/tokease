@@ -7,6 +7,7 @@ __pycache__/
 *.egg-info/
 dist/
 build/
+.eggs/
 
 # macOS
 .DS_Store
@@ -18,6 +19,9 @@ build/
 .vscode/
 *.swp
 *.swo
+
+# Claude Code local settings
+.claude/
 
 # Secrets (none used, but just in case)
 .env
