@@ -259,7 +259,7 @@ class App(rumps.App):
 
     def _fetch_and_update(self):
         data, err = get_usage()
-        rumps.Timer(lambda _: self._apply_usage(data, err), 0).start()
+        self._apply_usage(data, err)
 
     def _apply_usage(self, data, err):
         if err == "auth":
