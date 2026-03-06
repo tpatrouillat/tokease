@@ -25,6 +25,7 @@ Security notes:
 """
 
 import json
+import re
 import subprocess
 import threading
 import urllib.error
@@ -103,15 +104,24 @@ def get_usage():
         )
         if result.returncode != 0:
             return None, "auth"
-        creds = json.loads(result.stdout.strip())
-        token = creds.get("claudeAiOauth", {}).get("accessToken")
-        # Immediately clear the full credentials blob from this frame
-        del result, creds
+        raw = result.stdout.strip()
+        # Immediately clear the subprocess result from this frame
+        del result
+        # Try full JSON parse first; fall back to regex if the keychain
+        # CLI truncates the blob (macOS clips at ~2 KB).
+        try:
+            creds = json.loads(raw)
+            token = creds.get("claudeAiOauth", {}).get("accessToken")
+            del creds
+        except json.JSONDecodeError:
+            m = re.search(r'"accessToken"\s*:\s*"([^"]+)"', raw)
+            token = m.group(1) if m else None
+        del raw
         if not token:
             return None, "auth"
     except subprocess.TimeoutExpired:
         return None, "error"
-    except (OSError, json.JSONDecodeError):
+    except OSError:
         return None, "error"
 
     # --- Step 2: call the usage API ----------------------------------------
