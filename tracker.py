@@ -45,12 +45,35 @@ INTERVALS = {
 }
 
 CENTS_PER_DOLLAR = 100
+_FALLBACK_UA = "claude-code/2.1.34"
 
 # Default menu item text (extracted to avoid string duplication)
 FIVE_HOUR_DEFAULT = "5-hour: --"
 WEEKLY_DEFAULT = "Weekly: --"
 SONNET_DEFAULT = "Sonnet: --"
 EXTRA_DEFAULT = "Extra: --"
+
+# ---------------------------------------------------------------------------
+# Security: block HTTP redirects to prevent Bearer token leaking to other
+# domains if the API endpoint ever returns a 3xx.
+# ---------------------------------------------------------------------------
+
+def _detect_claude_code_ua():
+    """Detect installed Claude Code version for the User-Agent header."""
+    try:
+        result = subprocess.run(
+            ["claude", "--version"],
+            capture_output=True, text=True, timeout=5,
+        )
+        if result.returncode == 0:
+            version = result.stdout.strip().split()[0]
+            if re.fullmatch(r"\d+\.\d+\.\d+", version):
+                return f"claude-code/{version}"
+    except (OSError, subprocess.TimeoutExpired, IndexError):
+        pass
+    return _FALLBACK_UA
+
+_user_agent = _detect_claude_code_ua()
 
 # ---------------------------------------------------------------------------
 # Security: block HTTP redirects to prevent Bearer token leaking to other
@@ -143,7 +166,7 @@ def get_usage():
             headers={
                 "Authorization": f"Bearer {token}",
                 "anthropic-beta": "oauth-2025-04-20",
-                "User-Agent": "claude-code/2.1.34",
+                "User-Agent": _user_agent,
             },
         )
         with _opener.open(req, timeout=10) as resp:
@@ -155,7 +178,8 @@ def get_usage():
         if exc.code == 401:
             return None, "auth"
         if exc.code == 429:
-            return None, "rate"
+            retry_secs = _safe_int(exc.headers.get("Retry-After")) if exc.headers else 0
+            return {"retry_after": retry_secs}, "rate"
         if exc.code == 403:
             return None, "plan"
         return None, "error"
@@ -279,7 +303,12 @@ class App(rumps.App):
 
         if err == "rate":
             self.title = "⏳"
-            self.m5h.title = "Rate limited — will retry"
+            retry_secs = data.get("retry_after", 0) if isinstance(data, dict) else 0
+            if retry_secs > 0:
+                mins = (retry_secs + 59) // 60
+                self.m5h.title = f"Rate limited — retry in {mins}m"
+            else:
+                self.m5h.title = "Rate limited — will retry"
             return
 
         if err == "plan":
