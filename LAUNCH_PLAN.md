@@ -5,93 +5,98 @@
 
 ---
 
-## Security & Code Audit Summary
+## Current State
 
-**Overall Score: 9.2/10**
+- **67/67 tests passing** (0.38s, Python 3.13.5, pytest 9.0.2)
+- Coverage spans: helpers, API responses, HTTP security, token cleanup, display logic, error states, edge cases
+- All error paths tested (401, 403, 429, 500, timeouts, malformed JSON, truncated keychain)
+- No TODO/FIXME/HACK comments in codebase
 
-### Findings
+---
+
+## Fixes Applied
+
+None required. All tests passed on first run; code review found no issues.
+
+---
+
+## Project Scan Summary
+
+- Python macOS menu bar app using `rumps` framework
+- Single-file design (`tracker.py`, 338 lines)
+- 67 comprehensive unit tests covering all code paths
+- Reads OAuth token from `Claude Code-credentials` macOS Keychain entry
+- Calls undocumented Anthropic API endpoint: `https://api.anthropic.com/api/oauth/usage`
+- Menu bar shows: 5-hour utilization, weekly, Sonnet, extra usage with reset countdowns
+- Configurable refresh intervals (1min, 5min, 30min, 1hr)
+- Background threads prevent UI blocking
+- py2app for standalone `.app` builds
+- LaunchAgent support for auto-start
+
+---
+
+## Security Summary
 
 | Area | Status | Notes |
 |------|--------|-------|
-| Hardcoded secrets | Clean | Token read from macOS Keychain only, cleared in `finally` block |
-| Injection vulnerabilities | Clean | Subprocess uses list args; no `eval()`/`exec()` |
-| HTTP security | Excellent | Custom `_NoRedirectHandler` blocks 3xx to prevent Bearer token leakage |
+| Secrets on disk | Clean | Zero-config design; no `.env` files; token from macOS Keychain only |
+| Token handling | Excellent | Read into local variable, used once, cleared in `finally` block |
+| HTTP redirects | Blocked | Custom `_NoRedirectHandler` prevents Bearer token leaking via 3xx |
 | Input validation | Robust | `_safe_int()` clamps negatives, handles all edge cases |
 | Exception handling | Good | No bare `except:`; specific types only; timeouts on subprocess + HTTP |
 | Dependencies | Minimal | Single runtime dep (`rumps==0.4.0`); no known CVEs |
 | Shell scripts | Safe | `set -euo pipefail`, quoted variables, no injection vectors |
-| Landing page (docs/) | Clean | No XSS; static content only; semantic HTML with ARIA labels |
-
-### Fixes Applied This Session
-
-- **Pinned `rumps` dependency** from `>=0.4.0` to `==0.4.0` for reproducible builds
 
 ---
 
-## Test Results
+## Blocking Issues for Production/Distribution
 
-- **67/67 tests passing** (0.13s)
-- Coverage spans: helpers, API responses, HTTP security, token cleanup, display logic, error states, edge cases
-- All error paths tested (401, 403, 429, 500, timeouts, malformed JSON, truncated keychain)
-
----
-
-## Core Features — Status
-
-| Feature | Status | Notes |
-|---------|--------|-------|
-| OAuth token from Keychain | Done | With regex fallback for truncation |
-| API usage fetching | Done | All HTTP error codes handled |
-| 5-hour utilization display | Done | Drives menu bar title |
-| Weekly utilization display | Done | |
-| Sonnet weekly display | Done | |
-| Extra/overage tracking | Done | Shows $/limit with percentage |
-| Configurable refresh interval | Done | 1m / 5m / 30m / 1h |
-| Manual refresh | Done | |
-| Background threading | Done | Daemon thread, non-blocking |
-| Native .app bundle | Done | py2app build with LaunchAgent |
-| Landing page | Done | Responsive, accessible |
+1. **Undocumented API dependency** — The `/api/oauth/usage` endpoint is not a public Anthropic API. It could change or disappear without notice, breaking the app entirely. There is no fallback data source.
+2. **Hardcoded User-Agent** — Currently set to `claude-code/2.1.34`. If the endpoint begins rejecting outdated User-Agent strings, the app will stop working.
+3. **Code signing** — The `.app` bundle is not signed or notarized. macOS Gatekeeper will block it for users who download it. Requires an Apple Developer account ($99/yr) to resolve.
 
 ---
 
-## Missing / Blocking for Launch
-
-None identified. The app is feature-complete for its scope (macOS menu bar usage tracker).
-
----
-
-## Nice-to-Have Improvements
+## Nice-to-Have Features
 
 | Priority | Feature | Effort |
 |----------|---------|--------|
+| High | **Code signing + notarization** — required for smooth distribution | Medium |
 | Medium | **Rate-limit countdown** — show remaining wait time instead of just "will retry" | Small |
 | Medium | **Notification on high usage** — alert when utilization exceeds threshold (e.g., 80%) | Medium |
-| Low | **User-Agent version sync** — currently hardcoded to `claude-code/2.1.34`; consider auto-detecting | Small |
-| Low | **Pre-commit hooks** — prevent accidental secret commits | Small |
-| Low | **Keyboard shortcut** — add global hotkey to trigger refresh | Small |
-| Low | **Dark mode icon variant** — adaptive menu bar icon for dark/light mode | Small |
+| Medium | **Auto-update mechanism** — check for new versions on GitHub Releases | Medium |
+| Low | **User-Agent version sync** — auto-detect or make configurable | Small |
+| Low | **Dark mode icon variant** — adaptive menu bar icon | Small |
+| Low | **Homebrew formula** — `brew install claude-usage-tracker` | Small |
 
 ---
 
-## Architecture Notes
+## Distribution Checklist
 
-- **Single-file app** (`tracker.py`, 338 lines) — appropriate for scope
-- **No database** — stateless, fetches fresh data each interval
-- **No network persistence** — token never stored as instance attribute
-- **Minimal dependencies** — only `rumps` + Python stdlib
-- **Undocumented API** — `/api/oauth/usage` is not a public endpoint; may change without notice (disclosed in README)
-
----
-
-## Launch Checklist
-
-- [x] All tests passing
+- [x] All tests passing (67/67)
 - [x] Security audit complete — no vulnerabilities
-- [x] Dependencies pinned
-- [x] Build scripts verified (build.sh, install.sh)
-- [x] Landing page live-ready
-- [x] README complete with installation instructions
+- [x] Dependencies pinned (`rumps==0.4.0`)
+- [x] Build scripts verified (`build.sh`, `install.sh`)
+- [x] Landing page ready (`docs/`)
+- [x] README with installation instructions
 - [x] LICENSE (MIT) included
-- [x] .gitignore properly configured
-- [ ] Consider adding GitHub release workflow (optional)
-- [ ] Consider adding Homebrew formula (optional)
+- [x] `.gitignore` properly configured
+- [ ] Code signing with Apple Developer certificate
+- [ ] Notarization for Gatekeeper approval
+- [ ] DMG or installer package for distribution
+- [ ] GitHub Release with pre-built `.app` bundle
+- [ ] Homebrew formula (optional)
+- [ ] GitHub Actions workflow for automated releases (optional)
+
+---
+
+## Risk: Undocumented API Endpoint
+
+The app depends entirely on `https://api.anthropic.com/api/oauth/usage`, which is an undocumented, internal Anthropic endpoint discovered from Claude Code's own traffic. Key risks:
+
+- **Breaking changes** — The response schema could change at any time without deprecation notice
+- **Endpoint removal** — The endpoint could be removed or moved behind a different auth mechanism
+- **Rate limiting changes** — Current rate limits are unknown and could become more restrictive
+- **ToS concerns** — Using undocumented endpoints may violate Anthropic's Terms of Service
+
+**Mitigation:** The app handles all HTTP error codes gracefully and displays clear error states. If the endpoint breaks, users see a clear error rather than a crash. Monitor Anthropic's official API documentation for any public usage endpoint that could replace this.
