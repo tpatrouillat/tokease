@@ -334,7 +334,18 @@ class TestGetUsageAPI(unittest.TestCase):
             "url", 429, "Too Many Requests", {}, io.BytesIO()
         )
         data, err = tracker.get_usage()
-        self.assertIsNone(data)
+        self.assertEqual(data, {"retry_after": 0})
+        self.assertEqual(err, "rate")
+
+    @patch("tracker.subprocess.run", return_value=_keychain_result())
+    @patch("tracker._opener.open")
+    def test_http_429_with_retry_after(self, mock_open, _):
+        headers = {"Retry-After": "120"}
+        mock_open.side_effect = tracker.urllib.error.HTTPError(
+            "url", 429, "Too Many Requests", headers, io.BytesIO()
+        )
+        data, err = tracker.get_usage()
+        self.assertEqual(data, {"retry_after": 120})
         self.assertEqual(err, "rate")
 
     @patch("tracker.subprocess.run", return_value=_keychain_result())
@@ -512,6 +523,19 @@ class TestAppErrorStates(unittest.TestCase):
         app._apply_usage(None, "rate")
         self.assertEqual(app.title, "⏳")
         self.assertIn("Rate limited", app.m5h.title)
+        self.assertIn("will retry", app.m5h.title)
+
+    def test_rate_limit_with_retry_after(self):
+        app = self._make_app()
+        app._apply_usage({"retry_after": 120}, "rate")
+        self.assertEqual(app.title, "⏳")
+        self.assertIn("retry in 2m", app.m5h.title)
+
+    def test_rate_limit_with_partial_minute(self):
+        app = self._make_app()
+        app._apply_usage({"retry_after": 61}, "rate")
+        self.assertEqual(app.title, "⏳")
+        self.assertIn("retry in 2m", app.m5h.title)
 
     def test_plan_error(self):
         app = self._make_app()
@@ -672,6 +696,33 @@ class TestEdgeCases(unittest.TestCase):
         data = _make_api_response(five_hour_pct=100)
         app._update_display(data)
         self.assertEqual(app.title, "100%")
+
+
+class TestDetectUserAgent(unittest.TestCase):
+
+    @patch("tracker.subprocess.run")
+    def test_detects_version(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="2.1.73 (Claude Code)\n")
+        result = tracker._detect_claude_code_ua()
+        self.assertEqual(result, "claude-code/2.1.73")
+
+    @patch("tracker.subprocess.run")
+    def test_fallback_on_failure(self, mock_run):
+        mock_run.side_effect = OSError("not found")
+        result = tracker._detect_claude_code_ua()
+        self.assertEqual(result, tracker._FALLBACK_UA)
+
+    @patch("tracker.subprocess.run")
+    def test_fallback_on_bad_output(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=0, stdout="not-a-version\n")
+        result = tracker._detect_claude_code_ua()
+        self.assertEqual(result, tracker._FALLBACK_UA)
+
+    @patch("tracker.subprocess.run")
+    def test_fallback_on_nonzero_exit(self, mock_run):
+        mock_run.return_value = MagicMock(returncode=1, stdout="")
+        result = tracker._detect_claude_code_ua()
+        self.assertEqual(result, tracker._FALLBACK_UA)
 
 
 if __name__ == "__main__":
