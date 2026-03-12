@@ -249,7 +249,33 @@ claude-usage-tracker/
 
 ---
 
-## What NOT to Build
+## Future Vision: Multi-Tool Usage Aggregator (v2/v3)
+
+Beyond Claude Code, many AI-powered tools have their own usage limits and credits:
+
+| Tool | Usage Model |
+|------|-------------|
+| **Claude Code** | 5-hour / weekly / Sonnet caps + paid overage |
+| **Lovable** | Monthly credit allocation |
+| **Replit** | Token/cycle-based billing |
+| **Cursor** | Monthly request caps (fast/slow) |
+| **Windsurf** | Credit-based system |
+| **GitHub Copilot** | Monthly completions quota |
+| **v0 (Vercel)** | Generation credits |
+
+**Vision:** A unified dashboard showing usage across all AI dev tools in one place — menu bar, CLI, or MCP server.
+
+**Why defer to v2/v3:**
+- Each tool has its own auth mechanism (OAuth, API keys, cookies)
+- Most don't have public usage APIs — would need reverse-engineering per tool
+- Token/credential management across tools is a significant security surface
+- Plugin architecture needed to add tools without modifying core
+
+**When to start:** Once the core library refactor (Phase 1) is done and the plugin/provider pattern is in place, adding new tools becomes modular.
+
+---
+
+## What NOT to Build (v1)
 
 | Idea | Why skip it |
 |------|-------------|
