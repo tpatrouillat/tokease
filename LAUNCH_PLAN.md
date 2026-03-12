@@ -7,7 +7,7 @@
 
 ## Current State
 
-- **67/67 tests passing** (0.38s, Python 3.13.5, pytest 9.0.2)
+- **74/74 tests passing** (0.64s, Python 3.13.5, pytest 9.0.2)
 - Coverage spans: helpers, API responses, HTTP security, token cleanup, display logic, error states, edge cases
 - All error paths tested (401, 403, 429, 500, timeouts, malformed JSON, truncated keychain)
 - No TODO/FIXME/HACK comments in codebase
@@ -16,7 +16,10 @@
 
 ## Fixes Applied
 
-None required. All tests passed on first run; code review found no issues.
+- **Pinned `rumps` dependency** from `>=0.4.0` to `==0.4.0` for reproducible builds
+- **Dynamic User-Agent detection** — auto-detects Claude Code version via `claude --version` instead of hardcoding `2.1.34`
+- **Rate-limit retry countdown** — captures `Retry-After` header on HTTP 429 and displays "retry in Xm"
+- **7 new tests** added for the above features
 
 ---
 
@@ -24,7 +27,7 @@ None required. All tests passed on first run; code review found no issues.
 
 - Python macOS menu bar app using `rumps` framework
 - Single-file design (`tracker.py`, 338 lines)
-- 67 comprehensive unit tests covering all code paths
+- 74 comprehensive unit tests covering all code paths
 - Reads OAuth token from `Claude Code-credentials` macOS Keychain entry
 - Calls undocumented Anthropic API endpoint: `https://api.anthropic.com/api/oauth/usage`
 - Menu bar shows: 5-hour utilization, weekly, Sonnet, extra usage with reset countdowns
@@ -52,7 +55,7 @@ None required. All tests passed on first run; code review found no issues.
 ## Blocking Issues for Production/Distribution
 
 1. **Undocumented API dependency** — The `/api/oauth/usage` endpoint is not a public Anthropic API. It could change or disappear without notice, breaking the app entirely. There is no fallback data source.
-2. **Hardcoded User-Agent** — Currently set to `claude-code/2.1.34`. If the endpoint begins rejecting outdated User-Agent strings, the app will stop working.
+2. ~~**Hardcoded User-Agent**~~ — RESOLVED: Now auto-detected via `claude --version` with fallback.
 3. **Code signing** — The `.app` bundle is not signed or notarized. macOS Gatekeeper will block it for users who download it. Requires an Apple Developer account ($99/yr) to resolve.
 
 ---
@@ -62,10 +65,10 @@ None required. All tests passed on first run; code review found no issues.
 | Priority | Feature | Effort |
 |----------|---------|--------|
 | High | **Code signing + notarization** — required for smooth distribution | Medium |
-| Medium | **Rate-limit countdown** — show remaining wait time instead of just "will retry" | Small |
+| ~~Medium~~ | ~~**Rate-limit countdown**~~ — DONE | ~~Small~~ |
 | Medium | **Notification on high usage** — alert when utilization exceeds threshold (e.g., 80%) | Medium |
 | Medium | **Auto-update mechanism** — check for new versions on GitHub Releases | Medium |
-| Low | **User-Agent version sync** — auto-detect or make configurable | Small |
+| ~~Low~~ | ~~**User-Agent version sync**~~ — DONE | ~~Small~~ |
 | Low | **Dark mode icon variant** — adaptive menu bar icon | Small |
 | Low | **Homebrew formula** — `brew install claude-usage-tracker` | Small |
 
@@ -73,7 +76,7 @@ None required. All tests passed on first run; code review found no issues.
 
 ## Distribution Checklist
 
-- [x] All tests passing (67/67)
+- [x] All tests passing (74/74)
 - [x] Security audit complete — no vulnerabilities
 - [x] Dependencies pinned (`rumps==0.4.0`)
 - [x] Build scripts verified (`build.sh`, `install.sh`)
