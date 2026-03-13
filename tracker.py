@@ -54,8 +54,7 @@ SONNET_DEFAULT = "Sonnet: --"
 EXTRA_DEFAULT = "Extra: --"
 
 # ---------------------------------------------------------------------------
-# Security: block HTTP redirects to prevent Bearer token leaking to other
-# domains if the API endpoint ever returns a 3xx.
+# User-Agent detection
 # ---------------------------------------------------------------------------
 
 def _detect_claude_code_ua():
