@@ -26,3 +26,9 @@ build/
 # Secrets (none used, but just in case)
 .env
 *.local.json
+
+# Test caches
+.pytest_cache/
+
+# Local knowledge-graph build artifacts (internal use only)
+graphify-out/

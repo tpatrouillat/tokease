@@ -20,7 +20,17 @@ A lightweight macOS menu bar app that shows your Claude Code API usage in real t
 - **Claude Code** installed and logged in (`claude login`)
 - **Claude Pro or Max** subscription (the usage API requires a paid plan)
 
-## Quick Install
+## Quick Install (Homebrew, recommended)
+
+```bash
+brew install tpatrouillat/tap/claude-usage-tracker
+claude-usage-tracker          # launch immediately
+brew services start claude-usage-tracker   # auto-start at login
+```
+
+Bypasses Gatekeeper (no Apple Developer signing required), installs the Python virtualenv automatically, and `brew upgrade` handles updates.
+
+## Install from Source
 
 ```bash
 git clone https://github.com/tpatrouillat/claude-usage-tracker.git
@@ -33,7 +43,7 @@ The install script will:
 2. Optionally set up a macOS LaunchAgent for auto-start at login
 3. Optionally launch the app immediately
 
-## Manual Install
+## Manual Install (no install script)
 
 ```bash
 git clone https://github.com/tpatrouillat/claude-usage-tracker.git
@@ -79,6 +89,10 @@ Contributions are welcome! Here's how:
 6. Open a Pull Request
 
 Please keep the codebase minimal — this is intentionally a small, focused tool.
+
+## Roadmap
+
+v1.0 is **macOS menu bar + Claude Code only** — intentionally narrow. See [ROADMAP.md](ROADMAP.md) for what's explicitly out of scope (iPhone, Windows/Linux, other AI tools) and what might land in v1.1.
 
 ## License
 
