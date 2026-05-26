@@ -27,6 +27,7 @@ Security notes:
 import json
 import re
 import subprocess
+import tempfile
 import threading
 import urllib.error
 import urllib.request
@@ -35,9 +36,63 @@ from pathlib import Path
 
 import rumps
 
+# Pillow is used for the dynamic ring icon; gracefully no-op when absent so
+# a source install without Pillow still works (falls back to the static icon).
+try:
+    from PIL import Image, ImageDraw
+    _PILLOW_AVAILABLE = True
+except ImportError:
+    _PILLOW_AVAILABLE = False
+
 # Resolves both from source (repo root + assets/) and from the py2app bundle
 # (Resources/assets/) — DATA_FILES in setup.py places it under Resources/assets.
 _ICON_PATH = Path(__file__).resolve().parent / "assets" / "menubar-template.png"
+
+# Dynamic-icon rendering: rewritten on every refresh, lives in tempdir so it
+# never mutates the bundled assets and gets cleaned by macOS periodically.
+_DYNAMIC_ICON_PATH = Path(tempfile.gettempdir()) / "claude-usage-tracker-icon.png"
+
+# Icon geometry — must stay consistent with assets/build-menubar-icon.py so
+# the dynamic and fallback static icons have the same visual footprint.
+_ICON_SIZE_FINAL = 44
+_ICON_SCALE = 4
+_ICON_SIZE = _ICON_SIZE_FINAL * _ICON_SCALE
+_RING_RADII = (20, 14, 8)      # outer, middle, inner (at final scale)
+_RING_STROKE = 3                # final-scale stroke width
+_TRACK_ALPHA = 70               # faint background ring so 0% still shows
+
+
+def _render_dynamic_icon(session_pct, weekly_pct, inner_pct):
+    """
+    Render the 3-ring icon with arcs filled per current usage metric.
+
+    Outer ring = 5-hour session %, middle = weekly %, inner = max(sonnet, opus).
+    Each arc starts at 12 o'clock and sweeps clockwise. A faint full ring is
+    drawn behind each arc so 0% still has a visual outline.
+
+    Returns the path to a freshly written PNG, or None if Pillow is missing
+    (in which case the caller keeps the existing static icon).
+    """
+    if not _PILLOW_AVAILABLE:
+        return None
+    img = Image.new("RGBA", (_ICON_SIZE, _ICON_SIZE), (0, 0, 0, 0))
+    draw = ImageDraw.Draw(img)
+    center = _ICON_SIZE // 2
+    stroke = _RING_STROKE * _ICON_SCALE
+
+    for radius, pct in zip(_RING_RADII, (session_pct, weekly_pct, inner_pct)):
+        r = radius * _ICON_SCALE
+        bbox = (center - r, center - r, center + r, center + r)
+        draw.ellipse(bbox, outline=(0, 0, 0, _TRACK_ALPHA), width=stroke)
+        pct_clamped = max(0, min(100, int(pct)))
+        if pct_clamped > 0:
+            sweep = (pct_clamped / 100.0) * 360.0
+            draw.arc(bbox, start=-90, end=-90 + sweep,
+                     fill=(0, 0, 0, 255), width=stroke)
+
+    img = img.resize((_ICON_SIZE_FINAL, _ICON_SIZE_FINAL), Image.LANCZOS)
+    img.save(_DYNAMIC_ICON_PATH)
+    return _DYNAMIC_ICON_PATH
 
 # ---------------------------------------------------------------------------
 # Refresh interval options (label → seconds)
@@ -387,33 +442,41 @@ class App(rumps.App):
         return f"{label}: {pct}% (resets {fmt_reset(section.get('resets_at'))})", pct
 
     def _update_display(self, data):
+        session_pct = weekly_pct = sonnet_pct = opus_pct = 0
+
         # 5-hour session (also drives the menu bar title and threshold alerts)
         if h := data.get("five_hour"):
-            text, pct = self._fmt_utilization("5-hour", h)
-            self.title = f"{pct}%"
+            text, session_pct = self._fmt_utilization("5-hour", h)
+            self.title = f"{session_pct}%"
             self.m5h.title = text
-            self._maybe_notify(pct)
+            self._maybe_notify(session_pct)
         else:
             self.title = "0%"
             self.m5h.title = FIVE_HOUR_DEFAULT
 
         # 7-day
         if d := data.get("seven_day"):
-            self.m7d.title, _ = self._fmt_utilization("Weekly", d)
+            self.m7d.title, weekly_pct = self._fmt_utilization("Weekly", d)
         else:
             self.m7d.title = WEEKLY_DEFAULT
 
         # Sonnet weekly
         if s := data.get("seven_day_sonnet"):
-            self.mson.title, _ = self._fmt_utilization("Sonnet", s)
+            self.mson.title, sonnet_pct = self._fmt_utilization("Sonnet", s)
         else:
             self.mson.title = SONNET_DEFAULT
 
         # Opus weekly
         if o := data.get("seven_day_opus"):
-            self.mopus.title, _ = self._fmt_utilization("Opus", o)
+            self.mopus.title, opus_pct = self._fmt_utilization("Opus", o)
         else:
             self.mopus.title = OPUS_DEFAULT
+
+        # Inner ring = whichever per-model metric is more saturated, so the
+        # icon surfaces the model the user is most at risk of capping out on.
+        dyn = _render_dynamic_icon(session_pct, weekly_pct, max(sonnet_pct, opus_pct))
+        if dyn is not None:
+            self.icon = str(dyn)
 
         # Extra (paid overage)
         e = data.get("extra_usage")
