@@ -34,14 +34,12 @@ def render_rings(size_final: int, scale: int = 4, fill_pcts: list = None) -> Ima
     """
     size = size_final * scale
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
-    draw = ImageDraw.Draw(img)
+    draw = ImageDraw.Draw(img, "RGBA")
     center = size // 2
 
     # Scale ring radii proportionally
     scale_factor = size_final / SIZE_FINAL
-
-    track_alpha = 70  # Empty ring opacity
-    fill_alpha = 255  # Filled ring opacity
+    stroke_width = int(STROKE * scale_factor * scale)
 
     for idx, radius in enumerate(RING_RADII):
         r = int(radius * scale_factor * scale)
@@ -49,25 +47,23 @@ def render_rings(size_final: int, scale: int = 4, fill_pcts: list = None) -> Ima
 
         if fill_pcts is None:
             # Empty rings only
-            draw.ellipse(bbox, outline=INK, width=int(STROKE * scale_factor * scale))
+            draw.ellipse(bbox, outline=INK, width=stroke_width)
         else:
-            # Draw track (light)
-            draw.ellipse(bbox, outline=(*INK[:3], track_alpha), width=int(STROKE * scale_factor * scale))
-
-            # Draw filled arc
+            # Only draw filled arc (no background track)
             pct = max(0, min(100, fill_pcts[idx]))
             if pct > 0:
                 sweep = (pct / 100.0) * 360.0
+                # Draw arc with rounded caps via thick width
                 draw.arc(bbox, start=-90, end=-90 + sweep,
-                        fill=(*INK[:3], fill_alpha), width=int(STROKE * scale_factor * scale))
+                        fill=INK, width=stroke_width)
 
     return img.resize((size_final, size_final), Image.LANCZOS)
 
 def main() -> None:
     assets_dir = Path(__file__).resolve().parent
 
-    # Example usage percentages for marketing: 70% (session), 80% (weekly), 30% (top model)
-    DEMO_USAGE = [70, 80, 30]
+    # Example usage percentages for marketing: 70% (session), 80% (weekly), 40% (top model)
+    DEMO_USAGE = [70, 80, 40]
 
     print("📍 Generating EMPTY rings (baseline)...")
     # 1. Generate icon sizes with empty rings (16, 32, 64, 128, 256, 512)
@@ -84,8 +80,8 @@ def main() -> None:
         img.save(out)
         print(f"  ✓ {out.name}")
 
-    print("\n📍 Generating FILLED rings (demo usage: 70% / 80% / 30%)...")
-    # 3. Demo versions with 70/80/30 usage (for marketing)
+    print("\n📍 Generating FILLED rings (demo usage: 70% / 80% / 40%)...")
+    # 3. Demo versions with 70/80/40 usage (for marketing)
     for size in [128, 256, 512]:
         img = render_rings(size, fill_pcts=DEMO_USAGE)
         out = assets_dir / f"logo-{size}-demo.png"
@@ -135,7 +131,7 @@ def main() -> None:
     print("  Empty rings (baseline):")
     print("    - favicon-16.png, favicon-32.png")
     print("    - logo-16/32/64/128/256/512.png")
-    print("  Demo usage (70%/80%/30%):")
+    print("  Demo usage (70%/80%/40%):")
     print("    - logo-128-demo.png, logo-256-demo.png, logo-512-demo.png")
     print("    - logo-social-preview.png (1200x630)")
     print("    - logo-square-512.png")
