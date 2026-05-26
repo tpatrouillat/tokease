@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="assets/logo-square-512.png" alt="Claude Usage Tracker" width="128" height="128">
+  <img src="assets/logo-256-demo.png" alt="Claude Usage Tracker" width="200" height="200">
   <h1>Claude Usage Tracker</h1>
   <p>A lightweight macOS menu bar app showing your Claude Code API usage in real time<br/><strong>Know your limits before you hit them</strong></p>
 </div>
