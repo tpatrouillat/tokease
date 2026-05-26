@@ -282,18 +282,6 @@
         .section-title { font-size: 2rem; font-weight: 700; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
         .section-sub { color: var(--text-dim); font-size: 1.05rem; }
 
-        /* --- Screenshot --------------------------------------------------- */
-        #screenshot { padding-top: 3rem; padding-bottom: 3rem; }
-        .screenshot-frame {
-            max-width: 720px;
-            margin: 0 auto;
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            overflow: hidden;
-            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(168, 85, 247, 0.08);
-        }
-        .screenshot-frame img { display: block; width: 100%; height: auto; }
-
         /* --- Features ----------------------------------------------------- */
         .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
         .card {
@@ -686,13 +674,6 @@
         </div>
     </header>
 </div>
-
-<!-- Real screenshot -->
-<section id="screenshot" class="reveal" aria-label="Real screenshot of the app running">
-    <div class="screenshot-frame">
-        <img src="screenshot.png" alt="Claude Usage Tracker running in the macOS menu bar with the dropdown open, showing real session, weekly, and Sonnet utilization percentages and reset timers." loading="lazy" width="1440" height="900">
-    </div>
-</section>
 
 <!-- Features -->
 <div class="divider" aria-hidden="true"><hr></div>
