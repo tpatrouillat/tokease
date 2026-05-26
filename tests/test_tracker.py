@@ -71,6 +71,13 @@ sys.modules["rumps"] = fake_rumps
 
 import tracker  # noqa: E402 — must come after rumps mock
 
+# Neutralise settings persistence so tests don't pick up stored UserDefaults
+# values from prior runs (interval, alerts, display_mode).
+tracker._DEFAULTS = None
+# Drop the title spacer so existing assertions like `app.title == "42%"` keep
+# working — the spacer is a pure cosmetic and not the unit under test here.
+tracker._TITLE_SPACER = ""
+
 
 # ---------------------------------------------------------------------------
 # Fake API response builder
