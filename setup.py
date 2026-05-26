@@ -13,6 +13,10 @@ from setuptools import setup
 APP = ["tracker.py"]
 APP_NAME = "Claude Usage Tracker"
 
+# Bundled into Resources/assets/ so tracker.py can find the menu bar icon
+# both from source (repo root) and from the frozen .app.
+DATA_FILES = [("assets", ["assets/menubar-template.png"])]
+
 OPTIONS = {
     "argv_emulation": False,
     "iconfile": "assets/icon.icns",
@@ -30,6 +34,7 @@ OPTIONS = {
 setup(
     name=APP_NAME,
     app=APP,
+    data_files=DATA_FILES,
     options={"py2app": OPTIONS},
     setup_requires=["py2app"],
 )

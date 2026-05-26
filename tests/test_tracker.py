@@ -51,9 +51,11 @@ class FakeTimer:
 
 
 class FakeApp:
-    def __init__(self, name, title="", quit_button=None):
+    def __init__(self, name, title="", icon=None, template=False, quit_button=None):
         self.name = name
         self.title = title
+        self.icon = icon
+        self.template = template
         self.menu = {}
 
     def run(self):

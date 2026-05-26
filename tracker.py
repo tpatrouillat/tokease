@@ -31,8 +31,13 @@ import threading
 import urllib.error
 import urllib.request
 from datetime import datetime, timezone
+from pathlib import Path
 
 import rumps
+
+# Resolves both from source (repo root + assets/) and from the py2app bundle
+# (Resources/assets/) — DATA_FILES in setup.py places it under Resources/assets.
+_ICON_PATH = Path(__file__).resolve().parent / "assets" / "menubar-template.png"
 
 # ---------------------------------------------------------------------------
 # Refresh interval options (label → seconds)
@@ -48,6 +53,11 @@ CENTS_PER_DOLLAR = 100
 # Used only when `claude --version` cannot be found in PATH — the LaunchAgent
 # ships with a minimal PATH so this fallback matters in practice.
 _FALLBACK_UA = "claude-code/2.1.145"
+
+# Notification thresholds (5-hour session %). Sorted ascending. Notifications
+# fire when the pct CROSSES one upward — never on first observation, never
+# repeatedly while sitting at/above the threshold.
+NOTIFY_THRESHOLDS = (80, 95)
 
 # Default menu item text (extracted to avoid string duplication)
 FIVE_HOUR_DEFAULT = "5-hour: --"
@@ -228,9 +238,20 @@ def fmt_reset(iso):
 class App(rumps.App):
 
     def __init__(self):
-        super().__init__("Claude", title="...", quit_button=None)
+        # template=True lets macOS auto-invert the icon for dark mode.
+        # Pass the icon path only if it exists — a missing asset shouldn't
+        # crash the app, just fall back to text-only menu bar.
+        icon = str(_ICON_PATH) if _ICON_PATH.exists() else None
+        super().__init__(
+            "Claude", title="...", icon=icon, template=True, quit_button=None,
+        )
         self.interval = 300  # default: 5 minutes
         self._timer = None
+
+        # Notification state: None = no baseline yet (first observation).
+        # Tracked in-memory only; resets on restart.
+        self.alerts_enabled = True
+        self._last_pct = None
 
         # Usage display items
         self.m5h   = rumps.MenuItem("5-hour: ...")
@@ -239,6 +260,13 @@ class App(rumps.App):
         self.mopus = rumps.MenuItem("Opus: ...")
         self.mext  = rumps.MenuItem(EXTRA_DEFAULT)
         self.mupd  = rumps.MenuItem("Updated: --")
+
+        # Notification toggle
+        self.m_alerts = rumps.MenuItem(
+            f"Alert at {NOTIFY_THRESHOLDS[0]}% / {NOTIFY_THRESHOLDS[1]}%",
+            callback=self._toggle_alerts,
+        )
+        self.m_alerts.state = 1 if self.alerts_enabled else 0
 
         # Interval submenu
         interval_menu = rumps.MenuItem("Refresh Interval")
@@ -256,6 +284,7 @@ class App(rumps.App):
             self.mupd,
             rumps.MenuItem("Refresh", callback=self._refresh),
             None,
+            self.m_alerts,
             interval_menu, None,
             rumps.MenuItem("Quit", callback=rumps.quit_application),
         ]
@@ -276,6 +305,31 @@ class App(rumps.App):
         self.interval = self._item_to_secs[sender.title]
         self._update_interval_menu()
         self._start_timer()
+
+    def _toggle_alerts(self, sender):
+        self.alerts_enabled = not self.alerts_enabled
+        sender.state = 1 if self.alerts_enabled else 0
+
+    def _maybe_notify(self, pct):
+        """Fire a notification when pct crosses a threshold upward."""
+        previous = self._last_pct
+        self._last_pct = pct
+        if not self.alerts_enabled or previous is None:
+            return
+        crossed = [t for t in NOTIFY_THRESHOLDS if previous < t <= pct]
+        if not crossed:
+            return
+        threshold = max(crossed)
+        try:
+            rumps.notification(
+                title="Claude Usage Tracker",
+                subtitle=f"Session at {pct}%",
+                message=f"You've passed {threshold}% of your 5-hour limit.",
+            )
+        except Exception:
+            # rumps.notification requires a signed bundle on recent macOS —
+            # silently no-op when running from source so dev never breaks.
+            pass
 
     def _start_timer(self):
         if self._timer:
@@ -333,11 +387,12 @@ class App(rumps.App):
         return f"{label}: {pct}% (resets {fmt_reset(section.get('resets_at'))})", pct
 
     def _update_display(self, data):
-        # 5-hour session (also drives the menu bar title)
+        # 5-hour session (also drives the menu bar title and threshold alerts)
         if h := data.get("five_hour"):
             text, pct = self._fmt_utilization("5-hour", h)
             self.title = f"{pct}%"
             self.m5h.title = text
+            self._maybe_notify(pct)
         else:
             self.title = "0%"
             self.m5h.title = FIVE_HOUR_DEFAULT
