@@ -22,8 +22,16 @@ RING_RADII = [120, 84, 48]  # outer, middle, inner (at final 512 scale)
 STROKE = 18              # stroke width at final scale
 INK = (0, 0, 0, 255)     # Black
 
-def render_rings(size_final: int, scale: int = 4) -> Image.Image:
-    """Render the 3-ring Activity Ring design at any size."""
+def render_rings(size_final: int, scale: int = 4, fill_pcts: list = None) -> Image.Image:
+    """
+    Render the 3-ring Activity Ring design at any size.
+
+    Args:
+        size_final: Output size in pixels
+        scale: Oversample factor for antialiasing
+        fill_pcts: List of 3 percentages (0-100) for outer/middle/inner rings.
+                   If None, renders empty rings. If provided, fills each ring to that %.
+    """
     size = size_final * scale
     img = Image.new("RGBA", (size, size), (0, 0, 0, 0))
     draw = ImageDraw.Draw(img)
@@ -32,36 +40,64 @@ def render_rings(size_final: int, scale: int = 4) -> Image.Image:
     # Scale ring radii proportionally
     scale_factor = size_final / SIZE_FINAL
 
-    for radius in RING_RADII:
+    track_alpha = 70  # Empty ring opacity
+    fill_alpha = 255  # Filled ring opacity
+
+    for idx, radius in enumerate(RING_RADII):
         r = int(radius * scale_factor * scale)
         bbox = [center - r, center - r, center + r, center + r]
-        draw.ellipse(bbox, outline=INK, width=int(STROKE * scale_factor * scale))
+
+        if fill_pcts is None:
+            # Empty rings only
+            draw.ellipse(bbox, outline=INK, width=int(STROKE * scale_factor * scale))
+        else:
+            # Draw track (light)
+            draw.ellipse(bbox, outline=(*INK[:3], track_alpha), width=int(STROKE * scale_factor * scale))
+
+            # Draw filled arc
+            pct = max(0, min(100, fill_pcts[idx]))
+            if pct > 0:
+                sweep = (pct / 100.0) * 360.0
+                draw.arc(bbox, start=-90, end=-90 + sweep,
+                        fill=(*INK[:3], fill_alpha), width=int(STROKE * scale_factor * scale))
 
     return img.resize((size_final, size_final), Image.LANCZOS)
 
 def main() -> None:
     assets_dir = Path(__file__).resolve().parent
 
-    # 1. Generate icon sizes (16, 32, 64, 128, 256, 512)
+    # Example usage percentages for marketing: 70% (session), 80% (weekly), 30% (top model)
+    DEMO_USAGE = [70, 80, 30]
+
+    print("📍 Generating EMPTY rings (baseline)...")
+    # 1. Generate icon sizes with empty rings (16, 32, 64, 128, 256, 512)
     for size in [16, 32, 64, 128, 256, 512]:
         img = render_rings(size)
         out = assets_dir / f"logo-{size}.png"
         img.save(out)
-        print(f"✓ {out.name}")
+        print(f"  ✓ {out.name}")
 
-    # 2. Favicon variants
+    # 2. Favicon variants (empty)
     for size in [16, 32]:
         img = render_rings(size)
         out = assets_dir / f"favicon-{size}.png"
         img.save(out)
-        print(f"✓ {out.name}")
+        print(f"  ✓ {out.name}")
 
-    # 3. Social preview (1200x630, horizontal)
-    # White background, rings on left, text on right
+    print("\n📍 Generating FILLED rings (demo usage: 70% / 80% / 30%)...")
+    # 3. Demo versions with 70/80/30 usage (for marketing)
+    for size in [128, 256, 512]:
+        img = render_rings(size, fill_pcts=DEMO_USAGE)
+        out = assets_dir / f"logo-{size}-demo.png"
+        img.save(out)
+        print(f"  ✓ {out.name}")
+
+    # 4. Social preview (1200x630, horizontal) with demo rings
+    print("\n📍 Generating social preview (1200x630)...")
     social = Image.new("RGB", (1200, 630), (255, 255, 255))
 
     # Draw rings on left side (250px square, centered vertically)
-    rings = render_rings(250)
+    rings = render_rings(250, fill_pcts=DEMO_USAGE)
     rings_x = 100
     rings_y = (630 - 250) // 2
     social.paste(rings, (rings_x, rings_y), rings)
@@ -85,20 +121,25 @@ def main() -> None:
 
     out = assets_dir / "logo-social-preview.png"
     social.save(out)
-    print(f"✓ {out.name}")
+    print(f"  ✓ {out.name}")
 
-    # 4. Square logo (512x512, for GitHub, Homebrew, etc.)
-    logo_square = render_rings(512)
+    # 5. Square logo (512x512, for GitHub, Homebrew, etc.) - demo version
+    print("\n📍 Generating square logo (512x512)...")
+    logo_square = render_rings(512, fill_pcts=DEMO_USAGE)
     out = assets_dir / "logo-square-512.png"
     logo_square.save(out)
-    print(f"✓ {out.name}")
+    print(f"  ✓ {out.name}")
 
     print(f"\n✅ All logos generated in {assets_dir}")
-    print("\nRecommended usage:")
-    print("  - favicon-16.png, favicon-32.png → <link rel='icon'>")
-    print("  - logo-256.png → GitHub repo social card")
-    print("  - logo-square-512.png → app icon, Homebrew")
-    print("  - logo-social-preview.png → Twitter/OG meta tags")
+    print("\n📊 Files created:")
+    print("  Empty rings (baseline):")
+    print("    - favicon-16.png, favicon-32.png")
+    print("    - logo-16/32/64/128/256/512.png")
+    print("  Demo usage (70%/80%/30%):")
+    print("    - logo-128-demo.png, logo-256-demo.png, logo-512-demo.png")
+    print("    - logo-social-preview.png (1200x630)")
+    print("    - logo-square-512.png")
+    print("\n💡 Use the -demo versions for marketing (shows actual tracking in action)")
 
 if __name__ == "__main__":
     main()
