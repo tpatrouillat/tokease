@@ -53,34 +53,9 @@ def render_rings(size_final: int, scale: int = 4, fill_pcts: list = None) -> Ima
             pct = max(0, min(100, fill_pcts[idx]))
             if pct > 0:
                 sweep = (pct / 100.0) * 360.0
-                end_angle = -90 + sweep
-
-                # Draw arc with rounded caps
-                draw.arc(bbox, start=-90, end=end_angle,
+                # Draw arc with naturally rounded caps (Pillow's default)
+                draw.arc(bbox, start=-90, end=-90 + sweep,
                         fill=INK, width=stroke_width)
-
-                # Draw circles at start and end points for smoother caps
-                cap_radius = stroke_width // 2
-
-                # Start point (top)
-                start_x = center
-                start_y = center - r
-                draw.ellipse(
-                    [start_x - cap_radius, start_y - cap_radius,
-                     start_x + cap_radius, start_y + cap_radius],
-                    fill=INK
-                )
-
-                # End point
-                import math
-                end_rad = math.radians(end_angle)
-                end_x = center + r * math.cos(end_rad)
-                end_y = center + r * math.sin(end_rad)
-                draw.ellipse(
-                    [end_x - cap_radius, end_y - cap_radius,
-                     end_x + cap_radius, end_y + cap_radius],
-                    fill=INK
-                )
 
     return img.resize((size_final, size_final), Image.LANCZOS)
 
