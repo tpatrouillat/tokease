@@ -25,7 +25,7 @@ INK = (0, 0, 0, 255)     # Black
 
 def render_rings(size_final: int, scale: int = 4, fill_pcts: list = None) -> Image.Image:
     """
-    Render the 3-ring Activity Ring design at any size with smooth rounded strokes.
+    Render the 3-ring Activity Ring design at any size.
 
     Args:
         size_final: Output size in pixels
@@ -41,36 +41,22 @@ def render_rings(size_final: int, scale: int = 4, fill_pcts: list = None) -> Ima
     # Scale ring radii proportionally
     scale_factor = size_final / SIZE_FINAL
     stroke_width = int(STROKE * scale_factor * scale)
-    cap_radius = stroke_width // 2
 
     for idx, radius in enumerate(RING_RADII):
         r = int(radius * scale_factor * scale)
+        bbox = [center - r, center - r, center + r, center + r]
 
         if fill_pcts is None:
             # Empty rings only
-            bbox = [center - r, center - r, center + r, center + r]
             draw.ellipse(bbox, outline=INK, width=stroke_width)
         else:
-            # Draw filled arc with smooth rounded stroke
+            # Only draw filled arc (no background track)
             pct = max(0, min(100, fill_pcts[idx]))
             if pct > 0:
                 sweep = (pct / 100.0) * 360.0
-                end_angle = -90 + sweep
-
-                # Draw arc by sampling points and drawing circles (smooth rounded stroke)
-                num_points = max(int(sweep / 2), 20)  # More points = smoother curve
-                for i in range(num_points + 1):
-                    angle = -90 + (sweep * i / num_points)
-                    rad = math.radians(angle)
-                    x = center + r * math.cos(rad)
-                    y = center + r * math.sin(rad)
-
-                    # Draw small circle at this point for rounded stroke effect
-                    draw.ellipse(
-                        [x - cap_radius, y - cap_radius,
-                         x + cap_radius, y + cap_radius],
-                        fill=INK
-                    )
+                # Draw arc with naturally rounded caps (Pillow's default)
+                draw.arc(bbox, start=-90, end=-90 + sweep,
+                        fill=INK, width=stroke_width)
 
     return img.resize((size_final, size_final), Image.LANCZOS)
 
