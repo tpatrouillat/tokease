@@ -27,10 +27,12 @@ Security notes:
 import json
 import re
 import subprocess
+import sys
 import tempfile
 import threading
 import urllib.error
 import urllib.request
+import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -43,6 +45,14 @@ try:
     _PILLOW_AVAILABLE = True
 except ImportError:
     _PILLOW_AVAILABLE = False
+
+# NSUserDefaults persists settings across launches under the .app's bundle id.
+# Optional so non-macOS test environments (no PyObjC) still import cleanly.
+try:
+    from Foundation import NSUserDefaults
+    _DEFAULTS = NSUserDefaults.standardUserDefaults()
+except ImportError:
+    _DEFAULTS = None
 
 # Resolves both from source (repo root + assets/) and from the py2app bundle
 # (Resources/assets/) — DATA_FILES in setup.py places it under Resources/assets.
@@ -114,12 +124,115 @@ _FALLBACK_UA = "claude-code/2.1.145"
 # repeatedly while sitting at/above the threshold.
 NOTIFY_THRESHOLDS = (80, 95)
 
+# Display mode: which combination of icon + text appears in the menu bar.
+DISPLAY_BOTH = "both"
+DISPLAY_PCT = "pct"
+DISPLAY_ICON = "icon"
+
+# Persisted-setting keys
+_KEY_DISPLAY_MODE = "display_mode"
+_KEY_ALERTS = "alerts_enabled"
+_KEY_INTERVAL = "interval_secs"
+
+# Two-space spacer between icon and percentage so the digits don't crowd the
+# rings. Menu bar font renders one space at ~4 px; two = comfortable gap.
+_TITLE_SPACER = "  "
+
+# External links (Support submenu). Change DONATE_URL to BMC/Ko-fi/PayPal etc.
+# if GitHub Sponsors isn't your preferred platform.
+STAR_URL = "https://github.com/tpatrouillat/claude-usage-tracker"
+DONATE_URL = "https://github.com/sponsors/tpatrouillat"
+
+# Login-item registration uses the .app's CFBundleDisplayName — must match
+# Info.plist exactly or `delete login item` won't find it.
+LOGIN_ITEM_NAME = "Claude Usage Tracker"
+
 # Default menu item text (extracted to avoid string duplication)
 FIVE_HOUR_DEFAULT = "5-hour: --"
 WEEKLY_DEFAULT = "Weekly: --"
 SONNET_DEFAULT = "Sonnet: --"
 OPUS_DEFAULT = "Opus: --"
 EXTRA_DEFAULT = "Extra: --"
+
+# ---------------------------------------------------------------------------
+# Settings persistence (NSUserDefaults)
+# ---------------------------------------------------------------------------
+
+def _settings_get(key, default):
+    """Read a setting from NSUserDefaults; returns default if unset/unavailable."""
+    if _DEFAULTS is None:
+        return default
+    try:
+        val = _DEFAULTS.objectForKey_(key)
+        return val if val is not None else default
+    except Exception:
+        return default
+
+
+def _settings_set(key, value):
+    if _DEFAULTS is None:
+        return
+    try:
+        _DEFAULTS.setObject_forKey_(value, key)
+        _DEFAULTS.synchronize()
+    except Exception:
+        pass
+
+
+# ---------------------------------------------------------------------------
+# Login-item management (macOS System Events)
+# ---------------------------------------------------------------------------
+
+def _get_app_path():
+    """Return the .app bundle path if running as a frozen bundle, else None."""
+    if not getattr(sys, "frozen", None):
+        return None
+    try:
+        p = Path(sys.executable).resolve()
+        for parent in p.parents:
+            if parent.suffix == ".app":
+                return str(parent)
+    except OSError:
+        pass
+    return None
+
+
+def _is_login_item():
+    try:
+        result = subprocess.run(
+            ["osascript", "-e",
+             'tell application "System Events" to get the name of every login item'],
+            capture_output=True, text=True, timeout=5,
+        )
+        return LOGIN_ITEM_NAME in (result.stdout or "")
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+
+
+def _set_login_item(enabled, app_path):
+    # Reject paths containing characters that would break out of the AppleScript
+    # string literal (path comes from sys.executable so this is defence-in-depth).
+    if any(c in app_path for c in '"\\\n'):
+        return
+    try:
+        if enabled:
+            script = (
+                f'tell application "System Events" to make login item '
+                f'at end with properties '
+                f'{{path:"{app_path}", hidden:false}}'
+            )
+        else:
+            script = (
+                f'tell application "System Events" to '
+                f'delete login item "{LOGIN_ITEM_NAME}"'
+            )
+        subprocess.run(
+            ["osascript", "-e", script],
+            capture_output=True, timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        pass
+
 
 # ---------------------------------------------------------------------------
 # User-Agent detection
@@ -293,6 +406,13 @@ def fmt_reset(iso):
 class App(rumps.App):
 
     def __init__(self):
+        # Load persisted preferences (falls back to defaults if unset)
+        self.interval = int(_settings_get(_KEY_INTERVAL, 300))
+        self.alerts_enabled = bool(_settings_get(_KEY_ALERTS, True))
+        self.display_mode = str(_settings_get(_KEY_DISPLAY_MODE, DISPLAY_BOTH))
+        if self.display_mode not in (DISPLAY_BOTH, DISPLAY_PCT, DISPLAY_ICON):
+            self.display_mode = DISPLAY_BOTH
+
         # template=True lets macOS auto-invert the icon for dark mode.
         # Pass the icon path only if it exists — a missing asset shouldn't
         # crash the app, just fall back to text-only menu bar.
@@ -300,12 +420,11 @@ class App(rumps.App):
         super().__init__(
             "Claude", title="...", icon=icon, template=True, quit_button=None,
         )
-        self.interval = 300  # default: 5 minutes
         self._timer = None
+        self._app_path = _get_app_path()  # None when running from source
 
         # Notification state: None = no baseline yet (first observation).
         # Tracked in-memory only; resets on restart.
-        self.alerts_enabled = True
         self._last_pct = None
 
         # Usage display items
@@ -316,6 +435,31 @@ class App(rumps.App):
         self.mext  = rumps.MenuItem(EXTRA_DEFAULT)
         self.mupd  = rumps.MenuItem("Updated: --")
 
+        # --- Settings submenu --------------------------------------------
+        # Launch at login (only meaningful when running as a .app bundle)
+        if self._app_path:
+            self.m_login = rumps.MenuItem(
+                "Launch at login", callback=self._toggle_login,
+            )
+            self.m_login.state = 1 if _is_login_item() else 0
+        else:
+            self.m_login = rumps.MenuItem("Launch at login (install .app first)")
+            # No callback → menu item appears greyed out
+
+        # Display mode (radio group)
+        display_menu = rumps.MenuItem("Display")
+        self._display_items = {}
+        for mode, label in (
+            (DISPLAY_BOTH, "Icon + percentage"),
+            (DISPLAY_PCT,  "Percentage only"),
+            (DISPLAY_ICON, "Icon only"),
+        ):
+            item = rumps.MenuItem(label, callback=self._set_display_mode)
+            item._mode = mode  # stash mode on the item for the callback
+            self._display_items[mode] = item
+            display_menu.add(item)
+        self._update_display_menu()
+
         # Notification toggle
         self.m_alerts = rumps.MenuItem(
             f"Alert at {NOTIFY_THRESHOLDS[0]}% / {NOTIFY_THRESHOLDS[1]}%",
@@ -323,7 +467,7 @@ class App(rumps.App):
         )
         self.m_alerts.state = 1 if self.alerts_enabled else 0
 
-        # Interval submenu
+        # Refresh interval (radio submenu)
         interval_menu = rumps.MenuItem("Refresh Interval")
         self._interval_items = {}   # secs → MenuItem
         self._item_to_secs = {}     # MenuItem title → secs
@@ -333,14 +477,25 @@ class App(rumps.App):
             self._item_to_secs[label] = secs
             interval_menu.add(item)
 
+        settings_menu = rumps.MenuItem("Settings")
+        settings_menu.add(self.m_login)
+        settings_menu.add(display_menu)
+        settings_menu.add(self.m_alerts)
+        settings_menu.add(interval_menu)
+
+        # --- Support submenu --------------------------------------------
+        support_menu = rumps.MenuItem("Support")
+        support_menu.add(rumps.MenuItem("Star on GitHub", callback=self._open_star))
+        support_menu.add(rumps.MenuItem("Sponsor / Donate", callback=self._open_donate))
+
         self.menu = [
             self.m5h, self.m7d, self.mson, self.mopus, None,
             self.mext, None,
             self.mupd,
             rumps.MenuItem("Refresh", callback=self._refresh),
             None,
-            self.m_alerts,
-            interval_menu, None,
+            settings_menu,
+            support_menu, None,
             rumps.MenuItem("Quit", callback=rumps.quit_application),
         ]
 
@@ -356,14 +511,41 @@ class App(rumps.App):
         for secs, item in self._interval_items.items():
             item.state = 1 if secs == self.interval else 0
 
+    def _update_display_menu(self):
+        for mode, item in self._display_items.items():
+            item.state = 1 if mode == self.display_mode else 0
+
     def _set_interval(self, sender):
         self.interval = self._item_to_secs[sender.title]
+        _settings_set(_KEY_INTERVAL, self.interval)
         self._update_interval_menu()
         self._start_timer()
 
+    def _set_display_mode(self, sender):
+        self.display_mode = sender._mode
+        _settings_set(_KEY_DISPLAY_MODE, self.display_mode)
+        self._update_display_menu()
+        # Re-render immediately so the menu bar reflects the change without
+        # waiting for the next poll.
+        self._refresh(None)
+
     def _toggle_alerts(self, sender):
         self.alerts_enabled = not self.alerts_enabled
+        _settings_set(_KEY_ALERTS, self.alerts_enabled)
         sender.state = 1 if self.alerts_enabled else 0
+
+    def _toggle_login(self, sender):
+        new_state = not bool(sender.state)
+        _set_login_item(new_state, self._app_path)
+        # Verify by querying System Events, since the user may have denied
+        # the Automation permission prompt on first call.
+        sender.state = 1 if _is_login_item() else 0
+
+    def _open_star(self, _):
+        webbrowser.open(STAR_URL)
+
+    def _open_donate(self, _):
+        webbrowser.open(DONATE_URL)
 
     def _maybe_notify(self, pct):
         """Fire a notification when pct crosses a threshold upward."""
@@ -405,6 +587,8 @@ class App(rumps.App):
         self._apply_usage(data, err)
 
     def _apply_usage(self, data, err):
+        # Error states always show their text indicator regardless of display
+        # mode — the user needs to see *why* numbers aren't updating.
         if err == "auth":
             self.title = "↩ Login"
             self.m5h.title   = "Run: claude login"
@@ -435,6 +619,20 @@ class App(rumps.App):
 
         self._update_display(data)
 
+    def _apply_display(self, pct_text, icon_path):
+        """Apply the title + icon according to the user's display_mode preference."""
+        if self.display_mode == DISPLAY_PCT:
+            self.title = pct_text
+            self.icon = None
+        elif self.display_mode == DISPLAY_ICON:
+            self.title = ""
+            if icon_path:
+                self.icon = str(icon_path)
+        else:  # DISPLAY_BOTH
+            self.title = f"{_TITLE_SPACER}{pct_text}"
+            if icon_path:
+                self.icon = str(icon_path)
+
     @staticmethod
     def _fmt_utilization(label, section):
         """Format a utilization section as 'Label: N% (resets ...)'."""
@@ -447,11 +645,9 @@ class App(rumps.App):
         # 5-hour session (also drives the menu bar title and threshold alerts)
         if h := data.get("five_hour"):
             text, session_pct = self._fmt_utilization("5-hour", h)
-            self.title = f"{session_pct}%"
             self.m5h.title = text
             self._maybe_notify(session_pct)
         else:
-            self.title = "0%"
             self.m5h.title = FIVE_HOUR_DEFAULT
 
         # 7-day
@@ -474,9 +670,8 @@ class App(rumps.App):
 
         # Inner ring = whichever per-model metric is more saturated, so the
         # icon surfaces the model the user is most at risk of capping out on.
-        dyn = _render_dynamic_icon(session_pct, weekly_pct, max(sonnet_pct, opus_pct))
-        if dyn is not None:
-            self.icon = str(dyn)
+        icon_path = _render_dynamic_icon(session_pct, weekly_pct, max(sonnet_pct, opus_pct))
+        self._apply_display(f"{session_pct}%", icon_path)
 
         # Extra (paid overage)
         e = data.get("extra_usage")
