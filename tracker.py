@@ -45,12 +45,15 @@ INTERVALS = {
 }
 
 CENTS_PER_DOLLAR = 100
-_FALLBACK_UA = "claude-code/2.1.34"
+# Used only when `claude --version` cannot be found in PATH — the LaunchAgent
+# ships with a minimal PATH so this fallback matters in practice.
+_FALLBACK_UA = "claude-code/2.1.145"
 
 # Default menu item text (extracted to avoid string duplication)
 FIVE_HOUR_DEFAULT = "5-hour: --"
 WEEKLY_DEFAULT = "Weekly: --"
 SONNET_DEFAULT = "Sonnet: --"
+OPUS_DEFAULT = "Opus: --"
 EXTRA_DEFAULT = "Extra: --"
 
 # ---------------------------------------------------------------------------
@@ -230,11 +233,12 @@ class App(rumps.App):
         self._timer = None
 
         # Usage display items
-        self.m5h  = rumps.MenuItem("5-hour: ...")
-        self.m7d  = rumps.MenuItem("Weekly: ...")
-        self.mson = rumps.MenuItem("Sonnet: ...")
-        self.mext = rumps.MenuItem(EXTRA_DEFAULT)
-        self.mupd = rumps.MenuItem("Updated: --")
+        self.m5h   = rumps.MenuItem("5-hour: ...")
+        self.m7d   = rumps.MenuItem("Weekly: ...")
+        self.mson  = rumps.MenuItem("Sonnet: ...")
+        self.mopus = rumps.MenuItem("Opus: ...")
+        self.mext  = rumps.MenuItem(EXTRA_DEFAULT)
+        self.mupd  = rumps.MenuItem("Updated: --")
 
         # Interval submenu
         interval_menu = rumps.MenuItem("Refresh Interval")
@@ -247,7 +251,7 @@ class App(rumps.App):
             interval_menu.add(item)
 
         self.menu = [
-            self.m5h, self.m7d, self.mson, None,
+            self.m5h, self.m7d, self.mson, self.mopus, None,
             self.mext, None,
             self.mupd,
             rumps.MenuItem("Refresh", callback=self._refresh),
@@ -294,10 +298,11 @@ class App(rumps.App):
     def _apply_usage(self, data, err):
         if err == "auth":
             self.title = "↩ Login"
-            self.m5h.title  = "Run: claude login"
-            self.m7d.title  = WEEKLY_DEFAULT
-            self.mson.title = SONNET_DEFAULT
-            self.mext.title = EXTRA_DEFAULT
+            self.m5h.title   = "Run: claude login"
+            self.m7d.title   = WEEKLY_DEFAULT
+            self.mson.title  = SONNET_DEFAULT
+            self.mopus.title = OPUS_DEFAULT
+            self.mext.title  = EXTRA_DEFAULT
             return
 
         if err == "rate":
@@ -348,6 +353,12 @@ class App(rumps.App):
             self.mson.title, _ = self._fmt_utilization("Sonnet", s)
         else:
             self.mson.title = SONNET_DEFAULT
+
+        # Opus weekly
+        if o := data.get("seven_day_opus"):
+            self.mopus.title, _ = self._fmt_utilization("Opus", o)
+        else:
+            self.mopus.title = OPUS_DEFAULT
 
         # Extra (paid overage)
         e = data.get("extra_usage")

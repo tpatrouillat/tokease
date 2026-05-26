@@ -33,8 +33,12 @@ echo "Found $(python3 --version)"
 
 # --- Virtual environment ----------------------------------------------------
 echo ""
-echo "Creating virtual environment..."
-python3 -m venv "$VENV_DIR"
+if [[ -d "$VENV_DIR" ]]; then
+    echo "Reusing existing virtual environment at $VENV_DIR"
+else
+    echo "Creating virtual environment..."
+    python3 -m venv "$VENV_DIR"
+fi
 
 echo "Installing dependencies..."
 "$VENV_DIR/bin/pip" install --upgrade pip -q
@@ -59,8 +63,14 @@ read -r -p "Start the tracker automatically at login? (y/n): " auto_start
 if [[ "$auto_start" =~ ^[Yy]$ ]]; then
     mkdir -p "$LAUNCH_AGENT_DIR"
 
-    # PATH is explicitly set so `security` CLI is found even in a stripped
-    # LaunchAgent environment (macOS agents don't inherit the user's PATH).
+    # Unload any prior install before overwriting — avoids two trackers
+    # racing for the menu bar slot on re-install.
+    if [[ -f "$LAUNCH_AGENT_PLIST" ]]; then
+        launchctl unload "$LAUNCH_AGENT_PLIST" 2>/dev/null || true
+    fi
+
+    # PATH includes Homebrew (Intel + Apple Silicon) so `claude --version`
+    # resolves for the User-Agent header, plus system bins for `security`.
     cat > "$LAUNCH_AGENT_PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -77,7 +87,7 @@ if [[ "$auto_start" =~ ^[Yy]$ ]]; then
     <key>EnvironmentVariables</key>
     <dict>
         <key>PATH</key>
-        <string>/usr/bin:/bin:/usr/sbin:/sbin</string>
+        <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
     </dict>
     <key>RunAtLoad</key>
     <true/>
@@ -86,10 +96,8 @@ if [[ "$auto_start" =~ ^[Yy]$ ]]; then
 </dict>
 </plist>
 EOF
-    echo "LaunchAgent created: $LAUNCH_AGENT_PLIST"
-    echo "The tracker will start automatically at next login."
-    echo "To load it now without relogging:"
-    echo "  launchctl load \"$LAUNCH_AGENT_PLIST\""
+    launchctl load "$LAUNCH_AGENT_PLIST"
+    echo "LaunchAgent installed and loaded — it will also start at every login."
 fi
 
 # --- Done -------------------------------------------------------------------
@@ -106,8 +114,10 @@ read -r -p "Start the tracker now? (y/n): " start_now
 if [[ "$start_now" =~ ^[Yy]$ ]]; then
     echo "Starting Claude Usage Tracker..."
     nohup "$VENV_DIR/bin/python" "$SCRIPT_DIR/tracker.py" >/dev/null 2>&1 &
-    echo "Running — look for it in your menu bar."
 fi
 
+echo ""
+echo "Look for a percentage badge (e.g. \"42%\") in the top-right of your menu bar."
+echo "Click it to see your 5-hour, weekly, Sonnet, Opus, and overage limits."
 echo ""
 echo "Done!"
