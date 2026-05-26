@@ -1,17 +1,21 @@
-# Claude Usage Tracker
-
-A lightweight macOS menu bar app that shows your Claude Code API usage in real time. Know your limits before you hit them.
+<div align="center">
+  <img src="assets/logo-square-512.png" alt="Claude Usage Tracker" width="128" height="128">
+  <h1>Claude Usage Tracker</h1>
+  <p>A lightweight macOS menu bar app showing your Claude Code API usage in real time<br/><strong>Know your limits before you hit them</strong></p>
+</div>
 
 ![Claude Usage Tracker screenshot](docs/screenshot.png)
 
 ## Features
 
-- **Real-time usage** — 5-hour session, weekly, and Sonnet limits at a glance
-- **Extra usage tracking** — see paid overage spend if enabled
-- **Zero config** — reads your existing Claude Code OAuth token from the macOS Keychain
-- **Lightweight** — pure Python, single dependency (`rumps`), minimal resource usage
-- **Auto-refresh** — configurable interval from 1 minute to 1 hour
-- **Secure** — token never stored in memory longer than needed, no data collection
+- **3-Ring Activity Display** — Visual gauges for 5-hour session, weekly, and top-model usage
+- **Customizable Display** — Show icon + percentage, icon only, or percentage only
+- **Real-time usage** — Updates every 5 minutes (configurable)
+- **Extra usage tracking** — See paid overage spend if enabled
+- **Zero config** — Reads your existing Claude Code OAuth token from macOS Keychain
+- **Settings menu** — Launch at login, display modes, alert thresholds, refresh interval
+- **Lightweight** — Pure Python, minimal dependencies, zero network overhead
+- **Secure** — Token never leaves your Mac, no data collection
 
 ## Prerequisites
 
