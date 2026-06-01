@@ -4,23 +4,30 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Claude Usage Tracker — See your Claude Code limits before you burn them</title>
-    <meta name="description" content="Free, open-source macOS menu bar app that shows your Claude Code 5-hour, weekly, and Sonnet usage in real time. Reads the same OAuth endpoint Claude Code uses. No account, no telemetry.">
+    <meta name="description" content="Free, open-source macOS menu bar app with a 3-ring Activity Display showing your Claude Code 5-hour, weekly, and top-model usage in real time. Reads the same OAuth endpoint Claude Code uses. No account, no telemetry.">
     <meta name="theme-color" content="#09090b">
     <link rel="canonical" href="https://tpatrouillat.github.io/claude-usage-tracker/">
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+    <link rel="apple-touch-icon" sizes="256x256" href="logo.png">
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="Claude Usage Tracker — See your Claude Code limits before you burn them">
-    <meta property="og:description" content="Free, open-source macOS menu bar app for Claude Pro and Max users. Tracks 5-hour, weekly, and Sonnet limits in real time. No account, runs 100% locally.">
+    <meta property="og:description" content="Free, open-source macOS menu bar app for Claude Pro and Max users. 3-ring Activity Display shows 5-hour, weekly, and top-model limits in real time. No account, runs 100% locally.">
     <meta property="og:image" content="https://tpatrouillat.github.io/claude-usage-tracker/og-image.png">
+    <meta property="og:image:alt" content="Claude Usage Tracker — three concentric Activity Rings on a white background, alongside the product name">
     <meta property="og:url" content="https://tpatrouillat.github.io/claude-usage-tracker/">
     <meta property="og:site_name" content="Claude Usage Tracker">
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Claude Usage Tracker — See your Claude Code limits before you burn them">
-    <meta name="twitter:description" content="Free, open-source macOS menu bar app for Claude Pro and Max users. Reads the same OAuth endpoint Claude Code uses.">
+    <meta name="twitter:description" content="Free, open-source macOS menu bar app with a 3-ring Activity Display for Claude Pro and Max users. Reads the same OAuth endpoint Claude Code uses.">
     <meta name="twitter:image" content="https://tpatrouillat.github.io/claude-usage-tracker/og-image.png">
+    <meta name="twitter:image:alt" content="Claude Usage Tracker — three concentric Activity Rings on a white background, alongside the product name">
 
     <!-- JSON-LD SoftwareApplication -->
     <script type="application/ld+json">
@@ -34,7 +41,8 @@
         "license": "https://opensource.org/licenses/MIT",
         "downloadUrl": "https://github.com/tpatrouillat/claude-usage-tracker",
         "url": "https://tpatrouillat.github.io/claude-usage-tracker/",
-        "description": "A lightweight macOS menu bar app that shows your Claude Code API usage in real time."
+        "description": "A lightweight macOS menu bar app with a 3-ring Activity Display that shows your Claude Code API usage in real time — 5-hour session, weekly cap, and top-model limit.",
+        "image": "https://tpatrouillat.github.io/claude-usage-tracker/logo.png"
     }
     </script>
 
@@ -605,10 +613,11 @@
 <nav aria-label="Main navigation">
     <div class="nav-inner">
         <span class="nav-brand">
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-                <rect width="20" height="20" rx="5" fill="#a855f7" fill-opacity="0.15"/>
-                <path d="M10 4.5C7 4.5 5 7 5 10s2 5.5 5 5.5 5-3 5-5.5-2-5.5-5-5.5z" stroke="#a855f7" stroke-width="1.5" fill="none"/>
-                <circle cx="10" cy="10" r="2" fill="#a855f7"/>
+            <svg width="22" height="22" viewBox="0 0 512 512" fill="none" aria-hidden="true">
+                <!-- 3-ring Activity logo (matches favicon / app icon) -->
+                <circle cx="256" cy="256" r="120" stroke="#a855f7" stroke-width="32" fill="none"/>
+                <circle cx="256" cy="256" r="84"  stroke="#a855f7" stroke-width="32" fill="none"/>
+                <circle cx="256" cy="256" r="48"  stroke="#a855f7" stroke-width="32" fill="none"/>
             </svg>
             Claude Usage Tracker
         </span>
@@ -633,7 +642,7 @@
             <span>Free &amp; open source</span> &mdash; for Claude Pro &amp; Max
         </div>
         <h1>See your Claude Code<br><span class="highlight">limits before you burn them</span></h1>
-        <p class="hero-sub">A tiny macOS menu bar app that shows your 5-hour, weekly, and Sonnet usage in real time. Reads the same OAuth endpoint Claude Code uses. No account, no telemetry, no log parsing.</p>
+        <p class="hero-sub">A tiny macOS menu bar app with a <strong style="color:var(--text);font-weight:600;">3-ring Activity Display</strong> for your 5-hour, weekly, and top-model usage. Reads the same OAuth endpoint Claude Code uses. No account, no telemetry, no log parsing.</p>
 
         <div class="hero-ctas">
             <a href="#install" class="btn btn-primary">
@@ -648,25 +657,37 @@
 
         <div class="mockup-wrapper">
             <div class="mockup-glow" aria-hidden="true"></div>
-            <figure aria-label="Preview of the Claude Usage Tracker showing 77% usage in the macOS menu bar with a dropdown displaying session, weekly, and Sonnet limits with reset timers">
+            <figure aria-label="Preview of the Claude Usage Tracker — three concentric Activity Rings showing 70% session, 80% weekly, and 40% Sonnet usage in the macOS menu bar, with a dropdown listing session, weekly, Sonnet, Opus, extra spend, and a Settings submenu">
                 <div class="menubar">
-                    <span class="menubar-active">77%</span>
+                    <span class="menubar-active" aria-label="Activity Rings: session 70%, weekly 80%, Sonnet 40%">
+                        <svg width="16" height="16" viewBox="0 0 512 512" fill="none" aria-hidden="true" style="vertical-align:-3px">
+                            <circle cx="256" cy="256" r="120" stroke="currentColor" stroke-opacity="0.25" stroke-width="50" fill="none"/>
+                            <circle cx="256" cy="256" r="84"  stroke="currentColor" stroke-opacity="0.25" stroke-width="50" fill="none"/>
+                            <circle cx="256" cy="256" r="48"  stroke="currentColor" stroke-opacity="0.25" stroke-width="50" fill="none"/>
+                            <path d="M 256 136 A 120 120 0 1 1 220.85 391.59" stroke="currentColor" stroke-width="50" stroke-linecap="round" fill="none"/>
+                            <path d="M 256 172 A 84 84 0 1 1 219.74 326.74" stroke="currentColor" stroke-width="50" stroke-linecap="round" fill="none"/>
+                            <path d="M 256 208 A 48 48 0 0 1 297.57 280" stroke="currentColor" stroke-width="50" stroke-linecap="round" fill="none"/>
+                        </svg>
+                        <span style="margin-left:4px">70%</span>
+                    </span>
                     <span>TP</span>
                     <span class="menubar-dots">...</span>
                     <span>68&#176;F</span>
                     <span>100%</span>
                 </div>
                 <div class="dropdown">
-                    <div class="dd-item">5-hour: <span class="dd-pct">77%</span>&nbsp; (resets 25m)</div>
-                    <div class="dd-item">Weekly: <span class="dd-pct">35%</span>&nbsp; (resets Feb 13)</div>
-                    <div class="dd-item">Sonnet: <span class="dd-pct">16%</span>&nbsp; (resets 19h 25m)</div>
+                    <div class="dd-item">5-hour: <span class="dd-pct">70%</span>&nbsp; (resets 1h 25m)</div>
+                    <div class="dd-item">Weekly: <span class="dd-pct">80%</span>&nbsp; (resets Mon)</div>
+                    <div class="dd-item">Sonnet: <span class="dd-pct">40%</span>&nbsp; (resets 19h 25m)</div>
+                    <div class="dd-item">Opus: <span class="dd-pct">22%</span>&nbsp; (resets 4d 6h)</div>
                     <div class="dd-sep"></div>
                     <div class="dd-item">Extra: $8.47/$20 (42%)</div>
                     <div class="dd-sep"></div>
                     <div class="dd-item muted">Updated: 14:34</div>
                     <div class="dd-item">Refresh <span class="dd-shortcut">&#8984;R</span></div>
                     <div class="dd-sep"></div>
-                    <div class="dd-item">Refresh Interval <span class="dd-chevron">&#9656;</span></div>
+                    <div class="dd-item">Settings <span class="dd-chevron">&#9656;</span></div>
+                    <div class="dd-item">Support <span class="dd-chevron">&#9656;</span></div>
                     <div class="dd-sep"></div>
                     <div class="dd-item">Quit <span class="dd-shortcut">&#8984;Q</span></div>
                 </div>
@@ -686,24 +707,45 @@
     <div class="features">
         <article class="card reveal">
             <div class="card-icon" aria-hidden="true">
-                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2v4m0 10v4m-9-9h4m10 0h4m-3.36-6.36l-2.83 2.83m-5.62 5.62l-2.83 2.83m0-11.28l2.83 2.83m5.62 5.62l2.83 2.83" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="11" cy="11" r="8" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="11" cy="11" r="5" stroke="currentColor" stroke-width="1.8" fill="none"/><circle cx="11" cy="11" r="2" stroke="currentColor" stroke-width="1.8" fill="none"/></svg>
             </div>
-            <h3>Real-time limits</h3>
-            <p>5-hour session, weekly cap, Sonnet limit, and paid overage spend — visible in your menu bar without opening anything.</p>
+            <h3>3-Ring Activity Display</h3>
+            <p>Three concentric rings fill as you burn your 5-hour session, weekly cap, and top-model quota. One glance tells you where you stand — no opening menus required.</p>
+        </article>
+        <article class="card reveal">
+            <div class="card-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><rect x="3" y="5" width="16" height="12" rx="2" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M3 9h16M7 13h2m3 0h3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </div>
+            <h3>Customizable display</h3>
+            <p>Show rings + percentage, rings only, or percentage only. Set 80% / 95% alert thresholds. Pick a 1 / 5 / 15 / 30-minute refresh interval. Tailor the menu bar to your taste.</p>
         </article>
         <article class="card reveal">
             <div class="card-icon" aria-hidden="true">
                 <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M9 11l2 2 4-4m-4-6a9 9 0 110 18 9 9 0 010-18z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             <h3>Zero config</h3>
-            <p>Reads your existing Claude Code OAuth token from the macOS Keychain. No API keys, no setup files, no extra accounts.</p>
+            <p>Reads your existing Claude Code OAuth token from the macOS Keychain. No API keys, no setup files, no extra accounts. Optionally launches at login.</p>
+        </article>
+        <article class="card reveal">
+            <div class="card-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2v4m0 10v4m-9-9h4m10 0h4m-3.36-6.36l-2.83 2.83m-5.62 5.62l-2.83 2.83m0-11.28l2.83 2.83m5.62 5.62l2.83 2.83" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+            </div>
+            <h3>Real-time limits</h3>
+            <p>5-hour session, weekly cap, Sonnet and Opus model quotas, and paid overage spend — all visible without leaving your current app.</p>
+        </article>
+        <article class="card reveal">
+            <div class="card-icon" aria-hidden="true">
+                <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M11 2L3 6v6c0 4.4 3.4 8.4 8 9 4.6-.6 8-4.6 8-9V6l-8-4z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round" fill="none"/></svg>
+            </div>
+            <h3>Local-only & private</h3>
+            <p>Token stays in your Keychain. One API call, then immediately cleared from memory. HTTP redirects blocked so your Bearer token can't leak. No analytics, no telemetry.</p>
         </article>
         <article class="card reveal">
             <div class="card-icon" aria-hidden="true">
                 <svg width="22" height="22" viewBox="0 0 22 22" fill="none"><path d="M13 3l-2 7h6l-6 9 2-7H7l6-9z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
             </div>
             <h3>Lightweight</h3>
-            <p>Single Python file. One dependency. Minimal CPU and memory. Runs quietly in the background and auto-starts at login.</p>
+            <p>Single Python file. One dependency. Negligible CPU and memory. Auto-launches at login, runs silently in the background, fades into your menu bar.</p>
         </article>
     </div>
 </section>
@@ -729,8 +771,8 @@
         </div>
         <div class="step reveal">
             <div class="step-num" aria-hidden="true">3</div>
-            <h3>See your usage</h3>
-            <p>The tracker appears in your menu bar showing your current usage percentage. Click for the full breakdown.</p>
+            <h3>Read the rings</h3>
+            <p>Three rings appear in your menu bar — they fill as you burn each limit. Click for the full breakdown, or tweak display, alerts, and refresh interval in <strong>Settings</strong>.</p>
         </div>
     </div>
 </section>

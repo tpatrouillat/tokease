@@ -33,6 +33,9 @@ Pick **one** of the following based on what the comments actually ask for. Not b
 
 No v1.1 work. v1.0.1 polish only — bug fixes, UX hardening, more tests around edge cases users report.
 
+**Tracked polish ideas:**
+- **Ring clear-out animation** — when a 5-hour or weekly limit resets, briefly animate the affected ring from its previous fill back to empty (4–5 frames over ~400ms, driven by `rumps.Timer`). Pure cosmetic, but it makes resets feel earned.
+
 ### Trigger: <200 stars in the first week
 
 The hook didn't land. No expansion as a recovery move. Iterate on positioning, write a follow-up post in 4 weeks framed around something other than "I built another tool."
