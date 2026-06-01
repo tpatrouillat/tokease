@@ -629,6 +629,76 @@ class TestIntervalManagement(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Tests: Proactive reset-window refresh
+# ---------------------------------------------------------------------------
+class TestResetRefreshScheduling(unittest.TestCase):
+    """Bug: if the user picks a long refresh interval, the menu would show
+    pre-reset numbers for up to a full interval after a window rolls over.
+    Fix schedules a one-shot timer to fire ~5s after the soonest reset."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            app = tracker.App()
+        return app
+
+    def test_schedules_timer_for_soonest_future_reset(self):
+        app = self._make_app()
+        # Build data with three future resets — the 5-hour one is soonest.
+        now = datetime.now(timezone.utc)
+        five_hour_iso = (now + timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
+        weekly_iso    = (now + timedelta(days=2)).isoformat().replace("+00:00", "Z")
+        sonnet_iso    = (now + timedelta(days=3)).isoformat().replace("+00:00", "Z")
+        data = _make_api_response(
+            five_hour_resets=five_hour_iso,
+            seven_day_resets=weekly_iso,
+            sonnet_resets=sonnet_iso,
+        )
+        with patch("threading.Timer") as MockTimer:
+            mock_timer = MagicMock()
+            MockTimer.return_value = mock_timer
+            app._schedule_reset_refresh(data)
+            self.assertTrue(MockTimer.called)
+            delay = MockTimer.call_args[0][0]
+            # Expect ~10 minutes + 5s buffer; allow 2s slack for clock drift.
+            self.assertAlmostEqual(delay, 600 + 5, delta=2)
+            mock_timer.start.assert_called_once()
+
+    def test_cancels_previous_timer_when_rescheduling(self):
+        app = self._make_app()
+        prev_timer = MagicMock()
+        app._reset_timer = prev_timer
+        future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+        data = _make_api_response(five_hour_resets=future)
+        with patch("threading.Timer", return_value=MagicMock()):
+            app._schedule_reset_refresh(data)
+        prev_timer.cancel.assert_called_once()
+
+    def test_ignores_already_passed_resets(self):
+        app = self._make_app()
+        # All resets in the past — nothing to schedule.
+        past = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
+        data = _make_api_response(
+            five_hour_resets=past, seven_day_resets=past, sonnet_resets=past,
+        )
+        with patch("threading.Timer") as MockTimer:
+            app._schedule_reset_refresh(data)
+            MockTimer.assert_not_called()
+        self.assertIsNone(app._reset_timer)
+
+    def test_skips_malformed_iso_timestamps(self):
+        app = self._make_app()
+        data = _make_api_response(
+            five_hour_resets="not-a-date",
+            seven_day_resets=None,
+            sonnet_resets="",
+        )
+        with patch("threading.Timer") as MockTimer:
+            app._schedule_reset_refresh(data)
+            MockTimer.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Tests: Constants integrity
 # ---------------------------------------------------------------------------
 class TestConstants(unittest.TestCase):

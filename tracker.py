@@ -374,10 +374,15 @@ def get_usage():
 # Time formatting
 # ---------------------------------------------------------------------------
 
-def fmt_reset(iso):
-    """Format an ISO timestamp into a human-readable countdown."""
+def _parse_iso(iso):
+    """Parse an ISO-8601 timestamp from the API into a timezone-aware datetime.
+
+    Returns None for empty / malformed input. Centralised here so callers that
+    need the raw datetime (e.g. for reset-window scheduling) don't duplicate
+    the Python-version normalisation that `fmt_reset` already does.
+    """
     if not iso:
-        return "--"
+        return None
     try:
         # Normalise: strip sub-seconds, handle "Z" suffix, fix colon in offset
         clean = iso.replace("Z", "+00:00").split(".")[0]
@@ -387,16 +392,24 @@ def fmt_reset(iso):
         dt = datetime.fromisoformat(clean)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
-        diff = dt - datetime.now(timezone.utc)
-        if diff.total_seconds() < 0:
-            return "now"
-        if diff.days == 0:
-            h = diff.seconds // 3600
-            m = (diff.seconds % 3600) // 60
-            return f"{h}h {m}m" if h else f"{m}m"
-        return dt.strftime("%b %d")
+        return dt
     except (ValueError, OverflowError, IndexError):
-        return "?"
+        return None
+
+
+def fmt_reset(iso):
+    """Format an ISO timestamp into a human-readable countdown."""
+    dt = _parse_iso(iso)
+    if dt is None:
+        return "--" if not iso else "?"
+    diff = dt - datetime.now(timezone.utc)
+    if diff.total_seconds() < 0:
+        return "now"
+    if diff.days == 0:
+        h = diff.seconds // 3600
+        m = (diff.seconds % 3600) // 60
+        return f"{h}h {m}m" if h else f"{m}m"
+    return dt.strftime("%b %d")
 
 
 # ---------------------------------------------------------------------------
@@ -421,6 +434,7 @@ class App(rumps.App):
             "Claude", title="...", icon=icon, template=True, quit_button=None,
         )
         self._timer = None
+        self._reset_timer = None  # one-shot threading.Timer that fires just after a usage window rolls over
         self._app_path = _get_app_path()  # None when running from source
 
         # Notification state: None = no baseline yet (first observation).
@@ -574,6 +588,37 @@ class App(rumps.App):
         self._timer = rumps.Timer(lambda _: self._refresh(None), self.interval)
         self._timer.start()
 
+    def _schedule_reset_refresh(self, data):
+        """Trigger a one-shot refresh shortly after the soonest usage window resets,
+        so the rings clear out promptly even when the user picked a long refresh
+        interval (e.g. 'Every hour'). Without this, the menu can show stale
+        pre-reset numbers for up to a full interval after a window rolls over."""
+        if self._reset_timer is not None:
+            self._reset_timer.cancel()
+            self._reset_timer = None
+
+        now = datetime.now(timezone.utc)
+        soonest = None
+        for key in ("five_hour", "seven_day", "seven_day_sonnet", "seven_day_opus"):
+            section = data.get(key)
+            if not isinstance(section, dict):
+                continue
+            dt = _parse_iso(section.get("resets_at"))
+            if dt is None or dt <= now:
+                continue
+            if soonest is None or dt < soonest:
+                soonest = dt
+
+        if soonest is None:
+            return
+
+        # +5s buffer so Anthropic's backend has rolled the window before we re-poll.
+        delay = (soonest - now).total_seconds() + 5
+        timer = threading.Timer(delay, lambda: self._refresh(None))
+        timer.daemon = True
+        timer.start()
+        self._reset_timer = timer
+
     # ------------------------------------------------------------------
     # Data refresh
     # ------------------------------------------------------------------
@@ -684,6 +729,7 @@ class App(rumps.App):
             self.mext.title = EXTRA_DEFAULT
 
         self.mupd.title = f"Updated: {datetime.now().strftime('%H:%M')}"
+        self._schedule_reset_refresh(data)
 
 
 if __name__ == "__main__":
