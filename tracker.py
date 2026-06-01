@@ -69,7 +69,7 @@ _ICON_SCALE = 4
 _ICON_SIZE = _ICON_SIZE_FINAL * _ICON_SCALE
 _RING_RADII = (20, 14, 8)      # outer, middle, inner (at final scale)
 _RING_STROKE = 3                # final-scale stroke width
-_TRACK_ALPHA = 70               # faint background ring so 0% still shows
+_TRACK_ALPHA = 180              # background ring opacity so 0% reads as an empty "container", not a ghost
 
 
 def _render_dynamic_icon(session_pct, weekly_pct, inner_pct):
