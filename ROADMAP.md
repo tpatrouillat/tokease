@@ -35,6 +35,7 @@ No v1.1 work. v1.0.1 polish only — bug fixes, UX hardening, more tests around 
 
 **Tracked polish ideas:**
 - **Ring clear-out animation** — when a 5-hour or weekly limit resets, briefly animate the affected ring from its previous fill back to empty (4–5 frames over ~400ms, driven by `rumps.Timer`). Pure cosmetic, but it makes resets feel earned.
+- **Enterprise / Team plan support** — credit-based billing instead of 5-hour/weekly quotas, so the 3-ring UI doesn't map. Blocked on a redacted `/api/oauth/usage` sample from a real Enterprise account; will likely render a single "credits spent" gauge plus running $ total. README needs a "Pro/Max only for now" note in the meantime.
 
 ### Trigger: <200 stars in the first week
 
