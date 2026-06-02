@@ -629,6 +629,41 @@ class TestIntervalManagement(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Tests: Main-thread marshalling (regression for SIGABRT crash)
+# ---------------------------------------------------------------------------
+class TestMainThreadMarshalling(unittest.TestCase):
+    """Regression: AppKit assertion-fails and SIGABRTs the app if NSStatusItem
+    is mutated off the main thread. _fetch_and_update runs on a worker thread,
+    so _apply_usage MUST be marshalled via _call_on_main."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            app = tracker.App()
+        return app
+
+    def test_fetch_marshals_apply_usage_to_main_thread(self):
+        app = self._make_app()
+        with patch.object(tracker, "_call_on_main") as marshall, \
+             patch.object(tracker, "get_usage", return_value=({"foo": "bar"}, None)):
+            app._fetch_and_update()
+        marshall.assert_called_once_with(app._apply_usage, {"foo": "bar"}, None)
+
+    def test_reset_timer_callback_marshals_refresh(self):
+        app = self._make_app()
+        future = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
+        data = _make_api_response(five_hour_resets=future)
+        with patch("threading.Timer") as MockTimer:
+            MockTimer.return_value = MagicMock()
+            app._schedule_reset_refresh(data)
+            # Invoke the registered callback and confirm it goes through _call_on_main.
+            callback = MockTimer.call_args[0][1]
+            with patch.object(tracker, "_call_on_main") as marshall:
+                callback()
+            marshall.assert_called_once_with(app._refresh, None)
+
+
+# ---------------------------------------------------------------------------
 # Tests: Proactive reset-window refresh
 # ---------------------------------------------------------------------------
 class TestResetRefreshScheduling(unittest.TestCase):

@@ -38,6 +38,15 @@ from pathlib import Path
 
 import rumps
 
+# AppHelper.callAfter marshals a callable back onto the main runloop. Required
+# because AppKit asserts when NSStatusItem / NSImage are mutated off-thread —
+# without it, a background _fetch_and_update tick can SIGABRT the whole app.
+try:
+    from PyObjCTools.AppHelper import callAfter as _call_on_main
+except ImportError:  # pragma: no cover — only hit on non-Mac dev installs
+    def _call_on_main(fn, *args, **kwargs):
+        fn(*args, **kwargs)
+
 # Pillow is used for the dynamic ring icon; gracefully no-op when absent so
 # a source install without Pillow still works (falls back to the static icon).
 try:
@@ -613,8 +622,10 @@ class App(rumps.App):
             return
 
         # +5s buffer so Anthropic's backend has rolled the window before we re-poll.
+        # Marshal _refresh onto the main thread — it sets self.title and would
+        # otherwise inherit the threading.Timer's background thread (crash risk).
         delay = (soonest - now).total_seconds() + 5
-        timer = threading.Timer(delay, lambda: self._refresh(None))
+        timer = threading.Timer(delay, lambda: _call_on_main(self._refresh, None))
         timer.daemon = True
         timer.start()
         self._reset_timer = timer
@@ -629,7 +640,10 @@ class App(rumps.App):
 
     def _fetch_and_update(self):
         data, err = get_usage()
-        self._apply_usage(data, err)
+        # Marshal back to the main thread before touching menu items or icon —
+        # mutating NSStatusItem off the main thread eventually trips an AppKit
+        # assertion and SIGABRTs the app (latent crash on long-running installs).
+        _call_on_main(self._apply_usage, data, err)
 
     def _apply_usage(self, data, err):
         # Error states always show their text indicator regardless of display
