@@ -237,6 +237,12 @@ class TestFmtReset(unittest.TestCase):
         result = tracker.fmt_reset(iso)
         self.assertNotEqual(result, "?")
 
+    def test_non_string_input_does_not_crash(self):
+        # A numeric resets_at (API regression) must degrade gracefully —
+        # _parse_iso guards AttributeError/TypeError instead of raising.
+        self.assertIsNone(tracker._parse_iso(1718304000))
+        self.assertIn(tracker.fmt_reset(1718304000), ("--", "?"))
+
 
 # ---------------------------------------------------------------------------
 # Tests: get_usage — keychain errors
@@ -388,6 +394,20 @@ class TestGetUsageAPI(unittest.TestCase):
     def test_malformed_json_response(self, mock_open, _):
         resp = MagicMock()
         resp.read.return_value = b"not json{{"
+        resp.__enter__ = lambda s: s
+        resp.__exit__ = MagicMock(return_value=False)
+        mock_open.return_value = resp
+        data, err = tracker.get_usage()
+        self.assertIsNone(data)
+        self.assertEqual(err, "error")
+
+    @patch("tracker.subprocess.run", return_value=_keychain_result())
+    @patch("tracker._opener.open")
+    def test_non_utf8_response(self, mock_open, _):
+        # A 200 body that isn't valid UTF-8 (captive portal, proxy, binary) must
+        # surface as "error", not raise UnicodeDecodeError and kill the worker.
+        resp = MagicMock()
+        resp.read.return_value = b"\xe9\xff\x00garbage"
         resp.__enter__ = lambda s: s
         resp.__exit__ = MagicMock(return_value=False)
         mock_open.return_value = resp
@@ -626,6 +646,26 @@ class TestIntervalManagement(unittest.TestCase):
         self.assertEqual(app.interval, 60)
         self.assertEqual(app._interval_items[60].state, 1)
         self.assertEqual(app._interval_items[300].state, 0)
+
+    def test_corrupted_interval_falls_back(self):
+        # A non-numeric persisted value must not crash __init__ (startup).
+        def fake_get(key, default=None):
+            return "notanumber" if key == tracker._KEY_INTERVAL else default
+        with patch("tracker._settings_get", side_effect=fake_get), \
+             patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            app = tracker.App()
+        self.assertEqual(app.interval, 300)
+
+    def test_zero_interval_clamped(self):
+        # A persisted 0 must clamp to >= 60 so rumps.Timer is never given 0.
+        def fake_get(key, default=None):
+            return 0 if key == tracker._KEY_INTERVAL else default
+        with patch("tracker._settings_get", side_effect=fake_get), \
+             patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            app = tracker.App()
+        self.assertGreaterEqual(app.interval, 60)
 
 
 # ---------------------------------------------------------------------------

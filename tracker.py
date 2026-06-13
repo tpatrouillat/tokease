@@ -372,7 +372,7 @@ def get_usage():
         if exc.code == 403:
             return None, "plan"
         return None, "error"
-    except (json.JSONDecodeError, OSError):
+    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
         return None, "error"
     finally:
         token = None
@@ -402,7 +402,7 @@ def _parse_iso(iso):
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
-    except (ValueError, OverflowError, IndexError):
+    except (ValueError, OverflowError, IndexError, AttributeError, TypeError):
         return None
 
 
@@ -429,7 +429,8 @@ class App(rumps.App):
 
     def __init__(self):
         # Load persisted preferences (falls back to defaults if unset)
-        self.interval = int(_settings_get(_KEY_INTERVAL, 300))
+        # _safe_int + clamp: a corrupted or 0 persisted value must not crash startup nor yield Timer(0).
+        self.interval = max(60, _safe_int(_settings_get(_KEY_INTERVAL, 300), 300))
         self.alerts_enabled = bool(_settings_get(_KEY_ALERTS, True))
         self.display_mode = str(_settings_get(_KEY_DISPLAY_MODE, DISPLAY_BOTH))
         if self.display_mode not in (DISPLAY_BOTH, DISPLAY_PCT, DISPLAY_ICON):
@@ -639,7 +640,11 @@ class App(rumps.App):
         threading.Thread(target=self._fetch_and_update, daemon=True).start()
 
     def _fetch_and_update(self):
-        data, err = get_usage()
+        try:
+            data, err = get_usage()
+        except Exception as exc:  # worker thread must never die silently, else the menu freezes on "..."
+            print(f"tokease: unexpected fetch error: {exc!r}", file=sys.stderr)
+            data, err = None, "error"
         # Marshal back to the main thread before touching menu items or icon —
         # mutating NSStatusItem off the main thread eventually trips an AppKit
         # assertion and SIGABRTs the app (latent crash on long-running installs).
