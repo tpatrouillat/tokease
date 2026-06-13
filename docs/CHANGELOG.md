@@ -17,8 +17,8 @@
 - Distributable as `.dmg` disk image (19MB)
 
 ### Distribution Model
-- **Free:** open source repo — clone and run `tracker.py` from source
-- **Paid (5-10 EUR):** pre-built `.app` download — drag to Applications, done
+- Free and open source (MIT) — clone and run `tracker.py`, or install via Homebrew
+- No paid tier, no premium features held back: the Homebrew build is identical to the source
 
 ### Landing Page
 - `docs/index.html` — dark-themed landing page with features, install steps, privacy section
