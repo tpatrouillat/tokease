@@ -1,10 +1,10 @@
 <div align="center">
-  <img src="assets/logo-256-demo.png" alt="Claude Usage Tracker" width="200" height="200">
-  <h1>Claude Usage Tracker</h1>
+  <img src="assets/logo-256-demo.png" alt="Tokease" width="200" height="200">
+  <h1>Tokease</h1>
   <p>A lightweight macOS menu bar app showing your Claude Code API usage in real time<br/><strong>Know your limits before you hit them</strong></p>
 </div>
 
-![Claude Usage Tracker screenshot](docs/screenshot.png)
+![Tokease screenshot](docs/screenshot.png)
 
 ## Features
 
@@ -27,9 +27,9 @@
 ## Quick Install (Homebrew, recommended)
 
 ```bash
-brew install tpatrouillat/tap/claude-usage-tracker
-claude-usage-tracker          # launch immediately
-brew services start claude-usage-tracker   # auto-start at login
+brew install tpatrouillat/tap/tokease
+tokease          # launch immediately
+brew services start tokease   # auto-start at login
 ```
 
 Bypasses Gatekeeper (no Apple Developer signing required), installs the Python virtualenv automatically, and `brew upgrade` handles updates.
@@ -37,8 +37,8 @@ Bypasses Gatekeeper (no Apple Developer signing required), installs the Python v
 ## Install from Source
 
 ```bash
-git clone https://github.com/tpatrouillat/claude-usage-tracker.git
-cd claude-usage-tracker
+git clone https://github.com/tpatrouillat/tokease.git
+cd tokease
 bash install.sh
 ```
 
@@ -50,8 +50,8 @@ The install script will:
 ## Manual Install (no install script)
 
 ```bash
-git clone https://github.com/tpatrouillat/claude-usage-tracker.git
-cd claude-usage-tracker
+git clone https://github.com/tpatrouillat/tokease.git
+cd tokease
 python3 -m venv venv
 venv/bin/pip install -r requirements.txt
 venv/bin/python tracker.py

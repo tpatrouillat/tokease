@@ -11,7 +11,7 @@
 
 ### Native .app Bundle
 - **New:** `setup.py` — py2app configuration to build a standalone macOS `.app`
-- **New:** `build.sh` — one-command build script producing `Claude Usage Tracker.app`
+- **New:** `build.sh` — one-command build script producing `Tokease.app`
 - **New:** `assets/icon.icns` — app icon (purple gradient with usage meter bars)
 - App runs as menu bar-only (no Dock icon) via `LSUIElement`
 - Distributable as `.dmg` disk image (19MB)

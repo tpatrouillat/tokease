@@ -1,8 +1,8 @@
 #!/bin/bash
 #
-# Build Claude Usage Tracker as a standalone macOS .app
+# Build Tokease as a standalone macOS .app
 #
-# Output: dist/Claude Usage Tracker.app
+# Output: dist/Tokease.app
 #
 # Requirements: Python 3.10+, py2app
 #
@@ -16,7 +16,7 @@ VENV_DIR="$SCRIPT_DIR/venv"
 BANNER="================================================"
 
 echo "$BANNER"
-echo "   Claude Usage Tracker — Build"
+echo "   Tokease — Build"
 echo "$BANNER"
 echo ""
 
@@ -45,7 +45,7 @@ echo "   Build Complete"
 echo "$BANNER"
 echo ""
 
-APP_PATH="dist/Claude Usage Tracker.app"
+APP_PATH="dist/Tokease.app"
 if [[ -d "$APP_PATH" ]]; then
     echo "App:  $APP_PATH"
     echo "Size: $(du -sh "$APP_PATH" | cut -f1)"
@@ -54,9 +54,9 @@ if [[ -d "$APP_PATH" ]]; then
     echo "To install: cp -r \"$APP_PATH\" /Applications/"
     echo ""
     echo "To create a DMG for distribution:"
-    echo "  hdiutil create -volname 'Claude Usage Tracker' \\"
+    echo "  hdiutil create -volname 'Tokease' \\"
     echo "    -srcfolder dist -ov -format UDZO \\"
-    echo "    'dist/ClaudeUsageTracker.dmg'"
+    echo "    'dist/Tokease.dmg'"
 else
     echo "Build failed — check output above."
     exit 1
