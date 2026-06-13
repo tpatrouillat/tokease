@@ -1,0 +1,930 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tokease — See your Claude Code limits before you burn them</title>
+    <meta name="description" content="A small, open-source macOS menu bar app for Claude Pro and Max users. Three concentric rings show your Claude Code 5-hour, weekly, and per-model usage in real time. ~750 lines of Python you can audit. No account, no telemetry.">
+    <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+    <meta name="theme-color" content="#0c0c0e" media="(prefers-color-scheme: dark)">
+    <meta name="color-scheme" content="light dark">
+    <link rel="canonical" href="https://tpatrouillat.github.io/tokease/">
+
+    <!-- Favicons -->
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+    <link rel="apple-touch-icon" sizes="256x256" href="logo.png">
+
+    <!-- Open Graph -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="Tokease — See your Claude Code limits before you burn them">
+    <meta property="og:description" content="Open-source macOS menu bar app for Claude Pro and Max. Three concentric rings show your 5-hour, weekly, and per-model limits in real time. ~750 lines of Python, runs 100% locally.">
+    <meta property="og:image" content="https://tpatrouillat.github.io/tokease/og-image.png">
+    <meta property="og:image:alt" content="Tokease — three concentric Activity Rings alongside the product name">
+    <meta property="og:url" content="https://tpatrouillat.github.io/tokease/">
+    <meta property="og:site_name" content="Tokease">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Tokease — See your Claude Code limits before you burn them">
+    <meta name="twitter:description" content="Open-source macOS menu bar app with a 3-ring display for Claude Pro and Max users. Reads the same OAuth endpoint Claude Code uses. ~750 lines of auditable Python.">
+    <meta name="twitter:image" content="https://tpatrouillat.github.io/tokease/og-image.png">
+    <meta name="twitter:image:alt" content="Tokease — three concentric Activity Rings alongside the product name">
+
+    <!-- JSON-LD: SoftwareApplication -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Tokease",
+        "operatingSystem": "macOS",
+        "applicationCategory": "DeveloperApplication",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+        "license": "https://opensource.org/licenses/MIT",
+        "downloadUrl": "https://github.com/tpatrouillat/tokease",
+        "url": "https://tpatrouillat.github.io/tokease/",
+        "description": "A lightweight macOS menu bar app with a 3-ring display that shows your Claude Code usage in real time — 5-hour session, weekly cap, and per-model limit. Roughly 750 lines of Python you can read in one sitting.",
+        "image": "https://tpatrouillat.github.io/tokease/logo.png"
+    }
+    </script>
+
+    <!-- JSON-LD: FAQPage -->
+    <script type="application/ld+json">
+    {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+            {
+                "@type": "Question",
+                "name": "Is Tokease free?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes. Tokease is free forever and released under the MIT license. There is no paid tier, no account, and no upsell." }
+            },
+            {
+                "@type": "Question",
+                "name": "Do I need Claude Pro or Max?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes. Tokease reads the usage data tied to a Claude Pro or Max subscription. It does not work with pay-as-you-go API keys." }
+            },
+            {
+                "@type": "Question",
+                "name": "How does Tokease read my usage?",
+                "acceptedAnswer": { "@type": "Answer", "text": "It reads the OAuth token Claude Code already stored in your macOS Keychain and makes a single GET request to the same /api/oauth/usage endpoint the Claude Code CLI uses. No log parsing, no extra login." }
+            },
+            {
+                "@type": "Question",
+                "name": "Is my token safe?",
+                "acceptedAnswer": { "@type": "Answer", "text": "The token never leaves your Mac except in that one request to api.anthropic.com. It is read from the Keychain, used once, and cleared from memory. HTTP redirects are blocked so the Bearer token cannot leak to another domain. There is no telemetry and no analytics." }
+            },
+            {
+                "@type": "Question",
+                "name": "How is this different from ccusage or CodexBar?",
+                "acceptedAnswer": { "@type": "Answer", "text": "ccusage estimates usage by parsing local Claude Code logs. CodexBar is a multi-provider menu bar tool. Tokease does one thing: it reads the official OAuth usage endpoint and shows your real Pro/Max limits as three rings. Smaller scope, fewer moving parts." }
+            },
+            {
+                "@type": "Question",
+                "name": "Can I read the source?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes. The whole app is roughly 750 lines of Python plus the rumps menu bar library. tracker.py is the single file that does the work — read it on GitHub before you install." }
+            },
+            {
+                "@type": "Question",
+                "name": "Does it use an official API?",
+                "acceptedAnswer": { "@type": "Answer", "text": "No. The /api/oauth/usage endpoint is undocumented — it is what the Claude Code CLI itself uses. Anthropic could change or remove it at any time. If that happens, the menu bar shows an error state rather than crashing, and a fix ships once the community surfaces it." }
+            },
+            {
+                "@type": "Question",
+                "name": "Is Tokease affiliated with Anthropic?",
+                "acceptedAnswer": { "@type": "Answer", "text": "No. Tokease is an independent project and is not affiliated with, endorsed by, or sponsored by Anthropic." }
+            }
+        ]
+    }
+    </script>
+
+    <style>
+        *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+        :root {
+            /* Light theme — calm, paper-like */
+            --bg: #fbfbfa;
+            --bg-2: #ffffff;
+            --surface: #ffffff;
+            --line: #e6e6e3;
+            --line-strong: #d6d6d2;
+            --ink: #18181b;
+            --ink-2: #52525b;
+            --ink-3: #8a8a92;
+            --accent: #6d28d9;
+            --accent-soft: rgba(109, 40, 217, 0.08);
+            --code-bg: #f3f3f1;
+            --ok: #15803d;
+
+            --maxw: 880px;
+            --maxw-wide: 1040px;
+            --radius: 12px;
+            --radius-sm: 8px;
+            --mono: ui-monospace, 'SF Mono', 'SFMono-Regular', 'Menlo', 'Cascadia Code', 'Fira Code', monospace;
+            --sans: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Segoe UI', system-ui, sans-serif;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --bg: #0c0c0e;
+                --bg-2: #121214;
+                --surface: #131316;
+                --line: #26262a;
+                --line-strong: #34343a;
+                --ink: #f4f4f5;
+                --ink-2: #b4b4bb;
+                --ink-3: #7c7c85;
+                --accent: #b794f6;
+                --accent-soft: rgba(183, 148, 246, 0.12);
+                --code-bg: #1b1b1f;
+                --ok: #4ade80;
+            }
+        }
+
+        html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+
+        body {
+            font-family: var(--sans);
+            background: var(--bg);
+            color: var(--ink);
+            line-height: 1.65;
+            font-size: 17px;
+            -webkit-font-smoothing: antialiased;
+            text-rendering: optimizeLegibility;
+        }
+
+        a { color: var(--accent); text-decoration: none; }
+        a:hover { text-decoration: underline; text-underline-offset: 2px; }
+
+        :focus-visible {
+            outline: 2px solid var(--accent);
+            outline-offset: 3px;
+            border-radius: 2px;
+        }
+
+        code {
+            font-family: var(--mono);
+            background: var(--code-bg);
+            border: 1px solid var(--line);
+            padding: 0.1em 0.4em;
+            border-radius: 5px;
+            font-size: 0.85em;
+            color: var(--ink);
+        }
+
+        .wrap { max-width: var(--maxw); margin: 0 auto; padding: 0 1.5rem; }
+        .wrap-wide { max-width: var(--maxw-wide); margin: 0 auto; padding: 0 1.5rem; }
+
+        /* Skip link */
+        .skip {
+            position: absolute;
+            left: -9999px;
+            top: 0;
+            background: var(--ink);
+            color: var(--bg);
+            padding: 0.6rem 1rem;
+            border-radius: var(--radius-sm);
+            z-index: 100;
+        }
+        .skip:focus { left: 1rem; top: 1rem; }
+
+        /* --- Header / nav --------------------------------------------------- */
+        header.site {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            background: color-mix(in srgb, var(--bg) 88%, transparent);
+            backdrop-filter: saturate(180%) blur(12px);
+            -webkit-backdrop-filter: saturate(180%) blur(12px);
+            border-bottom: 1px solid var(--line);
+        }
+        .nav {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+            height: 56px;
+            max-width: var(--maxw-wide);
+            margin: 0 auto;
+            padding: 0 1.5rem;
+        }
+        .brand {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.55rem;
+            font-weight: 600;
+            font-size: 1rem;
+            letter-spacing: -0.01em;
+            color: var(--ink);
+        }
+        .brand:hover { text-decoration: none; }
+        .nav-right { display: flex; align-items: center; gap: 1.4rem; }
+        .nav-right a.navlink { color: var(--ink-2); font-size: 0.9rem; }
+        .nav-right a.navlink:hover { color: var(--ink); text-decoration: none; }
+        .nav-cta {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: var(--ink);
+            border: 1px solid var(--line-strong);
+            padding: 0.4rem 0.85rem;
+            border-radius: var(--radius-sm);
+            background: var(--surface);
+            transition: border-color 0.15s ease;
+        }
+        .nav-cta:hover { text-decoration: none; border-color: var(--accent); }
+
+        /* --- Hero ----------------------------------------------------------- */
+        .hero {
+            text-align: center;
+            padding: 6rem 1.5rem 3.5rem;
+            max-width: 720px;
+            margin: 0 auto;
+        }
+        .eyebrow {
+            display: inline-block;
+            font-size: 0.8rem;
+            color: var(--ink-3);
+            letter-spacing: 0.02em;
+            margin-bottom: 2.25rem;
+        }
+        .eyebrow strong { color: var(--ink-2); font-weight: 600; }
+        .hero-rings { margin: 0 auto 2.25rem; display: block; color: var(--accent); }
+        h1 {
+            font-size: clamp(2.1rem, 5.2vw, 3.25rem);
+            line-height: 1.08;
+            letter-spacing: -0.035em;
+            font-weight: 650;
+            font-weight: 600;
+            margin-bottom: 1.25rem;
+            text-wrap: balance;
+        }
+        .lede {
+            font-size: 1.18rem;
+            color: var(--ink-2);
+            max-width: 560px;
+            margin: 0 auto 2.25rem;
+            line-height: 1.6;
+            text-wrap: pretty;
+        }
+        .hero-actions {
+            display: flex;
+            gap: 0.75rem;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+            font-weight: 500;
+            padding: 0.65rem 1.25rem;
+            border-radius: var(--radius-sm);
+            border: 1px solid transparent;
+            cursor: pointer;
+            font-family: inherit;
+            transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+        }
+        .btn:hover { text-decoration: none; }
+        .btn-primary { background: var(--ink); color: var(--bg); }
+        .btn-primary:hover { background: color-mix(in srgb, var(--ink) 85%, var(--accent)); }
+        .btn-secondary {
+            background: var(--surface);
+            color: var(--ink);
+            border-color: var(--line-strong);
+        }
+        .btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+
+        /* --- Stat line ------------------------------------------------------ */
+        .stats {
+            border-top: 1px solid var(--line);
+            border-bottom: 1px solid var(--line);
+        }
+        .stats-inner {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            gap: 0 2.5rem;
+            padding: 1.1rem 1.5rem;
+            font-size: 0.875rem;
+            color: var(--ink-2);
+            max-width: var(--maxw-wide);
+            margin: 0 auto;
+        }
+        .stats-inner span { white-space: nowrap; }
+        .stats-inner strong { color: var(--ink); font-weight: 600; }
+
+        /* --- Sections ------------------------------------------------------- */
+        section { padding: 4.5rem 0; }
+        .sec-head { margin-bottom: 2.25rem; max-width: 620px; }
+        .sec-head.center { margin-left: auto; margin-right: auto; text-align: center; }
+        .kicker {
+            font-size: 0.78rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08em;
+            color: var(--ink-3);
+            font-weight: 600;
+            margin-bottom: 0.65rem;
+        }
+        h2 {
+            font-size: clamp(1.5rem, 3vw, 1.9rem);
+            letter-spacing: -0.025em;
+            font-weight: 600;
+            line-height: 1.2;
+            margin-bottom: 0.6rem;
+            text-wrap: balance;
+        }
+        .sec-head p { color: var(--ink-2); font-size: 1.05rem; }
+
+        /* --- Showcase ------------------------------------------------------- */
+        .showcase { text-align: center; padding-top: 0.5rem; }
+        .shot-frame {
+            display: inline-block;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface);
+            padding: 0.5rem;
+            max-width: 360px;
+            width: 100%;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.04), 0 12px 32px rgba(0,0,0,0.06);
+        }
+        @media (prefers-color-scheme: dark) {
+            .shot-frame { box-shadow: 0 1px 2px rgba(0,0,0,0.4), 0 12px 40px rgba(0,0,0,0.5); }
+        }
+        .shot-frame img {
+            display: block;
+            width: 100%;
+            height: auto;
+            border-radius: 7px;
+        }
+        .shot-caption {
+            margin-top: 1rem;
+            font-size: 0.85rem;
+            color: var(--ink-3);
+        }
+
+        /* --- Steps ---------------------------------------------------------- */
+        .steps {
+            list-style: none;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 1.75rem 2rem;
+            counter-reset: step;
+        }
+        .steps li { counter-increment: step; }
+        .steps li .num {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            border: 1px solid var(--line-strong);
+            border-radius: 50%;
+            font-size: 0.85rem;
+            font-variant-numeric: tabular-nums;
+            color: var(--ink-2);
+            margin-bottom: 0.85rem;
+        }
+        .steps li h3 { font-size: 1.02rem; font-weight: 600; margin-bottom: 0.35rem; }
+        .steps li p { color: var(--ink-2); font-size: 0.95rem; line-height: 1.6; }
+
+        /* --- Trust / privacy ------------------------------------------------ */
+        .trust {
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface);
+            padding: 2rem;
+        }
+        .trust ul { list-style: none; display: grid; gap: 1.25rem; }
+        .trust li { display: grid; grid-template-columns: 20px 1fr; gap: 0.85rem; align-items: start; }
+        .trust .tick { color: var(--accent); margin-top: 0.3rem; }
+        .trust li h3 { font-size: 1rem; font-weight: 600; margin-bottom: 0.2rem; }
+        .trust li p { color: var(--ink-2); font-size: 0.95rem; line-height: 1.6; }
+
+        /* --- Pricing -------------------------------------------------------- */
+        .pricing {
+            text-align: center;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface);
+            padding: 3rem 2rem;
+            max-width: 560px;
+            margin: 0 auto;
+        }
+        .price-amt {
+            font-size: clamp(2.5rem, 6vw, 3.25rem);
+            font-weight: 600;
+            letter-spacing: -0.03em;
+            line-height: 1;
+            margin-bottom: 0.5rem;
+        }
+        .price-sub { color: var(--ink-2); font-size: 1.02rem; margin-bottom: 1.5rem; }
+        .price-list { list-style: none; display: inline-grid; gap: 0.5rem; text-align: left; margin-bottom: 1.75rem; }
+        .price-list li { display: flex; gap: 0.6rem; align-items: center; color: var(--ink-2); font-size: 0.95rem; }
+        .price-list .tick { color: var(--accent); flex-shrink: 0; }
+
+        /* --- FAQ ------------------------------------------------------------ */
+        .faq-list { border-top: 1px solid var(--line); }
+        details {
+            border-bottom: 1px solid var(--line);
+        }
+        details > summary {
+            list-style: none;
+            cursor: pointer;
+            padding: 1.15rem 2rem 1.15rem 0;
+            font-size: 1.02rem;
+            font-weight: 500;
+            position: relative;
+            color: var(--ink);
+        }
+        details > summary::-webkit-details-marker { display: none; }
+        details > summary::after {
+            content: "+";
+            position: absolute;
+            right: 0.25rem;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 1.3rem;
+            font-weight: 400;
+            color: var(--ink-3);
+            line-height: 1;
+            transition: transform 0.2s ease;
+        }
+        details[open] > summary::after { content: "\2212"; }
+        details > summary:hover { color: var(--accent); }
+        .faq-answer {
+            padding: 0 2rem 1.25rem 0;
+            color: var(--ink-2);
+            font-size: 0.97rem;
+            line-height: 1.65;
+        }
+        .faq-answer p + p { margin-top: 0.75rem; }
+
+        /* --- Install -------------------------------------------------------- */
+        .install-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+        .install-card {
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface);
+            padding: 1.75rem;
+            display: flex;
+            flex-direction: column;
+        }
+        .install-card h3 {
+            font-size: 1.02rem;
+            font-weight: 600;
+            margin-bottom: 0.3rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .pill {
+            font-size: 0.68rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.06em;
+            color: var(--accent);
+            background: var(--accent-soft);
+            padding: 0.15rem 0.5rem;
+            border-radius: 100px;
+        }
+        .install-card > p { color: var(--ink-2); font-size: 0.9rem; margin-bottom: 1.1rem; }
+        .term {
+            position: relative;
+            background: var(--code-bg);
+            border: 1px solid var(--line);
+            border-radius: var(--radius-sm);
+            padding: 0.9rem 1rem;
+            margin-top: auto;
+        }
+        .term pre {
+            font-family: var(--mono);
+            font-size: 0.8rem;
+            line-height: 1.75;
+            color: var(--ink);
+            overflow-x: auto;
+            white-space: pre;
+        }
+        .term .pr { color: var(--ink-3); user-select: none; }
+        .copy {
+            position: absolute;
+            top: 0.5rem;
+            right: 0.5rem;
+            font-family: var(--sans);
+            font-size: 0.72rem;
+            font-weight: 500;
+            color: var(--ink-2);
+            background: var(--surface);
+            border: 1px solid var(--line-strong);
+            border-radius: 6px;
+            padding: 0.25rem 0.55rem;
+            cursor: pointer;
+            min-width: 52px;
+            transition: color 0.15s ease, border-color 0.15s ease;
+        }
+        .copy:hover { color: var(--ink); border-color: var(--accent); }
+        .copy.done { color: var(--ok); border-color: var(--ok); }
+        .install-note { color: var(--ink-3); font-size: 0.82rem; margin-top: 0.9rem; }
+
+        /* --- Notify --------------------------------------------------------- */
+        .notify {
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface);
+            padding: 2rem;
+            max-width: 560px;
+            margin: 0 auto;
+        }
+        .notify h3 { font-size: 1.1rem; font-weight: 600; margin-bottom: 0.4rem; }
+        .notify > p { color: var(--ink-2); font-size: 0.95rem; margin-bottom: 1.25rem; }
+        .notify-form { display: flex; gap: 0.6rem; }
+        .notify-form input[type="email"] {
+            flex: 1;
+            font-family: inherit;
+            font-size: 0.95rem;
+            padding: 0.6rem 0.85rem;
+            border: 1px solid var(--line-strong);
+            border-radius: var(--radius-sm);
+            background: var(--bg);
+            color: var(--ink);
+        }
+        .notify-form input[type="email"]:focus { outline: none; border-color: var(--accent); }
+        .notify .note { color: var(--ink-3); font-size: 0.8rem; margin-top: 0.85rem; margin-bottom: 0; }
+
+        /* --- Footer --------------------------------------------------------- */
+        footer.site {
+            border-top: 1px solid var(--line);
+            padding: 2.5rem 1.5rem 3rem;
+            color: var(--ink-3);
+            font-size: 0.85rem;
+        }
+        .footer-inner { max-width: var(--maxw-wide); margin: 0 auto; }
+        .footer-top {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1rem;
+            margin-bottom: 1.25rem;
+        }
+        .footer-links { display: flex; gap: 1.5rem; flex-wrap: wrap; }
+        .footer-links a { color: var(--ink-2); }
+        .footer-links a:hover { color: var(--ink); }
+        .disclaimer { max-width: 620px; line-height: 1.6; }
+
+        hr.rule { border: none; border-top: 1px solid var(--line); }
+
+        /* --- Restrained reveal (single subtle fade) ------------------------ */
+        .reveal { opacity: 0; transform: translateY(8px); transition: opacity 0.5s ease, transform 0.5s ease; }
+        .reveal.in { opacity: 1; transform: none; }
+
+        @media (prefers-reduced-motion: reduce) {
+            html { scroll-behavior: auto; }
+            .reveal { opacity: 1 !important; transform: none !important; transition: none !important; }
+            *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+        }
+
+        /* --- Responsive ----------------------------------------------------- */
+        @media (max-width: 720px) {
+            body { font-size: 16px; }
+            .hero { padding: 4rem 1.25rem 3rem; }
+            section { padding: 3.25rem 0; }
+            .steps, .install-grid { grid-template-columns: 1fr; }
+            .nav-right .hide-sm { display: none; }
+            .notify-form { flex-direction: column; }
+            .footer-top { flex-direction: column; align-items: flex-start; }
+        }
+    </style>
+</head>
+<body>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<!-- Header -->
+<header class="site">
+    <nav class="nav" aria-label="Primary">
+        <a class="brand" href="#main" aria-label="Tokease — home">
+            <svg width="20" height="20" viewBox="0 0 512 512" fill="none" aria-hidden="true">
+                <circle cx="256" cy="256" r="120" stroke="currentColor" stroke-width="36" fill="none"/>
+                <circle cx="256" cy="256" r="80"  stroke="currentColor" stroke-width="36" fill="none"/>
+                <circle cx="256" cy="256" r="40"  stroke="currentColor" stroke-width="36" fill="none"/>
+            </svg>
+            Tokease
+        </a>
+        <div class="nav-right">
+            <a class="navlink hide-sm" href="#how">How it works</a>
+            <a class="navlink hide-sm" href="#faq">FAQ</a>
+            <a class="navlink" href="https://github.com/tpatrouillat/tokease">GitHub</a>
+            <a class="nav-cta" href="#install">Install</a>
+        </div>
+    </nav>
+</header>
+
+<main id="main">
+
+<!-- Hero -->
+<section class="hero" aria-labelledby="hero-title">
+    <p class="eyebrow"><strong>Free &amp; open source</strong> &middot; macOS menu bar &middot; for Claude Pro &amp; Max</p>
+
+    <svg class="hero-rings" width="96" height="96" viewBox="0 0 512 512" fill="none" role="img" aria-label="Three concentric rings, the Tokease mark">
+        <circle cx="256" cy="256" r="184" stroke="currentColor" stroke-opacity="0.18" stroke-width="40" fill="none"/>
+        <circle cx="256" cy="256" r="124" stroke="currentColor" stroke-opacity="0.18" stroke-width="40" fill="none"/>
+        <circle cx="256" cy="256" r="64"  stroke="currentColor" stroke-opacity="0.18" stroke-width="40" fill="none"/>
+        <path d="M 256 72 A 184 184 0 1 1 202.2 437.9" stroke="currentColor" stroke-width="40" stroke-linecap="round" fill="none"/>
+        <path d="M 256 132 A 124 124 0 1 1 169.3 369.2" stroke="currentColor" stroke-width="40" stroke-linecap="round" fill="none"/>
+        <path d="M 256 192 A 64 64 0 0 1 311.4 288"   stroke="currentColor" stroke-width="40" stroke-linecap="round" fill="none"/>
+    </svg>
+
+    <h1 id="hero-title">See your Claude Code limits before you burn them</h1>
+    <p class="lede">A small macOS menu bar app. Three rings show your 5-hour session, weekly cap, and per-model usage in real time — read straight from the same endpoint Claude Code uses.</p>
+
+    <div class="hero-actions">
+        <a class="btn btn-primary" href="#install">Install via Homebrew</a>
+        <a class="btn btn-secondary" href="https://github.com/tpatrouillat/tokease">Read the source</a>
+    </div>
+</section>
+
+<!-- Stat line -->
+<div class="stats">
+    <div class="stats-inner">
+        <span><strong>~750</strong> lines of Python</span>
+        <span><strong>1</strong> GET request, then done</span>
+        <span><strong>0</strong> accounts &amp; 0 telemetry</span>
+        <span><strong>MIT</strong> licensed</span>
+    </div>
+</div>
+
+<!-- Showcase: real screenshot -->
+<section class="showcase wrap" aria-labelledby="showcase-title" id="showcase">
+    <div class="sec-head center">
+        <p class="kicker">What it looks like</p>
+        <h2 id="showcase-title">One glance at the menu bar</h2>
+        <p>The rings fill as you spend each limit. Click for the full breakdown — session, weekly, per model, and any extra paid usage.</p>
+    </div>
+    <figure class="reveal">
+        <span class="shot-frame">
+            <img src="screenshot.png" width="306" height="284"
+                 alt="Tokease dropdown in the macOS menu bar showing 5-hour usage at 77% resetting in 25 minutes, weekly at 35% resetting Feb 13, Sonnet at 16% resetting in 19h 25m, extra spend at $8.47 of $20, a last-updated time, and Refresh, Refresh Interval, and Quit menu items.">
+        </span>
+        <figcaption class="shot-caption">Actual screenshot — no mockup.</figcaption>
+    </figure>
+</section>
+
+<hr class="rule">
+
+<!-- How it works -->
+<section class="wrap" aria-labelledby="how-title" id="how">
+    <div class="sec-head">
+        <p class="kicker">How it works</p>
+        <h2 id="how-title">Three steps, under a minute</h2>
+    </div>
+    <ol class="steps reveal">
+        <li>
+            <span class="num" aria-hidden="true">1</span>
+            <h3>Log in to Claude Code</h3>
+            <p>Run <code>claude login</code> once. Your OAuth token lands in the macOS Keychain — Tokease reuses it.</p>
+        </li>
+        <li>
+            <span class="num" aria-hidden="true">2</span>
+            <h3>Install Tokease</h3>
+            <p>One Homebrew command, or clone the repo and run <code>install.sh</code>. No keys, no config files.</p>
+        </li>
+        <li>
+            <span class="num" aria-hidden="true">3</span>
+            <h3>Read the rings</h3>
+            <p>Three rings appear in your menu bar and fill as you use each limit. Click for details; set alert thresholds in Settings.</p>
+        </li>
+    </ol>
+</section>
+
+<hr class="rule">
+
+<!-- Privacy / trust -->
+<section class="wrap" aria-labelledby="trust-title" id="privacy">
+    <div class="sec-head">
+        <p class="kicker">Privacy &amp; trust</p>
+        <h2 id="trust-title">It runs on your Mac, and you can check</h2>
+        <p>No server to trust, because there isn't one. The whole thing is a file you can read.</p>
+    </div>
+    <div class="trust reveal">
+        <ul>
+            <li>
+                <svg class="tick" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10.5l3.5 3.5L16 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <div>
+                    <h3>Your token stays local</h3>
+                    <p>The OAuth token is read from the Keychain, used for a single GET to <code>api.anthropic.com/api/oauth/usage</code>, then cleared from memory. HTTP redirects are blocked so the Bearer token can't leak to another domain.</p>
+                </div>
+            </li>
+            <li>
+                <svg class="tick" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10.5l3.5 3.5L16 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <div>
+                    <h3>No telemetry, no account</h3>
+                    <p>No analytics, no phone-home, no sign-up. The only network request is the one that fetches your own usage.</p>
+                </div>
+            </li>
+            <li>
+                <svg class="tick" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10.5l3.5 3.5L16 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <div>
+                    <h3>Audit it in one sitting</h3>
+                    <p>Roughly 750 lines of Python plus the <code>rumps</code> menu bar library. Read <a href="https://github.com/tpatrouillat/tokease/blob/main/tracker.py"><code>tracker.py</code></a> before you install — that's the point.</p>
+                </div>
+            </li>
+            <li>
+                <svg class="tick" width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10.5l3.5 3.5L16 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                <div>
+                    <h3>Honest about the caveat</h3>
+                    <p>The usage endpoint is undocumented — the same one the Claude Code CLI uses. Anthropic could change it anytime; if they do, you'll see a clear error state, not a crash. Independent project, not affiliated with Anthropic.</p>
+                </div>
+            </li>
+        </ul>
+    </div>
+</section>
+
+<hr class="rule">
+
+<!-- Pricing -->
+<section class="wrap" aria-labelledby="price-title" id="pricing">
+    <div class="sec-head center">
+        <p class="kicker">Pricing</p>
+        <h2 id="price-title">Free. Forever.</h2>
+    </div>
+    <div class="pricing reveal">
+        <div class="price-amt">$0</div>
+        <p class="price-sub">MIT licensed. No paid tier, no upsell, no catch.</p>
+        <ul class="price-list">
+            <li><svg class="tick" width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10.5l3.5 3.5L16 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Every feature, no account needed</li>
+            <li><svg class="tick" width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10.5l3.5 3.5L16 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Source on GitHub, fork it freely</li>
+            <li><svg class="tick" width="18" height="18" viewBox="0 0 20 20" fill="none" aria-hidden="true"><path d="M4 10.5l3.5 3.5L16 5.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg> Optional sponsorship if it saves you a session</li>
+        </ul>
+        <div class="hero-actions" style="justify-content:center;">
+            <a class="btn btn-primary" href="#install">Install via Homebrew</a>
+            <a class="btn btn-secondary" href="https://github.com/sponsors/tpatrouillat">Sponsor</a>
+        </div>
+    </div>
+</section>
+
+<hr class="rule">
+
+<!-- Install -->
+<section class="wrap" aria-labelledby="install-title" id="install">
+    <div class="sec-head">
+        <p class="kicker">Install</p>
+        <h2 id="install-title">Two ways in</h2>
+        <p>Both free. Requires macOS and Claude Code logged in (<code>claude login</code>).</p>
+    </div>
+    <div class="install-grid">
+        <div class="install-card reveal">
+            <h3>Homebrew <span class="pill">Recommended</span></h3>
+            <p>One command. Self-contained — no Apple Developer warnings.</p>
+            <div class="term">
+                <pre id="cmd-brew"><span class="pr">$ </span>brew install tpatrouillat/tap/tokease</pre>
+                <button class="copy" type="button" data-target="cmd-brew" aria-label="Copy the Homebrew install command">Copy</button>
+            </div>
+            <p class="install-note">Then run <code>tokease</code>, or <code>brew services start tokease</code> to launch at login.</p>
+        </div>
+        <div class="install-card reveal">
+            <h3>From source</h3>
+            <p>Read every line first, then build. About 30 seconds.</p>
+            <div class="term">
+                <pre id="cmd-src"><span class="pr">$ </span>git clone https://github.com/tpatrouillat/tokease.git
+<span class="pr">$ </span>cd tokease
+<span class="pr">$ </span>bash install.sh</pre>
+                <button class="copy" type="button" data-target="cmd-src" aria-label="Copy the build-from-source commands">Copy</button>
+            </div>
+            <p class="install-note">Repo: <a href="https://github.com/tpatrouillat/tokease">github.com/tpatrouillat/tokease</a></p>
+        </div>
+    </div>
+</section>
+
+<hr class="rule">
+
+<!-- FAQ -->
+<section class="wrap" aria-labelledby="faq-title" id="faq">
+    <div class="sec-head">
+        <p class="kicker">FAQ</p>
+        <h2 id="faq-title">Questions, answered plainly</h2>
+    </div>
+    <div class="faq-list">
+        <details>
+            <summary>Is Tokease free?</summary>
+            <div class="faq-answer"><p>Yes — free forever, MIT licensed. There's no paid tier, no account, and no upsell.</p></div>
+        </details>
+        <details>
+            <summary>Do I need Claude Pro or Max?</summary>
+            <div class="faq-answer"><p>Yes. Tokease reads the usage tied to a Claude Pro or Max subscription. It doesn't work with pay-as-you-go API keys.</p></div>
+        </details>
+        <details>
+            <summary>How does it read my usage?</summary>
+            <div class="faq-answer"><p>It reuses the OAuth token Claude Code already stored in your macOS Keychain and makes a single GET request to the same <code>/api/oauth/usage</code> endpoint the Claude Code CLI uses. No log parsing, no extra login.</p></div>
+        </details>
+        <details>
+            <summary>Is my token safe?</summary>
+            <div class="faq-answer"><p>The token never leaves your Mac except in that one request to <code>api.anthropic.com</code>. It's read from the Keychain, used once, then cleared from memory. HTTP redirects are blocked so the Bearer token can't leak to another domain. No telemetry, no analytics.</p></div>
+        </details>
+        <details>
+            <summary>How is this different from ccusage or CodexBar?</summary>
+            <div class="faq-answer">
+                <p><strong>ccusage</strong> estimates usage by parsing your local Claude Code logs. <strong>CodexBar</strong> is a multi-provider menu bar tool.</p>
+                <p>Tokease does one thing: read the official OAuth usage endpoint and show your real Pro/Max limits as three rings. Smaller scope, fewer moving parts.</p>
+            </div>
+        </details>
+        <details>
+            <summary>Can I read the source?</summary>
+            <div class="faq-answer"><p>Yes. The whole app is roughly 750 lines of Python plus the <code>rumps</code> library. <a href="https://github.com/tpatrouillat/tokease/blob/main/tracker.py"><code>tracker.py</code></a> is the single file that does the work.</p></div>
+        </details>
+        <details>
+            <summary>Does it use an official API?</summary>
+            <div class="faq-answer"><p>No. The <code>/api/oauth/usage</code> endpoint is undocumented — it's what the Claude Code CLI itself uses. Anthropic could change or remove it anytime. If that happens, the menu bar shows an error state instead of crashing, and a fix ships once the community surfaces it.</p></div>
+        </details>
+        <details>
+            <summary>Is Tokease affiliated with Anthropic?</summary>
+            <div class="faq-answer"><p>No. It's an independent project, not affiliated with, endorsed by, or sponsored by Anthropic.</p></div>
+        </details>
+    </div>
+</section>
+
+<hr class="rule">
+
+<!-- Notify -->
+<section class="wrap" aria-labelledby="notify-title" id="notify">
+    <div class="notify reveal">
+        <h3 id="notify-title">One email if the endpoint changes</h3>
+        <p>If Anthropic ships an official usage API — or the current one breaks and the app needs an update — you'll get a single heads-up. No newsletter, no marketing.</p>
+        <!--
+          To make this live: create a free form at https://formspree.io
+          and replace YOUR_FORM_ID with your form's ID. Works without JavaScript.
+        -->
+        <form class="notify-form" action="https://formspree.io/f/YOUR_FORM_ID" method="POST">
+            <label for="notify-email" style="position:absolute;left:-9999px;">Email address</label>
+            <input id="notify-email" type="email" name="email" placeholder="you@example.com" required autocomplete="email">
+            <input type="hidden" name="_subject" value="Tokease — notify list signup">
+            <button type="submit" class="btn btn-primary">Notify me</button>
+        </form>
+        <p class="note">Used only for endpoint-change alerts. Unsubscribe in one click.</p>
+    </div>
+</section>
+
+</main>
+
+<!-- Footer -->
+<footer class="site">
+    <div class="footer-inner">
+        <div class="footer-top">
+            <a class="brand" href="#main" aria-label="Tokease — home">
+                <svg width="18" height="18" viewBox="0 0 512 512" fill="none" aria-hidden="true">
+                    <circle cx="256" cy="256" r="120" stroke="currentColor" stroke-width="40" fill="none"/>
+                    <circle cx="256" cy="256" r="80"  stroke="currentColor" stroke-width="40" fill="none"/>
+                    <circle cx="256" cy="256" r="40"  stroke="currentColor" stroke-width="40" fill="none"/>
+                </svg>
+                Tokease
+            </a>
+            <nav class="footer-links" aria-label="Footer">
+                <a href="https://github.com/tpatrouillat/tokease">GitHub</a>
+                <a href="https://github.com/tpatrouillat/tokease/releases">Releases</a>
+                <a href="https://github.com/tpatrouillat/tokease/issues">Issues</a>
+                <a href="https://github.com/sponsors/tpatrouillat">Sponsor</a>
+            </nav>
+        </div>
+        <p>MIT License &middot; built by <a href="https://github.com/tpatrouillat">Thibault Patrouillat</a></p>
+        <p class="disclaimer" style="margin-top:0.5rem;">
+            Not affiliated with, endorsed by, or sponsored by Anthropic. Uses an undocumented API endpoint that may change without notice. Use at your own risk.
+        </p>
+    </div>
+</footer>
+
+<script>
+    // Copy-to-clipboard for install commands
+    document.querySelectorAll('.copy').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var el = document.getElementById(btn.getAttribute('data-target'));
+            if (!el) return;
+            var text = el.innerText.replace(/^\$\s/gm, '').trim();
+            navigator.clipboard.writeText(text).then(function () {
+                var prev = btn.textContent;
+                btn.textContent = 'Copied';
+                btn.classList.add('done');
+                setTimeout(function () { btn.textContent = prev; btn.classList.remove('done'); }, 1800);
+            }).catch(function () {
+                btn.textContent = 'Failed';
+                setTimeout(function () { btn.textContent = 'Copy'; }, 1800);
+            });
+        });
+    });
+
+    // Restrained scroll reveal — single subtle fade, respects reduced motion
+    var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    var els = document.querySelectorAll('.reveal');
+    if (!reduce && 'IntersectionObserver' in window) {
+        var io = new IntersectionObserver(function (entries) {
+            entries.forEach(function (e) {
+                if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); }
+            });
+        }, { threshold: 0.1, rootMargin: '0px 0px -40px 0px' });
+        els.forEach(function (el) { io.observe(el); });
+    } else {
+        els.forEach(function (el) { el.classList.add('in'); });
+    }
+</script>
+
+</body>
+</html>

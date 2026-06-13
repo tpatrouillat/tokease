@@ -22,7 +22,7 @@
 - **macOS** (menu bar app using `rumps`)
 - **Python 3.10+**
 - **Claude Code** installed and logged in (`claude login`)
-- **Claude Pro or Max** subscription (the usage API requires a paid plan)
+- **Claude Pro or Max** subscription — the usage endpoint returns 403 on free accounts, and Team/Enterprise (credit-based billing) is not supported yet; the 3-ring model doesn't map to it
 
 ## Quick Install (Homebrew, recommended)
 
