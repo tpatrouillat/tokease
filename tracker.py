@@ -184,8 +184,8 @@ def _settings_set(key, value):
     try:
         _DEFAULTS.setObject_forKey_(value, key)
         _DEFAULTS.synchronize()
-    except Exception:
-        pass
+    except Exception as exc:  # non-critical: setting just won't persist — log, don't mask
+        print(f"tokease: settings write failed: {exc!r}", file=sys.stderr)
 
 
 # ---------------------------------------------------------------------------
@@ -209,7 +209,7 @@ def _get_app_path():
 def _is_login_item():
     try:
         result = subprocess.run(
-            ["osascript", "-e",
+            ["/usr/bin/osascript", "-e",
              'tell application "System Events" to get the name of every login item'],
             capture_output=True, text=True, timeout=5,
         )
@@ -236,7 +236,7 @@ def _set_login_item(enabled, app_path):
                 f'delete login item "{LOGIN_ITEM_NAME}"'
             )
         subprocess.run(
-            ["osascript", "-e", script],
+            ["/usr/bin/osascript", "-e", script],
             capture_output=True, timeout=5,
         )
     except (OSError, subprocess.TimeoutExpired):
@@ -304,7 +304,7 @@ def _read_keychain_token():
     """
     try:
         result = subprocess.run(
-            ["security", "find-generic-password",
+            ["/usr/bin/security", "find-generic-password",
              "-s", "Claude Code-credentials", "-w"],
             capture_output=True,
             text=True,
@@ -587,10 +587,10 @@ class App(rumps.App):
                 subtitle=f"Session at {pct}%",
                 message=f"You've passed {threshold}% of your 5-hour limit.",
             )
-        except Exception:
-            # rumps.notification requires a signed bundle on recent macOS —
-            # silently no-op when running from source so dev never breaks.
-            pass
+        except Exception as exc:
+            # rumps.notification needs a signed bundle on recent macOS; from source
+            # it can't fire — log rather than mask, but never crash the refresh.
+            print(f"tokease: notification skipped: {exc!r}", file=sys.stderr)
 
     def _start_timer(self):
         if self._timer:
