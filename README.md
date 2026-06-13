@@ -15,7 +15,7 @@
 - **Zero config** — Reads your existing Claude Code OAuth token from macOS Keychain
 - **Settings menu** — Launch at login, display modes, alert thresholds, refresh interval
 - **Lightweight** — Pure Python, minimal dependencies, zero network overhead
-- **Secure** — Token never leaves your Mac, no data collection
+- **Local-only** — Your token is only ever sent to Anthropic's own servers (the same destination Claude Code uses), never to any server the author controls; no telemetry, no data collection
 
 ## Prerequisites
 
@@ -23,6 +23,10 @@
 - **Python 3.10+**
 - **Claude Code** installed and logged in (`claude login`)
 - **Claude Pro or Max** subscription — the usage endpoint returns 403 on free accounts, and Team/Enterprise (credit-based billing) is not supported yet; the 3-ring model doesn't map to it
+
+## ⚠️ Terms of Service — read before installing
+
+As of **February 2026**, Anthropic's Consumer Terms state that the OAuth token issued for Claude **subscription** plans (Free/Pro/Max) is authorized **only** for use with Claude Code and Claude.ai; using it with any other tool or service is unauthorized. Tokease reads that token from your Keychain and calls the same usage endpoint Claude Code uses, so **using Tokease likely violates those terms**, and Anthropic enforces at the account level. The enforcement actions reported so far have centered on tools that route *inference* through the token rather than a read-only usage poll, but the risk to your account is **not zero**. Use Tokease entirely **at your own risk**. This is an independent project, **not affiliated with or endorsed by Anthropic**.
 
 ## Quick Install (Homebrew, recommended)
 
