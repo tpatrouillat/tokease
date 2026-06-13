@@ -879,5 +879,321 @@ class TestDetectUserAgent(unittest.TestCase):
         self.assertEqual(result, tracker._FALLBACK_UA)
 
 
+class TestErrorClearsStaleIcon(unittest.TestCase):
+    """Bug: after a successful render sets a ring icon, an error state left the
+    stale icon visible — misleading in ICON mode (title is empty) and
+    contradictory in BOTH mode (error glyph + full ring)."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def _seed_icon(self, app, mode):
+        app.display_mode = mode
+        app._update_display(_make_api_response(five_hour_pct=90))
+
+    def test_auth_error_clears_icon_in_icon_mode(self):
+        app = self._make_app()
+        self._seed_icon(app, tracker.DISPLAY_ICON)
+        self.assertIsNotNone(app.icon)
+        app._apply_usage(None, "auth")
+        self.assertIsNone(app.icon)
+
+    def test_rate_error_clears_icon_in_both_mode(self):
+        app = self._make_app()
+        self._seed_icon(app, tracker.DISPLAY_BOTH)
+        app._apply_usage(None, "rate")
+        self.assertIsNone(app.icon)
+
+    def test_generic_error_clears_icon(self):
+        app = self._make_app()
+        self._seed_icon(app, tracker.DISPLAY_BOTH)
+        app._apply_usage(None, "error")
+        self.assertIsNone(app.icon)
+
+    def test_none_data_clears_icon(self):
+        app = self._make_app()
+        self._seed_icon(app, tracker.DISPLAY_ICON)
+        app._apply_usage(None, None)
+        self.assertIsNone(app.icon)
+
+
+class TestSevenDayOpus(unittest.TestCase):
+    """The real API exposes seven_day_opus (often null). Nothing exercised the
+    Opus menu line, its role in the inner ring (max of sonnet/opus), nor its
+    consideration in reset scheduling."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def test_opus_present_sets_menu_line(self):
+        app = self._make_app()
+        data = _make_api_response()
+        data["seven_day_opus"] = {"utilization": 63, "resets_at": None}
+        app._update_display(data)
+        self.assertIn("Opus: 63%", app.mopus.title)
+
+    def test_opus_null_falls_back_to_default(self):
+        app = self._make_app()
+        data = _make_api_response()
+        data["seven_day_opus"] = None
+        app._update_display(data)
+        self.assertEqual(app.mopus.title, tracker.OPUS_DEFAULT)
+
+    def test_opus_absent_falls_back_to_default(self):
+        app = self._make_app()
+        data = _make_api_response()
+        data.pop("seven_day_opus", None)
+        app._update_display(data)
+        self.assertEqual(app.mopus.title, tracker.OPUS_DEFAULT)
+
+    def test_opus_drives_inner_ring_when_higher_than_sonnet(self):
+        app = self._make_app()
+        data = _make_api_response(sonnet_pct=10)
+        data["seven_day_opus"] = {"utilization": 80, "resets_at": None}
+        with patch.object(tracker, "_render_dynamic_icon") as render:
+            app._update_display(data)
+        render.assert_called_once()
+        inner_pct = render.call_args[0][2]
+        self.assertEqual(inner_pct, 80)
+
+    def test_opus_resets_at_considered_in_scheduling(self):
+        app = self._make_app()
+        now = datetime.now(timezone.utc)
+        soon = (now + timedelta(minutes=3)).isoformat().replace("+00:00", "Z")
+        far = (now + timedelta(days=2)).isoformat().replace("+00:00", "Z")
+        data = _make_api_response(
+            five_hour_resets=far, seven_day_resets=far, sonnet_resets=far,
+        )
+        data["seven_day_opus"] = {"utilization": 5, "resets_at": soon}
+        with patch("threading.Timer") as MockTimer:
+            MockTimer.return_value = MagicMock()
+            app._schedule_reset_refresh(data)
+            self.assertTrue(MockTimer.called)
+            delay = MockTimer.call_args[0][0]
+            self.assertAlmostEqual(delay, 180 + 5, delta=3)
+
+
+class TestMaybeNotify(unittest.TestCase):
+    """Threshold-crossing notifications: fire only on upward crossing, never on
+    first observation, never repeatedly at a plateau, never when disabled."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def _fire(self, app, sequence):
+        calls = []
+        with patch.object(tracker.rumps, "notification",
+                          side_effect=lambda **k: calls.append(k)):
+            for pct in sequence:
+                app._maybe_notify(pct)
+        return calls
+
+    def test_no_notify_on_first_observation(self):
+        app = self._make_app()
+        app.alerts_enabled = True
+        app._last_pct = None
+        calls = self._fire(app, [99])
+        self.assertEqual(calls, [])
+        self.assertEqual(app._last_pct, 99)
+
+    def test_notify_on_crossing_80(self):
+        app = self._make_app()
+        app.alerts_enabled = True
+        app._last_pct = 50
+        calls = self._fire(app, [85])
+        self.assertEqual(len(calls), 1)
+        self.assertIn("80%", calls[0]["message"])
+
+    def test_crossing_both_thresholds_at_once_picks_highest(self):
+        app = self._make_app()
+        app.alerts_enabled = True
+        app._last_pct = 10
+        calls = self._fire(app, [97])
+        self.assertEqual(len(calls), 1)
+        self.assertIn("95%", calls[0]["message"])
+
+    def test_no_repeat_at_plateau(self):
+        app = self._make_app()
+        app.alerts_enabled = True
+        app._last_pct = 50
+        calls = self._fire(app, [85, 90, 88])
+        self.assertEqual(len(calls), 1)
+
+    def test_disabled_never_notifies(self):
+        app = self._make_app()
+        app.alerts_enabled = False
+        app._last_pct = 50
+        calls = self._fire(app, [99])
+        self.assertEqual(calls, [])
+        self.assertEqual(app._last_pct, 99)
+
+    def test_notification_exception_swallowed(self):
+        app = self._make_app()
+        app.alerts_enabled = True
+        app._last_pct = 50
+        with patch.object(tracker.rumps, "notification",
+                          side_effect=RuntimeError("unsigned bundle")):
+            app._maybe_notify(85)
+
+    def test_drop_below_then_recross_renotifies(self):
+        app = self._make_app()
+        app.alerts_enabled = True
+        app._last_pct = 50
+        calls = self._fire(app, [85, 50, 85])
+        self.assertEqual(len(calls), 2)
+
+
+class TestApplyDisplayModes(unittest.TestCase):
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def test_pct_mode_clears_icon_and_sets_bare_title(self):
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_PCT
+        app._apply_display("42%", "stub-icon-a.png")
+        self.assertEqual(app.title, "42%")
+        self.assertIsNone(app.icon)
+
+    def test_icon_mode_empties_title_and_sets_icon(self):
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_ICON
+        app._apply_display("42%", "stub-icon-b.png")
+        self.assertEqual(app.title, "")
+        self.assertEqual(app.icon, "stub-icon-b.png")
+
+    def test_both_mode_prefixes_spacer(self):
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_BOTH
+        with patch.object(tracker, "_TITLE_SPACER", "  "):
+            app._apply_display("42%", "stub-icon-b.png")
+        self.assertEqual(app.title, "  42%")
+        self.assertEqual(app.icon, "stub-icon-b.png")
+
+    def test_none_icon_path_leaves_icon_untouched(self):
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_ICON
+        app.icon = "stub-previous.png"
+        app._apply_display("42%", None)
+        self.assertEqual(app.icon, "stub-previous.png")
+
+    def test_set_display_mode_persists_and_checks_radio(self):
+        app = self._make_app()
+        sender = SimpleNamespace(_mode=tracker.DISPLAY_ICON)
+        with patch("tracker._settings_set") as save, \
+             patch.object(app, "_refresh"):
+            app._set_display_mode(sender)
+        self.assertEqual(app.display_mode, tracker.DISPLAY_ICON)
+        save.assert_called_once_with(tracker._KEY_DISPLAY_MODE, tracker.DISPLAY_ICON)
+        self.assertEqual(app._display_items[tracker.DISPLAY_ICON].state, 1)
+        self.assertEqual(app._display_items[tracker.DISPLAY_BOTH].state, 0)
+
+
+class TestCorruptedSettings(unittest.TestCase):
+    def test_invalid_display_mode_falls_back_to_both(self):
+        def fake_get(key, default=None):
+            return "garbage_mode" if key == tracker._KEY_DISPLAY_MODE else default
+        with patch("tracker._settings_get", side_effect=fake_get), \
+             patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            app = tracker.App()
+        self.assertEqual(app.display_mode, tracker.DISPLAY_BOTH)
+
+    def test_falsy_alerts_setting_coerced_to_bool(self):
+        def fake_get(key, default=None):
+            return 0 if key == tracker._KEY_ALERTS else default
+        with patch("tracker._settings_get", side_effect=fake_get), \
+             patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            app = tracker.App()
+        self.assertIs(app.alerts_enabled, False)
+
+    def test_toggle_alerts_persists_and_flips_state(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            app = tracker.App()
+        app.alerts_enabled = True
+        sender = FakeMenuItem("Alert")
+        sender.state = 1
+        with patch("tracker._settings_set") as save:
+            app._toggle_alerts(sender)
+        self.assertFalse(app.alerts_enabled)
+        self.assertEqual(sender.state, 0)
+        save.assert_called_once_with(tracker._KEY_ALERTS, False)
+
+
+class TestUnknownBuckets(unittest.TestCase):
+    """Real API returns seven_day_cowork/oauth_apps/omelette + codenames, all
+    null except five_hour/seven_day/seven_day_sonnet. They must be ignored."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def test_unknown_buckets_do_not_affect_display(self):
+        app = self._make_app()
+        data = {
+            "five_hour": {"utilization": 30, "resets_at": None},
+            "seven_day_cowork": {"utilization": 99, "resets_at": None},
+            "oauth_apps": None,
+            "omelette": {"utilization": 88, "resets_at": None},
+            "some_codename_x7": {"utilization": 77, "resets_at": None},
+        }
+        app._update_display(data)
+        self.assertEqual(app.title, "30%")
+        self.assertEqual(app.m7d.title, tracker.WEEKLY_DEFAULT)
+
+    def test_unknown_bucket_reset_not_scheduled(self):
+        app = self._make_app()
+        now = datetime.now(timezone.utc)
+        soon = (now + timedelta(minutes=2)).isoformat().replace("+00:00", "Z")
+        data = {
+            "five_hour": {"utilization": 30, "resets_at": None},
+            "seven_day_cowork": {"utilization": 50, "resets_at": soon},
+        }
+        with patch("threading.Timer") as MockTimer:
+            app._schedule_reset_refresh(data)
+            MockTimer.assert_not_called()
+
+
+class TestSectionPresentNullReset(unittest.TestCase):
+    """A live section with utilization but resets_at: null must render the pct
+    and show 'resets --' without scheduling a reset timer."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def test_null_reset_renders_pct_with_dashes(self):
+        app = self._make_app()
+        data = {
+            "five_hour": {"utilization": 44, "resets_at": None},
+            "seven_day": {"utilization": 22, "resets_at": None},
+            "seven_day_sonnet": {"utilization": 11, "resets_at": None},
+        }
+        app._update_display(data)
+        self.assertIn("5-hour: 44%", app.m5h.title)
+        self.assertIn("resets --", app.m5h.title)
+        self.assertEqual(app.title, "44%")
+
+    def test_null_reset_schedules_no_timer(self):
+        app = self._make_app()
+        data = _make_api_response(
+            five_hour_resets=None, seven_day_resets=None, sonnet_resets=None,
+        )
+        with patch("threading.Timer") as MockTimer:
+            app._schedule_reset_refresh(data)
+            MockTimer.assert_not_called()
+
+
 if __name__ == "__main__":
     unittest.main()
