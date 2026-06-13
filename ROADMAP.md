@@ -4,7 +4,7 @@ Where this project is, and where it might go.
 
 ## v1.0 — what ships now
 
-A single-file macOS menu bar app that reads your Claude Code OAuth token from the Keychain, hits the undocumented `/api/oauth/usage` endpoint, and shows your 5-hour / weekly / per-model utilization. That's it. ~430 lines of Python, MIT, single dependency (`rumps`).
+A single-file macOS menu bar app that reads your Claude Code OAuth token from the Keychain, hits the undocumented `/api/oauth/usage` endpoint, and shows your 5-hour / weekly / per-model utilization. That's it. ~750 lines of Python, MIT, two small dependencies (`rumps` for the menu bar, `Pillow` for the dynamic icon).
 
 ### Explicitly out of scope for v1.0
 
