@@ -1,5 +1,5 @@
 """
-py2app build configuration for Claude Usage Tracker.
+py2app build configuration for Tokease.
 
 Build the .app bundle:
     python setup.py py2app
@@ -11,7 +11,7 @@ Build a dev/test version (symlinked, faster):
 from setuptools import setup
 
 APP = ["tracker.py"]
-APP_NAME = "Claude Usage Tracker"
+APP_NAME = "Tokease"
 
 # Bundled into Resources/assets/ so tracker.py can find the menu bar icon
 # both from source (repo root) and from the frozen .app.
@@ -23,7 +23,7 @@ OPTIONS = {
     "plist": {
         "CFBundleName": APP_NAME,
         "CFBundleDisplayName": APP_NAME,
-        "CFBundleIdentifier": "com.tpatrouillat.claude-usage-tracker",
+        "CFBundleIdentifier": "com.tpatrouillat.tokease",
         "CFBundleVersion": "1.0.0",
         "CFBundleShortVersionString": "1.0.0",
         "LSUIElement": True,  # Menu bar app — no Dock icon

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Claude Usage Tracker — Installation Script
+# Tokease — Installation Script
 #
 # What this does:
 #   1. Creates a Python virtualenv and installs rumps
@@ -17,10 +17,10 @@ SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 BANNER="================================================"
 VENV_DIR="$SCRIPT_DIR/venv"
 LAUNCH_AGENT_DIR="$HOME/Library/LaunchAgents"
-LAUNCH_AGENT_PLIST="$LAUNCH_AGENT_DIR/com.claude-usage-tracker.plist"
+LAUNCH_AGENT_PLIST="$LAUNCH_AGENT_DIR/com.tpatrouillat.tokease.plist"
 
 echo "$BANNER"
-echo "   Claude Usage Tracker — Installation"
+echo "   Tokease — Installation"
 echo "$BANNER"
 echo ""
 
@@ -78,7 +78,7 @@ if [[ "$auto_start" =~ ^[Yy]$ ]]; then
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.claude-usage-tracker</string>
+    <string>com.tpatrouillat.tokease</string>
     <key>ProgramArguments</key>
     <array>
         <string>$VENV_DIR/bin/python</string>
@@ -112,7 +112,7 @@ echo ""
 
 read -r -p "Start the tracker now? (y/n): " start_now
 if [[ "$start_now" =~ ^[Yy]$ ]]; then
-    echo "Starting Claude Usage Tracker..."
+    echo "Starting Tokease..."
     nohup "$VENV_DIR/bin/python" "$SCRIPT_DIR/tracker.py" >/dev/null 2>&1 &
 fi
 

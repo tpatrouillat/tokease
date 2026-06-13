@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Tests for Claude Usage Tracker.
+Tests for Tokease.
 
 Mocks rumps, subprocess, and urllib so tests run without macOS GUI or network.
 Covers: helpers, time formatting, API fetching (all error paths + success),

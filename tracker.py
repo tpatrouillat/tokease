@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Claude Usage Tracker — macOS menu bar app.
+Tokease — macOS menu bar app.
 
 Data flow:
   1. Read Claude Code's OAuth token from macOS Keychain
@@ -69,7 +69,7 @@ _ICON_PATH = Path(__file__).resolve().parent / "assets" / "menubar-template.png"
 
 # Dynamic-icon rendering: rewritten on every refresh, lives in tempdir so it
 # never mutates the bundled assets and gets cleaned by macOS periodically.
-_DYNAMIC_ICON_PATH = Path(tempfile.gettempdir()) / "claude-usage-tracker-icon.png"
+_DYNAMIC_ICON_PATH = Path(tempfile.gettempdir()) / "tokease-icon.png"
 
 # Icon geometry — must stay consistent with assets/build-menubar-icon.py so
 # the dynamic and fallback static icons have the same visual footprint.
@@ -149,12 +149,12 @@ _TITLE_SPACER = "  "
 
 # External links (Support submenu). Change DONATE_URL to BMC/Ko-fi/PayPal etc.
 # if GitHub Sponsors isn't your preferred platform.
-STAR_URL = "https://github.com/tpatrouillat/claude-usage-tracker"
+STAR_URL = "https://github.com/tpatrouillat/tokease"
 DONATE_URL = "https://github.com/sponsors/tpatrouillat"
 
 # Login-item registration uses the .app's CFBundleDisplayName — must match
 # Info.plist exactly or `delete login item` won't find it.
-LOGIN_ITEM_NAME = "Claude Usage Tracker"
+LOGIN_ITEM_NAME = "Tokease"
 
 # Default menu item text (extracted to avoid string duplication)
 FIVE_HOUR_DEFAULT = "5-hour: --"
@@ -582,7 +582,7 @@ class App(rumps.App):
         threshold = max(crossed)
         try:
             rumps.notification(
-                title="Claude Usage Tracker",
+                title="Tokease",
                 subtitle=f"Session at {pct}%",
                 message=f"You've passed {threshold}% of your 5-hour limit.",
             )

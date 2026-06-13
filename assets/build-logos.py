@@ -5,8 +5,7 @@ Outputs:
   - favicon-*.png (16, 32px)
   - logo-*.png (256, 512px) — for GitHub repo, social preview
   - logo-square-512.png — for app icon, social cards
-  - logo-social-preview.png (1200x630) — Twitter, OG meta
-  - logo-lockup-horizontal.png — "rings + Claude Usage Tracker" text
+  - logo-social-preview.png (1200x630) — Twitter, OG meta; embeds the "Tokease" text lockup
 
 Run: venv/bin/python assets/build-logos.py
 """
@@ -112,7 +111,7 @@ def main() -> None:
     text_x = 450
     text_y = 150
 
-    draw.text((text_x, text_y), "Claude Usage Tracker", fill=(0, 0, 0), font=font_large)
+    draw.text((text_x, text_y), "Tokease", fill=(0, 0, 0), font=font_large)
     draw.text((text_x, text_y + 90), "macOS menu bar app • Track your API limits in real-time",
               fill=(100, 100, 100), font=font_small)
 
