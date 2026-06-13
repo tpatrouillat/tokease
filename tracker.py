@@ -653,6 +653,10 @@ class App(rumps.App):
     def _apply_usage(self, data, err):
         # Error states always show their text indicator regardless of display
         # mode — the user needs to see *why* numbers aren't updating.
+        if err or not data:
+            # Clear any stale ring icon so it can't contradict the error glyph;
+            # in ICON mode the title is empty, so a frozen ring would mislead.
+            self.icon = None
         if err == "auth":
             self.title = "↩ Login"
             self.m5h.title   = "Run: claude login"
