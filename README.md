@@ -8,25 +8,40 @@
 
 ## Features
 
-- **3-Ring Activity Display** — Visual gauges for 5-hour session, weekly, and top-model usage
-- **Customizable Display** — Show icon + percentage, icon only, or percentage only
-- **Real-time usage** — Updates every 5 minutes (configurable)
-- **Extra usage tracking** — See paid overage spend if enabled
-- **Zero config** — Reads your existing Claude Code OAuth token from macOS Keychain
-- **Settings menu** — Launch at login, display modes, alert thresholds, refresh interval
-- **Lightweight** — Pure Python, minimal dependencies, zero network overhead
-- **Local-only** — Your token is only ever sent to Anthropic's own servers (the same destination Claude Code uses), never to any server the author controls; no telemetry, no data collection
+- **Authorized by design** — reads the usage Claude Code itself exposes to its statusline (`rate_limits`); no OAuth token read, no API call, no User-Agent spoofing
+- **Usage rings** — 5-hour session + weekly gauges in the menu bar (per-model Sonnet/Opus and paid overage are available only in the legacy API mode below)
+- **Customizable Display** — icon + percentage, icon only, or percentage only
+- **Honest freshness** — shows when Claude Code last refreshed the data, and flags it stale when Claude Code isn't running
+- **Settings menu** — data source, launch at login, display modes, alert thresholds, refresh interval
+- **Lightweight** — pure Python, two small dependencies (rumps + Pillow)
+- **No telemetry** — nothing leaves your machine except, in legacy mode only, the call Claude Code already makes to Anthropic's servers
 
 ## Prerequisites
 
 - **macOS** (menu bar app using `rumps`)
 - **Python 3.10+**
-- **Claude Code** installed and logged in (`claude login`)
-- **Claude Pro or Max** subscription — the usage endpoint returns 403 on free accounts, and Team/Enterprise (credit-based billing) is not supported yet; the 3-ring model doesn't map to it
+- **Claude Code ≥ 2.1.x** installed and logged in — the default mode reads its statusline `rate_limits` feed
+- **Claude Pro or Max** subscription — `rate_limits` only appears for subscribers; Team/Enterprise (credit-based billing) isn't supported (the gauges don't map to it)
 
-## ⚠️ Terms of Service — read before installing
+## Data sources & Terms of Service
 
-As of **February 2026**, Anthropic's Consumer Terms state that the OAuth token issued for Claude **subscription** plans (Free/Pro/Max) is authorized **only** for use with Claude Code and Claude.ai; using it with any other tool or service is unauthorized. Tokease reads that token from your Keychain and calls the same usage endpoint Claude Code uses, so **using Tokease likely violates those terms**, and Anthropic enforces at the account level. The enforcement actions reported so far have centered on tools that route *inference* through the token rather than a read-only usage poll, but the risk to your account is **not zero**. Use Tokease entirely **at your own risk**. This is an independent project, **not affiliated with or endorsed by Anthropic**.
+Tokease has two modes (Settings → **Data source**):
+
+- **Claude Code statusline (default, recommended).** Reads the `rate_limits`
+  data Claude Code (≥ 2.1.x) already passes to its statusline script. The data
+  is provided *by Claude Code*, so this stays within the authorized "use with
+  Claude Code" scope — no token read, no endpoint call.
+  → setup: [`statusline/README.md`](statusline/README.md).
+
+- **Direct API (legacy, off by default, at your own risk).** Reads the OAuth
+  token from your Keychain and calls Anthropic's usage endpoint directly. As of
+  **February 2026**, Anthropic's Consumer Terms restrict the subscription OAuth
+  token to Claude Code and Claude.ai only, so **this mode likely violates those
+  terms**, with account-level enforcement. It exists only because it also
+  surfaces per-model and overage data the statusline feed doesn't. Enable it
+  only if you understand and accept the risk to your Claude account.
+
+This is an independent project, **not affiliated with or endorsed by Anthropic**.
 
 ## Quick Install (Homebrew, recommended)
 
@@ -63,19 +78,23 @@ venv/bin/python tracker.py
 
 ## How It Works
 
-1. Reads Claude Code's OAuth token from the macOS Keychain (`Claude Code-credentials`)
-2. Calls Anthropic's usage endpoint (`/api/oauth/usage`) with Bearer authentication
-3. Displays utilization percentages and reset countdowns in the menu bar
+**Default (statusline) mode:**
+1. A small capture script ([`statusline/tokease-statusline.py`](statusline/tokease-statusline.py)) runs as your Claude Code statusline command
+2. Claude Code passes it `rate_limits.five_hour` / `.seven_day` on stdin; the script writes them to `~/.tokease/usage.json`
+3. The menu bar reads that file and shows the gauges + reset countdowns
 
-The menu bar shows your current 5-hour session usage. Click it to see weekly limits, Sonnet limits, extra usage, and more.
+**Legacy (Direct API) mode** reads the Keychain token and calls `/api/oauth/usage` directly — see the ToS note above.
+
+Click the menu bar item to see the weekly limit and (in legacy mode) per-model and overage details. Setup for the default mode: [`statusline/README.md`](statusline/README.md).
 
 ## Security
 
+- **Default mode reads no token** — it only reads `~/.tokease/usage.json`, written by the Claude Code statusline. The token-related points below apply to the legacy *Direct API* mode only.
 - **No data collection** — the app runs entirely on your machine
-- **Token handling** — the OAuth token is read from the Keychain, used for a single API call, then immediately cleared from memory
-- **No redirects** — HTTP redirects are blocked to prevent the Bearer token from leaking to other domains
+- **Token handling (legacy mode)** — the OAuth token is read from the Keychain, used for a single API call, then immediately cleared from memory
+- **No redirects (legacy mode)** — HTTP redirects are blocked to prevent the Bearer token from leaking to other domains
 - **No secrets stored** — no config files, no `.env`, no credentials on disk
-- **Open source** — audit the code yourself: it's a single `tracker.py` file
+- **Open source** — audit the code yourself: `tracker.py` plus a small statusline script
 
 ## Running Tests
 

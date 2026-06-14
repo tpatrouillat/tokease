@@ -2,13 +2,22 @@
 """
 Tokease — macOS menu bar app.
 
-Data flow:
-  1. Read Claude Code's OAuth token from macOS Keychain
-     (entry "Claude Code-credentials", written by `claude login`)
-  2. Call https://api.anthropic.com/api/oauth/usage with Bearer auth
-  3. Display utilization % and reset countdowns in the menu bar
+Two data sources (see docs/adr/0001-pivot-source-statusline.md):
 
-Security notes:
+  statusline (DEFAULT, authorized) — Claude Code (>= 2.1.x) pipes
+    rate_limits.five_hour / .seven_day into its statusline script. A capture
+    script (statusline/tokease-statusline.py) writes those to
+    ~/.tokease/usage.json; this app reads that file. The data is handed to us
+    BY Claude Code, so it stays within the authorized "use with Claude Code"
+    scope. No token read, no endpoint call, no User-Agent spoofing.
+
+  endpoint (LEGACY, opt-in) — the v0.9 behaviour: read the OAuth token from
+    the Keychain and call https://api.anthropic.com/api/oauth/usage. This
+    likely violates Anthropic's Consumer Terms (the subscription token is
+    authorized only for Claude Code / Claude.ai) and is kept off by default,
+    behind a Settings toggle and a ToS warning.
+
+Security notes (endpoint mode):
   - Token is read into a local variable, used once, then cleared — never
     stored as an instance attribute or logged anywhere. The full credentials
     blob (`creds`, `result.stdout`) is also deleted before the HTTP call.
@@ -18,10 +27,7 @@ Security notes:
   - Specific exception types are caught; bare `except:` is never used so
     KeyboardInterrupt / SystemExit propagate normally.
   - HTTP 401/403/429 are detected explicitly for clear user feedback.
-  - No external dependencies beyond `rumps`; stdlib `urllib` handles HTTP.
-  - The User-Agent matches what Claude Code itself sends because this
-    undocumented beta endpoint appears to require it. Authentication is
-    handled entirely by the Bearer token.
+  - The User-Agent is built lazily, only when endpoint mode is actually used.
 """
 
 import json
@@ -100,6 +106,8 @@ def _render_dynamic_icon(session_pct, weekly_pct, inner_pct):
     stroke = _RING_STROKE * _ICON_SCALE
 
     for radius, pct in zip(_RING_RADII, (session_pct, weekly_pct, inner_pct)):
+        if pct is None:
+            continue  # window absent/stale (e.g. statusline mode has no inner ring)
         r = radius * _ICON_SCALE
         bbox = (center - r, center - r, center + r, center + r)
         draw.ellipse(bbox, outline=(0, 0, 0, _TRACK_ALPHA), width=stroke)
@@ -142,6 +150,20 @@ DISPLAY_ICON = "icon"
 _KEY_DISPLAY_MODE = "display_mode"
 _KEY_ALERTS = "alerts_enabled"
 _KEY_INTERVAL = "interval_secs"
+_KEY_SOURCE = "data_source"
+
+# Data source: authorized statusline feed (default) vs legacy direct-endpoint.
+SOURCE_STATUSLINE = "statusline"
+SOURCE_ENDPOINT = "endpoint"
+_VALID_SOURCES = (SOURCE_STATUSLINE, SOURCE_ENDPOINT)
+
+# File written by the Claude Code statusline capture script
+# (statusline/tokease-statusline.py). Read on every refresh in statusline mode.
+_STATUSLINE_FILE = Path.home() / ".tokease" / "usage.json"
+
+# Captured statusline data older than this (seconds) is shown as stale —
+# the signal that Claude Code isn't running to refresh it.
+_STALE_AFTER_SECS = 15 * 60
 
 # Two-space spacer between icon and percentage so the digits don't crowd the
 # rings. Menu bar font renders one space at ~4 px; two = comfortable gap.
@@ -162,6 +184,7 @@ WEEKLY_DEFAULT = "Weekly: --"
 SONNET_DEFAULT = "Sonnet: --"
 OPUS_DEFAULT = "Opus: --"
 EXTRA_DEFAULT = "Extra: --"
+UPDATED_DEFAULT = "Updated: --"
 
 # ---------------------------------------------------------------------------
 # Settings persistence (NSUserDefaults)
@@ -262,7 +285,16 @@ def _detect_claude_code_ua():
         pass
     return _FALLBACK_UA
 
-_user_agent = _detect_claude_code_ua()
+# Lazily detected: only legacy endpoint mode sends a User-Agent, so the default
+# (statusline) path never even builds the claude-code/* string.
+_user_agent = None
+
+
+def _get_user_agent():
+    global _user_agent
+    if _user_agent is None:
+        _user_agent = _detect_claude_code_ua()
+    return _user_agent
 
 # ---------------------------------------------------------------------------
 # Security: block HTTP redirects to prevent Bearer token leaking to other
@@ -288,6 +320,14 @@ def _safe_int(val, default=0):
         return max(0, int(float(val))) if val is not None else default
     except (ValueError, TypeError):
         return default
+
+
+def _epoch_to_iso(epoch):
+    """Convert epoch seconds (statusline resets_at) into an ISO string fmt_reset reads."""
+    try:
+        return datetime.fromtimestamp(float(epoch), timezone.utc).isoformat()
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
 
 # ---------------------------------------------------------------------------
 # Data fetching
@@ -355,7 +395,7 @@ def get_usage():
             headers={
                 "Authorization": f"Bearer {token}",
                 "anthropic-beta": "oauth-2025-04-20",
-                "User-Agent": _user_agent,
+                "User-Agent": _get_user_agent(),
             },
         )
         with _opener.open(req, timeout=10) as resp:
@@ -377,6 +417,56 @@ def get_usage():
     finally:
         token = None
         req = None
+
+
+def fetch_usage(source):
+    """Dispatch to the configured data source and tag the result with _meta.
+
+    statusline (default, authorized): read the file the Claude Code statusline
+    script writes. endpoint (legacy): the v0.9 direct-endpoint behaviour.
+    Returns (data, err) — same contract as get_usage().
+    """
+    if source == SOURCE_ENDPOINT:
+        data, err = get_usage()
+        if data is not None and err is None:
+            data["_meta"] = {"source": SOURCE_ENDPOINT, "captured_at": None}
+        return data, err
+    return _get_usage_statusline()
+
+
+def _get_usage_statusline():
+    """Read usage captured by the Claude Code statusline script.
+
+    Normalises to the shape _update_display expects (used_percentage→utilization,
+    epoch→ISO) and tags _meta. Error codes: 'nostatusline' (file missing → not
+    wired yet), 'waiting' (file present but no rate_limits captured yet),
+    'error' (unreadable / invalid).
+    """
+    try:
+        raw = _STATUSLINE_FILE.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return None, "nostatusline"
+    except OSError:
+        return None, "error"
+    try:
+        payload = json.loads(raw)
+    except (json.JSONDecodeError, UnicodeDecodeError):
+        return None, "error"
+    if not isinstance(payload, dict):
+        return None, "error"
+
+    data = {}
+    for key in ("five_hour", "seven_day"):
+        win = payload.get(key)
+        if isinstance(win, dict) and win.get("used_percentage") is not None:
+            data[key] = {
+                "utilization": win.get("used_percentage"),
+                "resets_at": _epoch_to_iso(win.get("resets_at")),
+            }
+    if not data:
+        return None, "waiting"
+    data["_meta"] = {"source": SOURCE_STATUSLINE, "captured_at": payload.get("captured_at")}
+    return data, None
 
 
 # ---------------------------------------------------------------------------
@@ -436,6 +526,10 @@ class App(rumps.App):
         if self.display_mode not in (DISPLAY_BOTH, DISPLAY_PCT, DISPLAY_ICON):
             self.display_mode = DISPLAY_BOTH
 
+        # Data source: authorized statusline feed by default; endpoint is opt-in legacy.
+        src = str(_settings_get(_KEY_SOURCE, SOURCE_STATUSLINE))
+        self.data_source = src if src in _VALID_SOURCES else SOURCE_STATUSLINE
+
         # template=True lets macOS auto-invert the icon for dark mode.
         # Pass the icon path only if it exists — a missing asset shouldn't
         # crash the app, just fall back to text-only menu bar.
@@ -457,7 +551,7 @@ class App(rumps.App):
         self.mson  = rumps.MenuItem("Sonnet: ...")
         self.mopus = rumps.MenuItem("Opus: ...")
         self.mext  = rumps.MenuItem(EXTRA_DEFAULT)
-        self.mupd  = rumps.MenuItem("Updated: --")
+        self.mupd  = rumps.MenuItem(UPDATED_DEFAULT)
 
         # --- Settings submenu --------------------------------------------
         # Launch at login (only meaningful when running as a .app bundle)
@@ -484,6 +578,19 @@ class App(rumps.App):
             display_menu.add(item)
         self._update_display_menu()
 
+        # Data source (radio group): authorized statusline vs legacy endpoint
+        source_menu = rumps.MenuItem("Data source")
+        self._source_items = {}
+        for src_mode, label in (
+            (SOURCE_STATUSLINE, "Claude Code statusline (recommended)"),
+            (SOURCE_ENDPOINT, "Direct API — legacy, at your own risk"),
+        ):
+            item = rumps.MenuItem(label, callback=self._set_source)
+            item._source = src_mode  # stash mode on the item for the callback
+            self._source_items[src_mode] = item
+            source_menu.add(item)
+        self._update_source_menu()
+
         # Notification toggle
         self.m_alerts = rumps.MenuItem(
             f"Alert at {NOTIFY_THRESHOLDS[0]}% / {NOTIFY_THRESHOLDS[1]}%",
@@ -504,6 +611,7 @@ class App(rumps.App):
         settings_menu = rumps.MenuItem("Settings")
         settings_menu.add(self.m_login)
         settings_menu.add(display_menu)
+        settings_menu.add(source_menu)
         settings_menu.add(self.m_alerts)
         settings_menu.add(interval_menu)
 
@@ -538,6 +646,17 @@ class App(rumps.App):
     def _update_display_menu(self):
         for mode, item in self._display_items.items():
             item.state = 1 if mode == self.display_mode else 0
+
+    def _update_source_menu(self):
+        for src_mode, item in self._source_items.items():
+            item.state = 1 if src_mode == self.data_source else 0
+
+    def _set_source(self, sender):
+        self.data_source = sender._source
+        _settings_set(_KEY_SOURCE, self.data_source)
+        self._update_source_menu()
+        # Re-fetch immediately so the switch takes effect without waiting for the timer.
+        self._refresh(None)
 
     def _set_interval(self, sender):
         self.interval = self._item_to_secs[sender.title]
@@ -641,7 +760,7 @@ class App(rumps.App):
 
     def _fetch_and_update(self):
         try:
-            data, err = get_usage()
+            data, err = fetch_usage(self.data_source)
         except Exception as exc:  # worker thread must never die silently, else the menu freezes on "..."
             print(f"tokease: unexpected fetch error: {exc!r}", file=sys.stderr)
             data, err = None, "error"
@@ -681,6 +800,27 @@ class App(rumps.App):
             self.m5h.title = "Pro/Max plan required"
             return
 
+        if err == "nostatusline":
+            # statusline mode but the capture file doesn't exist yet — not wired.
+            self.title = "⚙"
+            self.m5h.title   = "Set up Claude Code statusline →"
+            self.m7d.title   = WEEKLY_DEFAULT
+            self.mson.title  = SONNET_DEFAULT
+            self.mopus.title = OPUS_DEFAULT
+            self.mext.title  = EXTRA_DEFAULT
+            return
+
+        if err == "waiting":
+            # File exists but Claude Code hasn't surfaced rate_limits yet
+            # (appears only after the first API response of a session).
+            self.title = "…"
+            self.m5h.title   = "Waiting for Claude Code activity…"
+            self.m7d.title   = WEEKLY_DEFAULT
+            self.mson.title  = SONNET_DEFAULT
+            self.mopus.title = OPUS_DEFAULT
+            self.mext.title  = EXTRA_DEFAULT
+            return
+
         if err or not data:
             self.title = "?"
             return
@@ -707,41 +847,54 @@ class App(rumps.App):
         pct = _safe_int(section.get("utilization"))
         return f"{label}: {pct}% (resets {fmt_reset(section.get('resets_at'))})", pct
 
-    def _update_display(self, data):
-        session_pct = weekly_pct = sonnet_pct = opus_pct = 0
+    @staticmethod
+    def _window_row(label, section, now, captured):
+        """Format a usage window row → (text, pct_for_ring).
 
-        # 5-hour session (also drives the menu bar title and threshold alerts)
-        if h := data.get("five_hour"):
-            text, session_pct = self._fmt_utilization("5-hour", h)
-            self.m5h.title = text
-            self._maybe_notify(session_pct)
-        else:
-            self.m5h.title = FIVE_HOUR_DEFAULT
+        pct_for_ring is None when the window has already reset since the data
+        was captured (statusline mode only): the stored % is no longer valid,
+        so the caller skips that ring and shows '—' instead of a stale number.
+        """
+        pct = _safe_int(section.get("utilization"))
+        if captured:
+            dt = _parse_iso(section.get("resets_at"))
+            if dt is not None and dt <= now:
+                return f"{label}: — (reset; awaiting Claude Code)", None
+        return f"{label}: {pct}% (resets {fmt_reset(section.get('resets_at'))})", pct
 
-        # 7-day
-        if d := data.get("seven_day"):
-            self.m7d.title, weekly_pct = self._fmt_utilization("Weekly", d)
-        else:
-            self.m7d.title = WEEKLY_DEFAULT
+    @staticmethod
+    def _freshness_label(captured_at, now):
+        """'Updated' line for statusline mode, flagging stale (Claude Code idle) data."""
+        if not captured_at:
+            return UPDATED_DEFAULT
+        try:
+            cap = datetime.fromtimestamp(float(captured_at), timezone.utc)
+            local = datetime.fromtimestamp(float(captured_at)).strftime("%H:%M")
+        except (TypeError, ValueError, OverflowError, OSError):
+            return UPDATED_DEFAULT
+        age = (now - cap).total_seconds()
+        if age > _STALE_AFTER_SECS:
+            return f"⚠ {local} · stale {int(age // 60)}m (Claude Code idle?)"
+        return f"Updated: {local} (via Claude Code)"
 
-        # Sonnet weekly
+    def _set_unsupported_rows(self):
+        """Rows the statusline feed can't provide: per-model split and paid overage."""
+        self.mson.title = "Sonnet: n/a"
+        self.mopus.title = "Opus: n/a"
+        self.mext.title = "Extra: n/a"
+
+    def _update_endpoint_rows(self, data, now):
+        """Per-model rows + paid overage (endpoint mode). Returns the inner-ring pct."""
+        sonnet_pct = opus_pct = 0
         if s := data.get("seven_day_sonnet"):
-            self.mson.title, sonnet_pct = self._fmt_utilization("Sonnet", s)
+            self.mson.title, sonnet_pct = self._window_row("Sonnet", s, now, False)
         else:
             self.mson.title = SONNET_DEFAULT
-
-        # Opus weekly
         if o := data.get("seven_day_opus"):
-            self.mopus.title, opus_pct = self._fmt_utilization("Opus", o)
+            self.mopus.title, opus_pct = self._window_row("Opus", o, now, False)
         else:
             self.mopus.title = OPUS_DEFAULT
 
-        # Inner ring = whichever per-model metric is more saturated, so the
-        # icon surfaces the model the user is most at risk of capping out on.
-        icon_path = _render_dynamic_icon(session_pct, weekly_pct, max(sonnet_pct, opus_pct))
-        self._apply_display(f"{session_pct}%", icon_path)
-
-        # Extra (paid overage)
         e = data.get("extra_usage")
         if isinstance(e, dict) and e.get("is_enabled"):
             used  = _safe_int(e.get("used_credits")) / CENTS_PER_DOLLAR
@@ -751,7 +904,42 @@ class App(rumps.App):
         else:
             self.mext.title = EXTRA_DEFAULT
 
-        self.mupd.title = f"Updated: {datetime.now().strftime('%H:%M')}"
+        # Surface the model the user is most at risk of capping out on.
+        return max(sonnet_pct, opus_pct)
+
+    def _update_display(self, data):
+        now = datetime.now(timezone.utc)
+        meta = data.get("_meta", {})
+        is_statusline = meta.get("source") == SOURCE_STATUSLINE
+        session_pct = weekly_pct = 0
+
+        # 5-hour session (also drives the menu bar title and threshold alerts)
+        if h := data.get("five_hour"):
+            self.m5h.title, session_pct = self._window_row("5-hour", h, now, is_statusline)
+            if session_pct is not None:
+                self._maybe_notify(session_pct)
+        else:
+            self.m5h.title = FIVE_HOUR_DEFAULT
+
+        # 7-day weekly
+        if d := data.get("seven_day"):
+            self.m7d.title, weekly_pct = self._window_row("Weekly", d, now, is_statusline)
+        else:
+            self.m7d.title = WEEKLY_DEFAULT
+
+        # Inner ring = per-model saturation; the statusline feed has no such split.
+        if is_statusline:
+            self._set_unsupported_rows()
+            inner_pct = None
+            self.mupd.title = self._freshness_label(meta.get("captured_at"), now)
+        else:
+            inner_pct = self._update_endpoint_rows(data, now)
+            self.mupd.title = f"Updated: {datetime.now().strftime('%H:%M')}"
+
+        icon_path = _render_dynamic_icon(session_pct, weekly_pct, inner_pct)
+        title_pct = f"{session_pct}%" if session_pct is not None else "—"
+        self._apply_display(title_pct, icon_path)
+
         self._schedule_reset_refresh(data)
 
 

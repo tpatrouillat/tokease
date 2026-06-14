@@ -11,8 +11,10 @@ import io
 import json
 import subprocess
 import sys
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -684,8 +686,10 @@ class TestMainThreadMarshalling(unittest.TestCase):
 
     def test_fetch_marshals_apply_usage_to_main_thread(self):
         app = self._make_app()
+        # _fetch_and_update dispatches via fetch_usage(self.data_source); mock at
+        # that boundary so the test stays source-agnostic and checks marshalling.
         with patch.object(tracker, "_call_on_main") as marshall, \
-             patch.object(tracker, "get_usage", return_value=({"foo": "bar"}, None)):
+             patch.object(tracker, "fetch_usage", return_value=({"foo": "bar"}, None)):
             app._fetch_and_update()
         marshall.assert_called_once_with(app._apply_usage, {"foo": "bar"}, None)
 
@@ -1193,6 +1197,199 @@ class TestSectionPresentNullReset(unittest.TestCase):
         with patch("threading.Timer") as MockTimer:
             app._schedule_reset_refresh(data)
             MockTimer.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests: _epoch_to_iso
+# ---------------------------------------------------------------------------
+class TestEpochToIso(unittest.TestCase):
+    def test_valid_epoch_round_trips(self):
+        iso = tracker._epoch_to_iso(1800000000)
+        self.assertIsNotNone(tracker._parse_iso(iso))
+
+    def test_none(self):
+        self.assertIsNone(tracker._epoch_to_iso(None))
+
+    def test_non_numeric(self):
+        self.assertIsNone(tracker._epoch_to_iso("not-a-number"))
+
+
+# ---------------------------------------------------------------------------
+# Tests: statusline data source (fetch_usage + _get_usage_statusline)
+# ---------------------------------------------------------------------------
+class TestStatuslineSource(unittest.TestCase):
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self._file = Path(self._td.name) / "usage.json"
+        self._patcher = patch.object(tracker, "_STATUSLINE_FILE", self._file)
+        self._patcher.start()
+
+    def tearDown(self):
+        self._patcher.stop()
+        self._td.cleanup()
+
+    def _write(self, payload):
+        self._file.write_text(json.dumps(payload), encoding="utf-8")
+
+    def test_nostatusline_when_file_missing(self):
+        data, err = tracker.fetch_usage(tracker.SOURCE_STATUSLINE)
+        self.assertIsNone(data)
+        self.assertEqual(err, "nostatusline")
+
+    def test_waiting_when_no_windows(self):
+        self._write({"schema": 1, "captured_at": 100, "source": "x"})
+        data, err = tracker.fetch_usage(tracker.SOURCE_STATUSLINE)
+        self.assertIsNone(data)
+        self.assertEqual(err, "waiting")
+
+    def test_error_on_invalid_json(self):
+        self._file.write_text("not json{{{", encoding="utf-8")
+        _, err = tracker.fetch_usage(tracker.SOURCE_STATUSLINE)
+        self.assertEqual(err, "error")
+
+    def test_error_when_payload_not_dict(self):
+        self._file.write_text("[1, 2, 3]", encoding="utf-8")
+        _, err = tracker.fetch_usage(tracker.SOURCE_STATUSLINE)
+        self.assertEqual(err, "error")
+
+    def test_normalizes_both_windows(self):
+        self._write({
+            "schema": 1, "captured_at": 1799999000,
+            "five_hour": {"used_percentage": 23.5, "resets_at": 1800000000},
+            "seven_day": {"used_percentage": 41, "resets_at": 1800500000},
+        })
+        data, err = tracker.fetch_usage(tracker.SOURCE_STATUSLINE)
+        self.assertIsNone(err)
+        self.assertEqual(data["five_hour"]["utilization"], 23.5)
+        self.assertIn("seven_day", data)
+        self.assertEqual(data["_meta"]["source"], tracker.SOURCE_STATUSLINE)
+        self.assertEqual(data["_meta"]["captured_at"], 1799999000)
+        self.assertIsNotNone(tracker._parse_iso(data["five_hour"]["resets_at"]))
+
+    def test_partial_only_five_hour(self):
+        self._write({"captured_at": 1, "five_hour": {"used_percentage": 10, "resets_at": 2}})
+        data, err = tracker.fetch_usage(tracker.SOURCE_STATUSLINE)
+        self.assertIsNone(err)
+        self.assertIn("five_hour", data)
+        self.assertNotIn("seven_day", data)
+
+    def test_window_without_percentage_is_waiting(self):
+        self._write({"captured_at": 1, "five_hour": {"resets_at": 2}})
+        _, err = tracker.fetch_usage(tracker.SOURCE_STATUSLINE)
+        self.assertEqual(err, "waiting")
+
+    def test_endpoint_source_delegates_and_tags_meta(self):
+        with patch.object(tracker, "get_usage", return_value=({"five_hour": {"utilization": 5}}, None)):
+            data, err = tracker.fetch_usage(tracker.SOURCE_ENDPOINT)
+        self.assertIsNone(err)
+        self.assertEqual(data["_meta"]["source"], tracker.SOURCE_ENDPOINT)
+        self.assertIsNone(data["_meta"]["captured_at"])
+
+    def test_endpoint_source_passes_error_through(self):
+        with patch.object(tracker, "get_usage", return_value=(None, "auth")):
+            data, err = tracker.fetch_usage(tracker.SOURCE_ENDPOINT)
+        self.assertIsNone(data)
+        self.assertEqual(err, "auth")
+
+
+# ---------------------------------------------------------------------------
+# Tests: statusline display mode (2 rings, n/a rows, freshness, reset-aware)
+# ---------------------------------------------------------------------------
+class TestStatuslineDisplay(unittest.TestCase):
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def _data(self, five=30, week=40, captured_at=None, five_reset=None):
+        now = datetime.now(timezone.utc)
+        future = (now + timedelta(hours=2)).isoformat()
+        if captured_at is None:
+            captured_at = now.timestamp()
+        return {
+            "five_hour": {"utilization": five, "resets_at": five_reset or future},
+            "seven_day": {"utilization": week, "resets_at": future},
+            "_meta": {"source": tracker.SOURCE_STATUSLINE, "captured_at": captured_at},
+        }
+
+    def test_inner_ring_omitted(self):
+        app = self._make_app()
+        with patch.object(tracker, "_render_dynamic_icon") as render:
+            app._update_display(self._data())
+        self.assertIsNone(render.call_args[0][2])
+
+    def test_per_model_and_extra_rows_na(self):
+        app = self._make_app()
+        app._update_display(self._data())
+        self.assertEqual(app.mson.title, "Sonnet: n/a")
+        self.assertEqual(app.mopus.title, "Opus: n/a")
+        self.assertEqual(app.mext.title, "Extra: n/a")
+
+    def test_title_and_row_show_five_hour(self):
+        app = self._make_app()
+        app._update_display(self._data(five=30))
+        self.assertEqual(app.title, "30%")
+        self.assertIn("5-hour: 30%", app.m5h.title)
+
+    def test_freshness_label_when_fresh(self):
+        app = self._make_app()
+        app._update_display(self._data())
+        self.assertIn("via Claude Code", app.mupd.title)
+
+    def test_stale_when_capture_is_old(self):
+        app = self._make_app()
+        old = (datetime.now(timezone.utc) - timedelta(hours=1)).timestamp()
+        app._update_display(self._data(captured_at=old))
+        self.assertIn("stale", app.mupd.title)
+
+    def test_window_reset_since_capture_blanks_pct_and_ring(self):
+        app = self._make_app()
+        past = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        with patch.object(tracker, "_render_dynamic_icon") as render:
+            app._update_display(self._data(five=90, five_reset=past))
+        self.assertEqual(app.title, "—")
+        self.assertIn("reset", app.m5h.title)
+        self.assertIsNone(render.call_args[0][0])
+
+    def test_set_source_persists_and_refreshes(self):
+        app = self._make_app()
+        sender = SimpleNamespace(_source=tracker.SOURCE_ENDPOINT)
+        with patch.object(tracker, "_settings_set") as save, \
+             patch.object(app, "_refresh") as refresh, \
+             patch.object(app, "_update_source_menu"):
+            app._set_source(sender)
+        self.assertEqual(app.data_source, tracker.SOURCE_ENDPOINT)
+        save.assert_called_once_with(tracker._KEY_SOURCE, tracker.SOURCE_ENDPOINT)
+        refresh.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Tests: statusline error states in _apply_usage
+# ---------------------------------------------------------------------------
+class TestStatuslineErrorStates(unittest.TestCase):
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def test_nostatusline_state(self):
+        app = self._make_app()
+        app._apply_usage(None, "nostatusline")
+        self.assertEqual(app.title, "⚙")
+        self.assertIn("statusline", app.m5h.title.lower())
+
+    def test_waiting_state(self):
+        app = self._make_app()
+        app._apply_usage(None, "waiting")
+        self.assertEqual(app.title, "…")
+        self.assertIn("Waiting", app.m5h.title)
+
+    def test_nostatusline_clears_stale_icon(self):
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_ICON
+        app._update_display(_make_api_response(five_hour_pct=70))
+        app._apply_usage(None, "nostatusline")
+        self.assertIsNone(app.icon)
 
 
 if __name__ == "__main__":
