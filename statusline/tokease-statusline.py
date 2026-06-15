@@ -61,12 +61,17 @@ def _extract_window(rate_limits, key):
 
 def _atomic_write(payload):
     """Write JSON atomically (temp in same dir + os.replace) so the reader
-    never sees a partially-written file."""
+    never sees a partially-written file. Cleans up the temp file on failure
+    instead of leaking a .usage.<pid>.tmp behind."""
     _DIR.mkdir(parents=True, exist_ok=True)
     tmp = _DIR / f".usage.{os.getpid()}.tmp"
-    with open(tmp, "w", encoding="utf-8") as fh:
-        json.dump(payload, fh)
-    os.replace(tmp, _OUT)
+    try:
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(payload, fh)
+        os.replace(tmp, _OUT)
+    except (OSError, TypeError, ValueError):
+        tmp.unlink(missing_ok=True)
+        raise
 
 
 def main():

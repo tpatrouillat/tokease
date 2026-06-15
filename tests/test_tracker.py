@@ -9,6 +9,7 @@ display logic, security (redirect blocking, token cleanup), and interval mgmt.
 
 import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -1390,6 +1391,57 @@ class TestStatuslineErrorStates(unittest.TestCase):
         app._update_display(_make_api_response(five_hour_pct=70))
         app._apply_usage(None, "nostatusline")
         self.assertIsNone(app.icon)
+
+
+# ---------------------------------------------------------------------------
+# Tests: the statusline capture script (subprocess, isolated HOME)
+# ---------------------------------------------------------------------------
+class TestStatuslineScript(unittest.TestCase):
+    """End-to-end: run statusline/tokease-statusline.py with mock stdin and a
+    throwaway HOME, then assert what it wrote to ~/.tokease/usage.json."""
+
+    SCRIPT = Path(__file__).resolve().parent.parent / "statusline" / "tokease-statusline.py"
+
+    def _run(self, stdin_text):
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        env = {**os.environ, "HOME": td.name, "TOKEASE_STATUSLINE_QUIET": "1"}
+        proc = subprocess.run(
+            [sys.executable, str(self.SCRIPT)],
+            input=stdin_text, capture_output=True, text=True, env=env, timeout=10,
+        )
+        out_file = Path(td.name) / ".tokease" / "usage.json"
+        payload = json.loads(out_file.read_text(encoding="utf-8")) if out_file.exists() else None
+        return proc, out_file, payload
+
+    def test_captures_rate_limits(self):
+        stdin = json.dumps({"rate_limits": {
+            "five_hour": {"used_percentage": 23.5, "resets_at": 1800000000},
+            "seven_day": {"used_percentage": 41, "resets_at": 1800500000},
+        }})
+        proc, _, payload = self._run(stdin)
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(payload["five_hour"]["used_percentage"], 23.5)
+        self.assertEqual(payload["seven_day"]["used_percentage"], 41)
+        self.assertEqual(payload["source"], "claude-code-statusline")
+        self.assertIn("captured_at", payload)
+
+    def test_no_rate_limits_writes_windowless_file(self):
+        proc, _, payload = self._run(json.dumps({"model": {"id": "x"}}))
+        self.assertEqual(proc.returncode, 0)
+        self.assertNotIn("five_hour", payload)
+        self.assertIn("captured_at", payload)
+
+    def test_invalid_json_does_not_write_file(self):
+        proc, out_file, _ = self._run("not json {{{")
+        self.assertEqual(proc.returncode, 0)  # must never crash the statusline
+        self.assertFalse(out_file.exists())
+
+    def test_partial_window_only(self):
+        stdin = json.dumps({"rate_limits": {"five_hour": {"used_percentage": 10, "resets_at": 1}}})
+        _, _, payload = self._run(stdin)
+        self.assertIn("five_hour", payload)
+        self.assertNotIn("seven_day", payload)
 
 
 if __name__ == "__main__":
