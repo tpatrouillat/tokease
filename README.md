@@ -1,45 +1,51 @@
 <div align="center">
   <img src="assets/logo-256-demo.png" alt="Tokease" width="200" height="200">
   <h1>Tokease</h1>
-  <p>A lightweight macOS menu bar app showing your Claude Code API usage in real time<br/><strong>Know your limits before you hit them</strong></p>
+  <p>A lightweight macOS menu bar app showing your Claude Code rate limits in real time<br/><strong>The only Claude Code limit tracker that never reads your token</strong></p>
 </div>
 
 ![Tokease screenshot](docs/screenshot.png)
 
+## Why Tokease
+
+Tokease reads the `rate_limits` data **Claude Code itself publishes to its statusline** — nothing else. No OAuth token read from the Keychain, no hidden API call, no User-Agent spoofing. It's compliant with Anthropic's Terms by construction, not by promise. Other trackers read your subscription token from the Keychain; Tokease never touches it.
+
+Three things it does:
+
+1. **Compliant by construction, not by promise.** The only data source is the `rate_limits` feed Claude Code passes to its statusline script (a documented field). No token read, no endpoint call.
+2. **Shows the limit you have left, not the history you spent.** Your 5-hour and weekly remaining capacity, with reset countdowns — amber at 80%, red at 95%.
+3. **One file, zero telemetry, zero account.** A small single-file menu bar app, MIT-licensed. Nothing leaves your machine; nothing to sign up for.
+
 ## Features
 
-- **Authorized by design** — reads the usage Claude Code itself exposes to its statusline (`rate_limits`); no OAuth token read, no API call, no User-Agent spoofing
-- **Usage rings** — 5-hour session + weekly gauges in the menu bar (per-model Sonnet/Opus and paid overage are available only in the legacy API mode below)
-- **Customizable Display** — icon + percentage, icon only, or percentage only
-- **Honest freshness** — shows when Claude Code last refreshed the data, and flags it stale when Claude Code isn't running
-- **Settings menu** — data source, launch at login, display modes, alert thresholds, refresh interval
-- **Lightweight** — pure Python, two small dependencies (rumps + Pillow)
-- **No telemetry** — nothing leaves your machine except, in legacy mode only, the call Claude Code already makes to Anthropic's servers
+- **Two usage rings** — 5-hour session (outer) + weekly (inner) gauges, right in the menu bar
+- **Reset countdowns** — see when each window rolls over
+- **Honest freshness** — shows when Claude Code last refreshed the data, and flags it *stale* when Claude Code isn't running
+- **Customizable display** — icon + percentage, icon only, or percentage only
+- **Settings menu** — launch at login, display modes, alert thresholds (amber 80% / red 95%), refresh interval
+- **Lightweight** — pure Python, two small dependencies (`rumps` + `Pillow`)
+- **No telemetry** — no account, no config files, nothing phones home
 
 ## Prerequisites
 
 - **macOS** (menu bar app using `rumps`)
 - **Python 3.10+**
-- **Claude Code ≥ 2.1.x** installed and logged in — the default mode reads its statusline `rate_limits` feed
-- **Claude Pro or Max** subscription — `rate_limits` only appears for subscribers; Team/Enterprise (credit-based billing) isn't supported (the gauges don't map to it)
+- **Claude Code ≥ 2.1.x** installed and logged in — Tokease reads its statusline `rate_limits` feed
+- **Claude Pro or Max** subscription — `rate_limits` only appears for these plans. Claude **Free** doesn't expose it; **Team/Enterprise** use credit-based billing, so the rings don't map and it isn't supported.
 
-## Data sources & Terms of Service
+> **Note on Desktop & Cowork.** The statusline is a feature of the **Claude Code CLI only** — Claude Desktop and Cowork can't feed Tokease. But rate limits are tracked at the **account level**, so running the CLI now and then also reflects what you consumed in Desktop/Cowork. Tokease targets CLI users.
 
-Tokease has two modes (Settings → **Data source**):
+## How It Works
 
-- **Claude Code statusline (default, recommended).** Reads the `rate_limits`
-  data Claude Code (≥ 2.1.x) already passes to its statusline script. The data
-  is provided *by Claude Code*, so this stays within the authorized "use with
-  Claude Code" scope — no token read, no endpoint call.
-  → setup: [`statusline/README.md`](statusline/README.md).
+The only data source is the Claude Code statusline:
 
-- **Direct API (legacy, off by default, at your own risk).** Reads the OAuth
-  token from your Keychain and calls Anthropic's usage endpoint directly. As of
-  **February 2026**, Anthropic's Consumer Terms restrict the subscription OAuth
-  token to Claude Code and Claude.ai only, so **this mode likely violates those
-  terms**, with account-level enforcement. It exists only because it also
-  surfaces per-model and overage data the statusline feed doesn't. Enable it
-  only if you understand and accept the risk to your Claude account.
+1. A small capture script ([`statusline/tokease-statusline.py`](statusline/tokease-statusline.py)) runs as your Claude Code statusline command.
+2. Claude Code passes it `rate_limits.five_hour` / `.seven_day` on stdin; the script writes them to `~/.tokease/usage.json`.
+3. The menu bar reads that file and shows the two rings + reset countdowns.
+
+Because the data is handed over *by Claude Code*, Tokease stays within the authorized "use with Claude Code" scope: no token read, no endpoint call. Setup details: [`statusline/README.md`](statusline/README.md).
+
+> The legacy endpoint mode (which read the OAuth token) is frozen at the git tag `v0.9.0-endpoint`; v1.0 never reads the token.
 
 This is an independent project, **not affiliated with or endorsed by Anthropic**.
 
@@ -76,25 +82,19 @@ venv/bin/pip install -r requirements.txt
 venv/bin/python tracker.py
 ```
 
-## How It Works
+After installing the app, wire up the statusline capture script — see [`statusline/README.md`](statusline/README.md).
 
-**Default (statusline) mode:**
-1. A small capture script ([`statusline/tokease-statusline.py`](statusline/tokease-statusline.py)) runs as your Claude Code statusline command
-2. Claude Code passes it `rate_limits.five_hour` / `.seven_day` on stdin; the script writes them to `~/.tokease/usage.json`
-3. The menu bar reads that file and shows the gauges + reset countdowns
+## A note on freshness
 
-**Legacy (Direct API) mode** reads the Keychain token and calls `/api/oauth/usage` directly — see the ToS note above.
-
-Click the menu bar item to see the weekly limit and (in legacy mode) per-model and overage details. Setup for the default mode: [`statusline/README.md`](statusline/README.md).
+The `rate_limits` feed only updates **while Claude Code is running** — its statusline ticks on activity. When Claude Code is closed, Tokease shows the last known values and flags them *stale*; it also detects reset windows that have already rolled over, so an old percentage is never shown as if it were fresh. This is an honest limitation of reading a statusline feed rather than calling an endpoint.
 
 ## Security
 
-- **Default mode reads no token** — it only reads `~/.tokease/usage.json`, written by the Claude Code statusline. The token-related points below apply to the legacy *Direct API* mode only.
-- **No data collection** — the app runs entirely on your machine
-- **Token handling (legacy mode)** — the OAuth token is read from the Keychain, used for a single API call, then immediately cleared from memory
-- **No redirects (legacy mode)** — HTTP redirects are blocked to prevent the Bearer token from leaking to other domains
-- **No secrets stored** — no config files, no `.env`, no credentials on disk
-- **Open source** — audit the code yourself: `tracker.py` plus a small statusline script
+- **Reads no token, ever.** Tokease only reads `~/.tokease/usage.json`, written by the Claude Code statusline. It never touches the Keychain or your OAuth token.
+- **No API calls of its own.** The only network call involved is the one Claude Code already makes — Tokease just reads the result Claude Code wrote locally.
+- **No data collection** — the app runs entirely on your machine.
+- **No secrets stored** — no config files, no `.env`, no credentials on disk.
+- **Open source** — audit the code yourself: `tracker.py` plus a small statusline script.
 
 ## Running Tests
 
@@ -102,7 +102,7 @@ Click the menu bar item to see the weekly limit and (in legacy mode) per-model a
 venv/bin/python -m pytest tests/ -v
 ```
 
-Tests cover token retrieval, API response parsing, time formatting, and display logic using mocked data (no real API calls).
+Tests cover statusline parsing, freshness/reset logic, time formatting, and display logic using mocked data (no real API calls).
 
 ## Contributing
 
@@ -127,4 +127,4 @@ v1.0 is **macOS menu bar + Claude Code only** — intentionally narrow. See [ROA
 
 ## Disclaimer
 
-This project is not affiliated with, endorsed by, or sponsored by Anthropic. It uses an undocumented API endpoint that may change without notice. Use at your own risk.
+This project is not affiliated with, endorsed by, or sponsored by Anthropic. It relies on the Claude Code statusline `rate_limits` field, which Anthropic may change without notice. Use at your own risk.

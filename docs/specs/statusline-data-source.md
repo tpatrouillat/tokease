@@ -1,7 +1,12 @@
 # Spec — Source de données « statusline »
 
-Réf. : [ADR 0001](../adr/0001-pivot-source-statusline.md). Décrit le contrat entre
-le script de statusline (producteur) et l'app menu bar (consommateur).
+Réf. : [ADR 0001](../adr/0001-pivot-source-statusline.md) et
+[ADR 0002](../adr/0002-retrait-mode-endpoint.md). Décrit le contrat entre le script de
+statusline (producteur) et l'app menu bar (consommateur).
+
+> Depuis l'[ADR 0002](../adr/0002-retrait-mode-endpoint.md), la statusline est la
+> **seule** source de données : le mode endpoint est retiré de v1.0 (figé au tag
+> `v0.9.0-endpoint`). Tokease ne lit donc jamais le token.
 
 ## Vue d'ensemble
 
@@ -46,13 +51,13 @@ avalée silencieusement côté script **mais** rien n'est écrit si le JSON est 
 
 ## Consommateur — `tracker.py`
 
-`get_usage(source)` aiguille :
-- `statusline` (défaut) → lit le fichier, normalise vers la forme interne attendue par
-  `_update_display` (`{"five_hour": {"utilization": …, "resets_at": ISO}, …}`,
-  `used_percentage`→`utilization`, epoch→ISO), ajoute `_meta` ;
-- `endpoint` (legacy) → comportement v0.9 inchangé.
+`get_usage()` lit le fichier `~/.tokease/usage.json` (source unique, statusline) et
+normalise vers la forme interne attendue par `_update_display`
+(`{"five_hour": {"utilization": …, "resets_at": ISO}, …}`, `used_percentage`→`utilization`,
+epoch→ISO), en ajoutant `_meta`. Il n'y a plus d'aiguillage de source : le mode endpoint
+a été retiré (cf. [ADR 0002](../adr/0002-retrait-mode-endpoint.md)).
 
-### États d'erreur (mode statusline)
+### États d'erreur
 
 | Code | Déclencheur | Affichage |
 |------|-------------|-----------|
@@ -70,8 +75,9 @@ avalée silencieusement côté script **mais** rien n'est écrit si le JSON est 
 
 ### Rendu
 
-- **2 anneaux** (5 h, hebdo) ; l'anneau interne (par-modèle) est omis (`None`).
-- lignes Sonnet / Opus / Extra → `n/a` en mode statusline.
+- **2 anneaux** (5 h externe, hebdo interne).
+- pas de split Sonnet / Opus ni d'overage : non fournis par la statusline, et le mode
+  endpoint qui les exposait a été retiré (cf. [ADR 0002](../adr/0002-retrait-mode-endpoint.md)).
 
 ## Câblage côté utilisateur (friction #2)
 

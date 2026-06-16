@@ -1,5 +1,7 @@
 # ADR 0001 — Pivot de la source de données : endpoint OAuth → statusline Claude Code
 
+> **Mise à jour 2026-06-16 :** la décision de conserver l'endpoint en legacy est révisée par [ADR 0002](0002-retrait-mode-endpoint.md) — l'endpoint est retiré de v1.0.
+
 - **Statut** : Accepté (2026-06-14)
 - **Décideur** : Thibault
 - **Concerne** : `tracker.py` (acquisition des données d'usage), distribution, README
