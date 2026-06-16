@@ -1,5 +1,6 @@
 """
-Generate all logo variants from the 3-ring Activity Ring design.
+Generate all logo variants from the 2-ring Activity Ring design
+(outer = 5-hour window, inner = weekly window — same as the app icon).
 
 Outputs:
   - favicon-*.png (16, 32px)
@@ -17,19 +18,19 @@ SIZE_FINAL = 512         # Base size for logo variants
 SCALE = 4                # Oversample for antialiased edges
 SIZE = SIZE_FINAL * SCALE
 
-# Ring geometry (scaled to 512px)
-RING_RADII = [120, 84, 48]  # outer, middle, inner (at final 512 scale)
+# Ring geometry (scaled to 512px). Même ratio (1:0.7) que l'icône runtime _RING_RADII.
+RING_RADII = [120, 84]   # outer (5h), inner (weekly) — at final 512 scale
 STROKE = 18              # stroke width at final scale
 INK = (0, 0, 0, 255)     # Black
 
 def render_rings(size_final: int, scale: int = 4, fill_pcts: list = None) -> Image.Image:
     """
-    Render the 3-ring Activity Ring design at any size.
+    Render the 2-ring Activity Ring design at any size.
 
     Args:
         size_final: Output size in pixels
         scale: Oversample factor for antialiasing
-        fill_pcts: List of 3 percentages (0-100) for outer/middle/inner rings.
+        fill_pcts: List of 2 percentages (0-100) for outer/inner rings (5h/weekly).
                    If None, renders empty rings. If provided, fills each ring to that %.
     """
     size = size_final * scale
@@ -62,8 +63,8 @@ def render_rings(size_final: int, scale: int = 4, fill_pcts: list = None) -> Ima
 def main() -> None:
     assets_dir = Path(__file__).resolve().parent
 
-    # Example usage percentages for marketing: 70% (session), 80% (weekly), 40% (top model)
-    DEMO_USAGE = [70, 80, 40]
+    # Example usage percentages for marketing: 70% (5h session), 80% (weekly)
+    DEMO_USAGE = [70, 80]
 
     print("📍 Generating EMPTY rings (baseline)...")
     # 1. Generate icon sizes with empty rings (16, 32, 64, 128, 256, 512)
@@ -80,8 +81,8 @@ def main() -> None:
         img.save(out)
         print(f"  ✓ {out.name}")
 
-    print("\n📍 Generating FILLED rings (demo usage: 70% / 80% / 40%)...")
-    # 3. Demo versions with 70/80/40 usage (for marketing)
+    print("\n📍 Generating FILLED rings (demo usage: 70% / 80%)...")
+    # 3. Demo versions with 70/80 usage (for marketing)
     for size in [128, 256, 512]:
         img = render_rings(size, fill_pcts=DEMO_USAGE)
         out = assets_dir / f"logo-{size}-demo.png"
@@ -112,7 +113,10 @@ def main() -> None:
     text_y = 150
 
     draw.text((text_x, text_y), "Tokease", fill=(0, 0, 0), font=font_large)
-    draw.text((text_x, text_y + 90), "macOS menu bar app • Track your API limits in real-time",
+    # Deux lignes pour tenir dans 1200px sans troncature, en gardant le wedge.
+    draw.text((text_x, text_y + 90), "Your Claude Code 5h & weekly limits, in the menu bar.",
+              fill=(100, 100, 100), font=font_small)
+    draw.text((text_x, text_y + 122), "No token read — conformant by construction.",
               fill=(100, 100, 100), font=font_small)
 
     out = assets_dir / "logo-social-preview.png"
@@ -131,7 +135,7 @@ def main() -> None:
     print("  Empty rings (baseline):")
     print("    - favicon-16.png, favicon-32.png")
     print("    - logo-16/32/64/128/256/512.png")
-    print("  Demo usage (70%/80%/40%):")
+    print("  Demo usage (70%/80%):")
     print("    - logo-128-demo.png, logo-256-demo.png, logo-512-demo.png")
     print("    - logo-social-preview.png (1200x630)")
     print("    - logo-square-512.png")
