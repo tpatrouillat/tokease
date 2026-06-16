@@ -1,0 +1,15 @@
+version: 2
+updates:
+  # Met à jour les deps Python (rumps / Pillow) déclarées dans requirements.txt + setup.py
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      python-deps:                 # regroupe minor+patch en UNE PR au lieu de plusieurs
+        update-types: [minor, patch]
+  # Met à jour les actions elles-mêmes (checkout, setup-python…)
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly

@@ -1,0 +1,41 @@
+name: CI
+
+# Quand lancer la CI : sur chaque Pull Request, et sur chaque push vers main
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Annule le run précédent si tu repushes vite sur la même branche (économise des minutes)
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint (ruff)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install ruff
+      - run: ruff check .
+      # Décommente ce gate APRÈS avoir lancé `ruff format .` une fois (voir explications)
+      # - run: ruff format --check .
+
+  test:
+    name: Test (py ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false           # un échec sur une version ne coupe pas les autres
+      matrix:
+        python-version: ["3.10", "3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - run: pip install pytest Pillow   # rumps est mocké dans les tests, inutile de l'installer
+      - run: python -m pytest -q

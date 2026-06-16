@@ -1,0 +1,11 @@
+# Config ruff partagée entre ton poste (uvx ruff) et la CI — même règles partout
+[tool.ruff]
+target-version = "py310"                                  # cible Python 3.10+ (cf. README)
+extend-exclude = ["assets", "graphify-out", "docs", "venv"]  # scripts/artefacts hors code source
+
+[tool.ruff.lint]
+extend-select = ["S"]                 # garde les défauts ruff + ajoute S = flake8-bandit (sécurité)
+ignore = ["S603", "S607"]            # subprocess à entrées contrôlées (osascript, `claude`) — sûr, cf. audit code
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["S101", "S105", "S106", "S107"]   # asserts + tokens factices = normaux dans les tests
