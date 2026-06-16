@@ -306,19 +306,29 @@ def _parse_iso(iso):
     que les appelants qui ont besoin du datetime brut (planif. de reset) ne
     dupliquent pas la normalisation Python que `fmt_reset` fait déjà.
     """
-    if not iso:
+    if not iso or not isinstance(iso, str):
         return None
     try:
-        # Normalise: strip sub-seconds, handle "Z" suffix, fix colon in offset
-        clean = iso.replace("Z", "+00:00").split(".")[0]
-        # Python <3.11 fromisoformat doesn't accept "+00:00", needs "+0000"
-        if len(clean) >= 6 and clean[-3] == ":" and clean[-6] in ("+", "-"):
-            clean = clean[:-3] + clean[-2:]
+        clean = iso.strip()
+        # "Z" → offset UTC explicite (fromisoformat n'accepte "Z" qu'à partir de 3.11)
+        if clean.endswith("Z"):
+            clean = clean[:-1] + "+00:00"
+        # Strippe les sous-secondes (3.10 est strict sur le nb de chiffres) en
+        # préservant l'offset colon ±HH:MM, que 3.10 exige (et rejette ±HHMM).
+        if "." in clean:
+            head, _, tail = clean.partition(".")
+            off = ""
+            for sign in ("+", "-"):
+                idx = tail.find(sign)
+                if idx != -1:
+                    off = tail[idx:]
+                    break
+            clean = head + off
         dt = datetime.fromisoformat(clean)
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
-    except (ValueError, OverflowError, IndexError, AttributeError, TypeError):
+    except (ValueError, OverflowError, TypeError):
         return None
 
 
