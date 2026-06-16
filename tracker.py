@@ -2,42 +2,23 @@
 """
 Tokease — macOS menu bar app.
 
-Two data sources (see docs/adr/0001-pivot-source-statusline.md):
+Source de données UNIQUE : le feed statusline de Claude Code
+(voir docs/adr/0001-pivot-source-statusline.md). Claude Code (>= 2.1.x)
+transmet `rate_limits.five_hour` / `.seven_day` à son script statusline.
+Un script de capture (statusline/tokease-statusline.py) écrit ces fenêtres
+dans ~/.tokease/usage.json ; cette app lit ce fichier. La donnée nous est
+fournie PAR Claude Code, donc on reste dans le cadre "usage avec Claude Code" :
+jamais de lecture du token OAuth, jamais d'appel à l'endpoint Anthropic.
 
-  statusline (DEFAULT, authorized) — Claude Code (>= 2.1.x) pipes
-    rate_limits.five_hour / .seven_day into its statusline script. A capture
-    script (statusline/tokease-statusline.py) writes those to
-    ~/.tokease/usage.json; this app reads that file. The data is handed to us
-    BY Claude Code, so it stays within the authorized "use with Claude Code"
-    scope. No token read, no endpoint call, no User-Agent spoofing.
-
-  endpoint (LEGACY, opt-in) — the v0.9 behaviour: read the OAuth token from
-    the Keychain and call https://api.anthropic.com/api/oauth/usage. This
-    likely violates Anthropic's Consumer Terms (the subscription token is
-    authorized only for Claude Code / Claude.ai) and is kept off by default,
-    behind a Settings toggle and a ToS warning.
-
-Security notes (endpoint mode):
-  - Token is read into a local variable, used once, then cleared — never
-    stored as an instance attribute or logged anywhere. The full credentials
-    blob (`creds`, `result.stdout`) is also deleted before the HTTP call.
-  - HTTP redirects are blocked: a custom NoRedirectHandler prevents urllib
-    from following 3xx responses, which would resend the Bearer token to
-    an arbitrary domain.
-  - Specific exception types are caught; bare `except:` is never used so
-    KeyboardInterrupt / SystemExit propagate normally.
-  - HTTP 401/403/429 are detected explicitly for clear user feedback.
-  - The User-Agent is built lazily, only when endpoint mode is actually used.
+Conséquence : seules les fenêtres 5h et hebdo sont disponibles (2 anneaux).
+Le split par modèle (Sonnet/Opus) et l'overage payant ne sont pas dans ce feed.
 """
 
 import json
-import re
 import subprocess
 import sys
 import tempfile
 import threading
-import urllib.error
-import urllib.request
 import webbrowser
 from datetime import datetime, timezone
 from pathlib import Path
@@ -82,21 +63,21 @@ _DYNAMIC_ICON_PATH = Path(tempfile.gettempdir()) / "tokease-icon.png"
 _ICON_SIZE_FINAL = 44
 _ICON_SCALE = 4
 _ICON_SIZE = _ICON_SIZE_FINAL * _ICON_SCALE
-_RING_RADII = (20, 14, 8)      # outer, middle, inner (at final scale)
+_RING_RADII = (20, 14)         # externe (5h), interne (hebdo) — à l'échelle finale
 _RING_STROKE = 3                # final-scale stroke width
 _TRACK_ALPHA = 180              # background ring opacity so 0% reads as an empty "container", not a ghost
 
 
-def _render_dynamic_icon(session_pct, weekly_pct, inner_pct):
+def _render_dynamic_icon(session_pct, weekly_pct):
     """
-    Render the 3-ring icon with arcs filled per current usage metric.
+    Dessine l'icône à 2 anneaux remplis selon l'usage courant.
 
-    Outer ring = 5-hour session %, middle = weekly %, inner = max(sonnet, opus).
-    Each arc starts at 12 o'clock and sweeps clockwise. A faint full ring is
-    drawn behind each arc so 0% still has a visual outline.
+    Anneau externe = % session 5h, anneau interne = % hebdo. Chaque arc part de
+    midi et tourne dans le sens horaire ; un anneau plein discret est tracé
+    derrière pour que 0% garde un contour visible.
 
-    Returns the path to a freshly written PNG, or None if Pillow is missing
-    (in which case the caller keeps the existing static icon).
+    Renvoie le chemin du PNG fraîchement écrit, ou None si Pillow est absent
+    (l'appelant garde alors l'icône statique existante).
     """
     if not _PILLOW_AVAILABLE:
         return None
@@ -105,9 +86,9 @@ def _render_dynamic_icon(session_pct, weekly_pct, inner_pct):
     center = _ICON_SIZE // 2
     stroke = _RING_STROKE * _ICON_SCALE
 
-    for radius, pct in zip(_RING_RADII, (session_pct, weekly_pct, inner_pct)):
+    for radius, pct in zip(_RING_RADII, (session_pct, weekly_pct)):
         if pct is None:
-            continue  # window absent/stale (e.g. statusline mode has no inner ring)
+            continue  # fenêtre absente/réinitialisée depuis la capture
         r = radius * _ICON_SCALE
         bbox = (center - r, center - r, center + r, center + r)
         draw.ellipse(bbox, outline=(0, 0, 0, _TRACK_ALPHA), width=stroke)
@@ -131,11 +112,6 @@ INTERVALS = {
     "Every hour": 3600,
 }
 
-CENTS_PER_DOLLAR = 100
-# Used only when `claude --version` cannot be found in PATH — the LaunchAgent
-# ships with a minimal PATH so this fallback matters in practice.
-_FALLBACK_UA = "claude-code/2.1.145"
-
 # Notification thresholds (5-hour session %). Sorted ascending. Notifications
 # fire when the pct CROSSES one upward — never on first observation, never
 # repeatedly while sitting at/above the threshold.
@@ -150,12 +126,9 @@ DISPLAY_ICON = "icon"
 _KEY_DISPLAY_MODE = "display_mode"
 _KEY_ALERTS = "alerts_enabled"
 _KEY_INTERVAL = "interval_secs"
-_KEY_SOURCE = "data_source"
 
-# Data source: authorized statusline feed (default) vs legacy direct-endpoint.
+# Tag de la donnée dans _meta — source unique désormais.
 SOURCE_STATUSLINE = "statusline"
-SOURCE_ENDPOINT = "endpoint"
-_VALID_SOURCES = (SOURCE_STATUSLINE, SOURCE_ENDPOINT)
 
 # File written by the Claude Code statusline capture script
 # (statusline/tokease-statusline.py). Read on every refresh in statusline mode.
@@ -181,9 +154,6 @@ LOGIN_ITEM_NAME = "Tokease"
 # Default menu item text (extracted to avoid string duplication)
 FIVE_HOUR_DEFAULT = "5-hour: --"
 WEEKLY_DEFAULT = "Weekly: --"
-SONNET_DEFAULT = "Sonnet: --"
-OPUS_DEFAULT = "Opus: --"
-EXTRA_DEFAULT = "Extra: --"
 UPDATED_DEFAULT = "Updated: --"
 
 # ---------------------------------------------------------------------------
@@ -267,50 +237,6 @@ def _set_login_item(enabled, app_path):
 
 
 # ---------------------------------------------------------------------------
-# User-Agent detection
-# ---------------------------------------------------------------------------
-
-def _detect_claude_code_ua():
-    """Detect installed Claude Code version for the User-Agent header."""
-    try:
-        result = subprocess.run(
-            ["claude", "--version"],
-            capture_output=True, text=True, timeout=5,
-        )
-        if result.returncode == 0:
-            version = result.stdout.strip().split()[0]
-            if re.fullmatch(r"\d+\.\d+\.\d+", version):
-                return f"claude-code/{version}"
-    except (OSError, subprocess.TimeoutExpired, IndexError):
-        pass
-    return _FALLBACK_UA
-
-# Lazily detected: only legacy endpoint mode sends a User-Agent, so the default
-# (statusline) path never even builds the claude-code/* string.
-_user_agent = None
-
-
-def _get_user_agent():
-    global _user_agent
-    if _user_agent is None:
-        _user_agent = _detect_claude_code_ua()
-    return _user_agent
-
-# ---------------------------------------------------------------------------
-# Security: block HTTP redirects to prevent Bearer token leaking to other
-# domains if the API endpoint ever returns a 3xx.
-# ---------------------------------------------------------------------------
-
-class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
-    """Reject all HTTP redirects — prevents leaking the Bearer token."""
-    def redirect_request(self, req, fp, code, msg, headers, newurl):
-        raise urllib.error.HTTPError(
-            req.full_url, code, "Redirect blocked for security", headers, fp
-        )
-
-_opener = urllib.request.build_opener(_NoRedirectHandler)
-
-# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
@@ -330,117 +256,16 @@ def _epoch_to_iso(epoch):
         return None
 
 # ---------------------------------------------------------------------------
-# Data fetching
+# Data fetching — lecture pure du fichier statusline (source unique)
 # ---------------------------------------------------------------------------
 
-def _read_keychain_token():
-    """
-    Read the Claude Code OAuth token from the macOS Keychain.
+def fetch_usage():
+    """Lit l'usage capturé par le script statusline de Claude Code.
 
-    Returns:
-        (str, None)      token on success
-        (None, "auth")   when the token is missing or keychain entry not found
-        (None, "error")  on timeout or OS-level failure
-    """
-    try:
-        result = subprocess.run(
-            ["/usr/bin/security", "find-generic-password",
-             "-s", "Claude Code-credentials", "-w"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode != 0:
-            return None, "auth"
-        raw = result.stdout.strip()
-        del result
-        # Try full JSON parse first; fall back to regex if the keychain
-        # CLI truncates the blob (macOS clips at ~2 KB).
-        try:
-            creds = json.loads(raw)
-            token = creds.get("claudeAiOauth", {}).get("accessToken")
-            del creds
-        except json.JSONDecodeError:
-            m = re.search(r'"accessToken"\s*:\s*"([^"]+)"', raw)
-            token = m.group(1) if m else None
-        del raw
-        if not token:
-            return None, "auth"
-        return token, None
-    except subprocess.TimeoutExpired:
-        return None, "error"
-    except OSError:
-        return None, "error"
-
-
-def get_usage():
-    """
-    Fetch subscription usage from the Anthropic OAuth usage endpoint.
-
-    Returns:
-        (dict, None)     on success
-        (None, "auth")   when the token is missing or expired (HTTP 401)
-        (None, "plan")   when the subscription plan lacks access (HTTP 403)
-        (None, "rate")   when rate-limited (HTTP 429)
-        (None, "error")  on any other failure
-    """
-    token, err = _read_keychain_token()
-    if err:
-        return None, err
-
-    req = None
-    try:
-        req = urllib.request.Request(
-            "https://api.anthropic.com/api/oauth/usage",
-            headers={
-                "Authorization": f"Bearer {token}",
-                "anthropic-beta": "oauth-2025-04-20",
-                "User-Agent": _get_user_agent(),
-            },
-        )
-        with _opener.open(req, timeout=10) as resp:
-            data = json.loads(resp.read())
-            if not isinstance(data, dict):
-                return None, "error"
-            return data, None
-    except urllib.error.HTTPError as exc:
-        if exc.code == 401:
-            return None, "auth"
-        if exc.code == 429:
-            retry_secs = _safe_int(exc.headers.get("Retry-After")) if exc.headers else 0
-            return {"retry_after": retry_secs}, "rate"
-        if exc.code == 403:
-            return None, "plan"
-        return None, "error"
-    except (json.JSONDecodeError, UnicodeDecodeError, OSError):
-        return None, "error"
-    finally:
-        token = None
-        req = None
-
-
-def fetch_usage(source):
-    """Dispatch to the configured data source and tag the result with _meta.
-
-    statusline (default, authorized): read the file the Claude Code statusline
-    script writes. endpoint (legacy): the v0.9 direct-endpoint behaviour.
-    Returns (data, err) — same contract as get_usage().
-    """
-    if source == SOURCE_ENDPOINT:
-        data, err = get_usage()
-        if data is not None and err is None:
-            data["_meta"] = {"source": SOURCE_ENDPOINT, "captured_at": None}
-        return data, err
-    return _get_usage_statusline()
-
-
-def _get_usage_statusline():
-    """Read usage captured by the Claude Code statusline script.
-
-    Normalises to the shape _update_display expects (used_percentage→utilization,
-    epoch→ISO) and tags _meta. Error codes: 'nostatusline' (file missing → not
-    wired yet), 'waiting' (file present but no rate_limits captured yet),
-    'error' (unreadable / invalid).
+    Normalise vers la forme attendue par _update_display (used_percentage→
+    utilization, epoch→ISO) et tague _meta. Codes d'erreur : 'nostatusline'
+    (fichier absent → pas encore branché), 'waiting' (fichier présent mais aucun
+    rate_limits capturé), 'error' (illisible / invalide).
     """
     try:
         raw = _STATUSLINE_FILE.read_text(encoding="utf-8")
@@ -474,11 +299,12 @@ def _get_usage_statusline():
 # ---------------------------------------------------------------------------
 
 def _parse_iso(iso):
-    """Parse an ISO-8601 timestamp from the API into a timezone-aware datetime.
+    """Parse un timestamp ISO-8601 (issu de _epoch_to_iso) en datetime tz-aware.
 
-    Returns None for empty / malformed input. Centralised here so callers that
-    need the raw datetime (e.g. for reset-window scheduling) don't duplicate
-    the Python-version normalisation that `fmt_reset` already does.
+    Renvoie None pour une entrée vide, non-str ou malformée — toutes les
+    exceptions de parsing sont rattrapées, jamais propagées. Centralisé ici pour
+    que les appelants qui ont besoin du datetime brut (planif. de reset) ne
+    dupliquent pas la normalisation Python que `fmt_reset` fait déjà.
     """
     if not iso:
         return None
@@ -526,10 +352,6 @@ class App(rumps.App):
         if self.display_mode not in (DISPLAY_BOTH, DISPLAY_PCT, DISPLAY_ICON):
             self.display_mode = DISPLAY_BOTH
 
-        # Data source: authorized statusline feed by default; endpoint is opt-in legacy.
-        src = str(_settings_get(_KEY_SOURCE, SOURCE_STATUSLINE))
-        self.data_source = src if src in _VALID_SOURCES else SOURCE_STATUSLINE
-
         # template=True lets macOS auto-invert the icon for dark mode.
         # Pass the icon path only if it exists — a missing asset shouldn't
         # crash the app, just fall back to text-only menu bar.
@@ -548,9 +370,6 @@ class App(rumps.App):
         # Usage display items
         self.m5h   = rumps.MenuItem("5-hour: ...")
         self.m7d   = rumps.MenuItem("Weekly: ...")
-        self.mson  = rumps.MenuItem("Sonnet: ...")
-        self.mopus = rumps.MenuItem("Opus: ...")
-        self.mext  = rumps.MenuItem(EXTRA_DEFAULT)
         self.mupd  = rumps.MenuItem(UPDATED_DEFAULT)
 
         # --- Settings submenu --------------------------------------------
@@ -578,19 +397,6 @@ class App(rumps.App):
             display_menu.add(item)
         self._update_display_menu()
 
-        # Data source (radio group): authorized statusline vs legacy endpoint
-        source_menu = rumps.MenuItem("Data source")
-        self._source_items = {}
-        for src_mode, label in (
-            (SOURCE_STATUSLINE, "Claude Code statusline (recommended)"),
-            (SOURCE_ENDPOINT, "Direct API — legacy, at your own risk"),
-        ):
-            item = rumps.MenuItem(label, callback=self._set_source)
-            item._source = src_mode  # stash mode on the item for the callback
-            self._source_items[src_mode] = item
-            source_menu.add(item)
-        self._update_source_menu()
-
         # Notification toggle
         self.m_alerts = rumps.MenuItem(
             f"Alert at {NOTIFY_THRESHOLDS[0]}% / {NOTIFY_THRESHOLDS[1]}%",
@@ -611,7 +417,6 @@ class App(rumps.App):
         settings_menu = rumps.MenuItem("Settings")
         settings_menu.add(self.m_login)
         settings_menu.add(display_menu)
-        settings_menu.add(source_menu)
         settings_menu.add(self.m_alerts)
         settings_menu.add(interval_menu)
 
@@ -621,8 +426,7 @@ class App(rumps.App):
         support_menu.add(rumps.MenuItem("Sponsor / Donate", callback=self._open_donate))
 
         self.menu = [
-            self.m5h, self.m7d, self.mson, self.mopus, None,
-            self.mext, None,
+            self.m5h, self.m7d, None,
             self.mupd,
             rumps.MenuItem("Refresh", callback=self._refresh),
             None,
@@ -646,17 +450,6 @@ class App(rumps.App):
     def _update_display_menu(self):
         for mode, item in self._display_items.items():
             item.state = 1 if mode == self.display_mode else 0
-
-    def _update_source_menu(self):
-        for src_mode, item in self._source_items.items():
-            item.state = 1 if src_mode == self.data_source else 0
-
-    def _set_source(self, sender):
-        self.data_source = sender._source
-        _settings_set(_KEY_SOURCE, self.data_source)
-        self._update_source_menu()
-        # Re-fetch immediately so the switch takes effect without waiting for the timer.
-        self._refresh(None)
 
     def _set_interval(self, sender):
         self.interval = self._item_to_secs[sender.title]
@@ -728,7 +521,7 @@ class App(rumps.App):
 
         now = datetime.now(timezone.utc)
         soonest = None
-        for key in ("five_hour", "seven_day", "seven_day_sonnet", "seven_day_opus"):
+        for key in ("five_hour", "seven_day"):
             section = data.get(key)
             if not isinstance(section, dict):
                 continue
@@ -760,7 +553,7 @@ class App(rumps.App):
 
     def _fetch_and_update(self):
         try:
-            data, err = fetch_usage(self.data_source)
+            data, err = fetch_usage()
         except Exception as exc:  # worker thread must never die silently, else the menu freezes on "..."
             print(f"tokease: unexpected fetch error: {exc!r}", file=sys.stderr)
             data, err = None, "error"
@@ -770,55 +563,27 @@ class App(rumps.App):
         _call_on_main(self._apply_usage, data, err)
 
     def _apply_usage(self, data, err):
-        # Error states always show their text indicator regardless of display
-        # mode — the user needs to see *why* numbers aren't updating.
+        # Les états d'erreur affichent toujours leur texte quel que soit le mode
+        # d'affichage — l'utilisateur doit voir *pourquoi* les chiffres ne bougent pas.
         if err or not data:
-            # Clear any stale ring icon so it can't contradict the error glyph;
-            # in ICON mode the title is empty, so a frozen ring would mislead.
+            # Efface toute icône d'anneau périmée pour qu'elle ne contredise pas
+            # le glyphe d'erreur (en mode ICON le titre est vide → anneau figé trompeur).
             self.icon = None
-        if err == "auth":
-            self.title = "↩ Login"
-            self.m5h.title   = "Run: claude login"
-            self.m7d.title   = WEEKLY_DEFAULT
-            self.mson.title  = SONNET_DEFAULT
-            self.mopus.title = OPUS_DEFAULT
-            self.mext.title  = EXTRA_DEFAULT
-            return
-
-        if err == "rate":
-            self.title = "⏳"
-            retry_secs = data.get("retry_after", 0) if isinstance(data, dict) else 0
-            if retry_secs > 0:
-                mins = (retry_secs + 59) // 60
-                self.m5h.title = f"Rate limited — retry in {mins}m"
-            else:
-                self.m5h.title = "Rate limited — will retry"
-            return
-
-        if err == "plan":
-            self.title = "⛔"
-            self.m5h.title = "Pro/Max plan required"
-            return
 
         if err == "nostatusline":
-            # statusline mode but the capture file doesn't exist yet — not wired.
+            # Fichier de capture absent → statusline pas encore branchée. On guide pas-à-pas.
             self.title = "⚙"
-            self.m5h.title   = "Set up Claude Code statusline →"
-            self.m7d.title   = WEEKLY_DEFAULT
-            self.mson.title  = SONNET_DEFAULT
-            self.mopus.title = OPUS_DEFAULT
-            self.mext.title  = EXTRA_DEFAULT
+            self.m5h.title = "1. lance statusline/install-statusline.sh"
+            self.m7d.title = "2. ajoute le bloc à ~/.claude/settings.json"
+            self.mupd.title = "3. envoie un message dans Claude Code"
             return
 
         if err == "waiting":
-            # File exists but Claude Code hasn't surfaced rate_limits yet
-            # (appears only after the first API response of a session).
+            # Fichier présent mais Claude Code n'a pas encore remonté rate_limits
+            # (n'apparaît qu'après la 1re réponse API d'une session).
             self.title = "…"
-            self.m5h.title   = "Waiting for Claude Code activity…"
-            self.m7d.title   = WEEKLY_DEFAULT
-            self.mson.title  = SONNET_DEFAULT
-            self.mopus.title = OPUS_DEFAULT
-            self.mext.title  = EXTRA_DEFAULT
+            self.m5h.title = "Waiting for Claude Code activity…"
+            self.m7d.title = WEEKLY_DEFAULT
             return
 
         if err or not data:
@@ -842,24 +607,17 @@ class App(rumps.App):
                 self.icon = str(icon_path)
 
     @staticmethod
-    def _fmt_utilization(label, section):
-        """Format a utilization section as 'Label: N% (resets ...)'."""
-        pct = _safe_int(section.get("utilization"))
-        return f"{label}: {pct}% (resets {fmt_reset(section.get('resets_at'))})", pct
+    def _window_row(label, section, now):
+        """Formate une ligne de fenêtre d'usage → (texte, pct_pour_anneau).
 
-    @staticmethod
-    def _window_row(label, section, now, captured):
-        """Format a usage window row → (text, pct_for_ring).
-
-        pct_for_ring is None when the window has already reset since the data
-        was captured (statusline mode only): the stored % is no longer valid,
-        so the caller skips that ring and shows '—' instead of a stale number.
+        pct_pour_anneau vaut None quand la fenêtre s'est déjà réinitialisée depuis
+        la capture : le % stocké n'est plus valide, donc l'appelant saute cet
+        anneau et affiche '—' plutôt qu'un chiffre périmé.
         """
         pct = _safe_int(section.get("utilization"))
-        if captured:
-            dt = _parse_iso(section.get("resets_at"))
-            if dt is not None and dt <= now:
-                return f"{label}: — (reset; awaiting Claude Code)", None
+        dt = _parse_iso(section.get("resets_at"))
+        if dt is not None and dt <= now:
+            return f"{label}: — (reset; awaiting Claude Code)", None
         return f"{label}: {pct}% (resets {fmt_reset(section.get('resets_at'))})", pct
 
     @staticmethod
@@ -877,67 +635,32 @@ class App(rumps.App):
             return f"⚠ {local} · stale {int(age // 60)}m (Claude Code idle?)"
         return f"Updated: {local} (via Claude Code)"
 
-    def _set_unsupported_rows(self):
-        """Rows the statusline feed can't provide: per-model split and paid overage."""
-        self.mson.title = "Sonnet: n/a"
-        self.mopus.title = "Opus: n/a"
-        self.mext.title = "Extra: n/a"
-
-    def _update_endpoint_rows(self, data, now):
-        """Per-model rows + paid overage (endpoint mode). Returns the inner-ring pct."""
-        sonnet_pct = opus_pct = 0
-        if s := data.get("seven_day_sonnet"):
-            self.mson.title, sonnet_pct = self._window_row("Sonnet", s, now, False)
-        else:
-            self.mson.title = SONNET_DEFAULT
-        if o := data.get("seven_day_opus"):
-            self.mopus.title, opus_pct = self._window_row("Opus", o, now, False)
-        else:
-            self.mopus.title = OPUS_DEFAULT
-
-        e = data.get("extra_usage")
-        if isinstance(e, dict) and e.get("is_enabled"):
-            used  = _safe_int(e.get("used_credits")) / CENTS_PER_DOLLAR
-            limit = _safe_int(e.get("monthly_limit")) / CENTS_PER_DOLLAR
-            pct   = _safe_int(e.get("utilization"))
-            self.mext.title = f"Extra: ${used:.2f}/${limit:.0f} ({pct}%)"
-        else:
-            self.mext.title = EXTRA_DEFAULT
-
-        # Surface the model the user is most at risk of capping out on.
-        return max(sonnet_pct, opus_pct)
-
     def _update_display(self, data):
         now = datetime.now(timezone.utc)
         meta = data.get("_meta", {})
-        is_statusline = meta.get("source") == SOURCE_STATUSLINE
         session_pct = weekly_pct = 0
 
-        # 5-hour session (also drives the menu bar title and threshold alerts)
+        # Session 5h (pilote aussi le titre menu bar et les alertes de seuil)
         if h := data.get("five_hour"):
-            self.m5h.title, session_pct = self._window_row("5-hour", h, now, is_statusline)
+            self.m5h.title, session_pct = self._window_row("5-hour", h, now)
             if session_pct is not None:
                 self._maybe_notify(session_pct)
         else:
             self.m5h.title = FIVE_HOUR_DEFAULT
 
-        # 7-day weekly
+        # Hebdo 7 jours
         if d := data.get("seven_day"):
-            self.m7d.title, weekly_pct = self._window_row("Weekly", d, now, is_statusline)
+            self.m7d.title, weekly_pct = self._window_row("Weekly", d, now)
         else:
             self.m7d.title = WEEKLY_DEFAULT
 
-        # Inner ring = per-model saturation; the statusline feed has no such split.
-        if is_statusline:
-            self._set_unsupported_rows()
-            inner_pct = None
-            self.mupd.title = self._freshness_label(meta.get("captured_at"), now)
-        else:
-            inner_pct = self._update_endpoint_rows(data, now)
-            self.mupd.title = f"Updated: {datetime.now().strftime('%H:%M')}"
+        self.mupd.title = self._freshness_label(meta.get("captured_at"), now)
 
-        icon_path = _render_dynamic_icon(session_pct, weekly_pct, inner_pct)
-        title_pct = f"{session_pct}%" if session_pct is not None else "—"
+        # Clamp 0..100 avant le titre et l'icône (le feed peut dépasser 100).
+        session_clamped = min(100, session_pct) if session_pct is not None else None
+        weekly_clamped = min(100, weekly_pct) if weekly_pct is not None else None
+        icon_path = _render_dynamic_icon(session_clamped, weekly_clamped)
+        title_pct = f"{session_clamped}%" if session_clamped is not None else "—"
         self._apply_display(title_pct, icon_path)
 
         self._schedule_reset_refresh(data)

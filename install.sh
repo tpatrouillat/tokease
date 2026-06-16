@@ -3,12 +3,13 @@
 # Tokease — Installation Script
 #
 # What this does:
-#   1. Creates a Python virtualenv and installs rumps
+#   1. Creates a Python virtualenv and installs dependencies
 #   2. Optionally creates a macOS LaunchAgent for auto-start at login
 #   3. Optionally launches the app immediately
 #
-# No API keys are needed — the tracker reads Claude Code's OAuth token
-# directly from the macOS Keychain (set by `claude login`).
+# No API keys, no token, no network call — the tracker reads only the usage
+# that Claude Code's statusline feed writes to ~/.tokease/usage.json.
+# Wire that up first with: bash statusline/install-statusline.sh
 #
 
 set -euo pipefail
@@ -49,8 +50,8 @@ chmod +x "$SCRIPT_DIR/tracker.py"
 
 # --- Prerequisite reminder --------------------------------------------------
 echo ""
-echo "Prerequisite: Claude Code must be installed and logged in."
-echo "If you haven't yet, run:  claude login"
+echo "Prerequisite: Claude Code (>= 2.1.x, Pro/Max) with the Tokease statusline."
+echo "If you haven't yet, run:  bash \"$SCRIPT_DIR/statusline/install-statusline.sh\""
 echo ""
 
 # --- LaunchAgent (auto-start) -----------------------------------------------
@@ -69,8 +70,8 @@ if [[ "$auto_start" =~ ^[Yy]$ ]]; then
         launchctl unload "$LAUNCH_AGENT_PLIST" 2>/dev/null || true
     fi
 
-    # PATH includes Homebrew (Intel + Apple Silicon) so `claude --version`
-    # resolves for the User-Agent header, plus system bins for `security`.
+    # PATH includes Homebrew (Intel + Apple Silicon) + system bins so python3
+    # and its dependencies resolve under the LaunchAgent's minimal environment.
     cat > "$LAUNCH_AGENT_PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -118,6 +119,6 @@ fi
 
 echo ""
 echo "Look for a percentage badge (e.g. \"42%\") in the top-right of your menu bar."
-echo "Click it to see your 5-hour, weekly, Sonnet, Opus, and overage limits."
+echo "Click it to see your 5-hour and weekly limits (2 rings)."
 echo ""
 echo "Done!"
