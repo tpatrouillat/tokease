@@ -65,8 +65,9 @@ printing anything, so it doesn't interfere with your statusline's output.
 
 ## Troubleshooting
 
-- Menu bar shows **⚙ "Set up Claude Code statusline"** → the file
-  `~/.tokease/usage.json` doesn't exist yet. Re-check steps 1–2.
+- Menu bar shows **⚙** (with a 3-step setup guide in the dropdown) → the file
+  `~/.tokease/usage.json` doesn't exist yet. Finish steps 1–2, then send a
+  message in Claude Code.
 - Menu bar shows **"Waiting for Claude Code activity…"** → wired correctly, but
   no `rate_limits` captured yet. Send a message in Claude Code.
 - Errors are logged to `~/.tokease/statusline.err`.

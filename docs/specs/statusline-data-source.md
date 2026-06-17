@@ -61,7 +61,7 @@ a été retiré (cf. [ADR 0002](../adr/0002-retrait-mode-endpoint.md)).
 
 | Code | Déclencheur | Affichage |
 |------|-------------|-----------|
-| `nostatusline` | fichier absent | « Set up Claude Code statusline → » (non câblé) |
+| `nostatusline` | fichier absent | titre ⚙ + guide 3 étapes dans le menu (non câblé) |
 | `waiting` | fichier présent, aucune fenêtre captée | « Waiting for Claude Code… » |
 | `error` | fichier illisible / JSON invalide | « ? » |
 
