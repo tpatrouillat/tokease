@@ -773,6 +773,11 @@ class TestEpochToIso(unittest.TestCase):
     def test_non_numeric(self):
         self.assertIsNone(tracker._epoch_to_iso("not-a-number"))
 
+    def test_iso_string_passes_through(self):
+        # claude-code#40094 : resets_at peut arriver déjà en ISO, pas en epoch.
+        out = tracker._epoch_to_iso("2026-03-28T15:00:00Z")
+        self.assertIsNotNone(tracker._parse_iso(out))
+
 
 # ---------------------------------------------------------------------------
 # Tests: fetch_usage (lecture pure du fichier statusline)
@@ -837,6 +842,17 @@ class TestStatuslineSource(unittest.TestCase):
         self._write({"captured_at": 1, "five_hour": {"resets_at": 2}})
         _, err = tracker.fetch_usage()
         self.assertEqual(err, "waiting")
+
+    def test_resets_at_as_iso_string(self):
+        # Contrat #40094 : si Claude Code passe resets_at en ISO (et non epoch),
+        # le compte à rebours ne doit pas disparaître en silence.
+        self._write({
+            "captured_at": 1799999000,
+            "five_hour": {"used_percentage": 12, "resets_at": "2099-01-01T00:00:00Z"},
+        })
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(err)
+        self.assertIsNotNone(tracker._parse_iso(data["five_hour"]["resets_at"]))
 
 
 # ---------------------------------------------------------------------------

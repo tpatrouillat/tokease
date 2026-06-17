@@ -15,6 +15,7 @@ Le split par modèle (Sonnet/Opus) et l'overage payant ne sont pas dans ce feed.
 """
 
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -50,9 +51,18 @@ try:
 except ImportError:
     _DEFAULTS = None
 
-# Resolves both from source (repo root + assets/) and from the py2app bundle
-# (Resources/assets/) — DATA_FILES in setup.py places it under Resources/assets.
-_ICON_PATH = Path(__file__).resolve().parent / "assets" / "menubar-template.png"
+def _resolve_icon_path():
+    """Chemin de l'icône menu bar — depuis les sources (assets/ à côté du script)
+    OU depuis le bundle py2app gelé : py2app place DATA_FILES sous Resources/ et
+    l'expose via $RESOURCEPATH (Path(__file__) n'y pointe pas une fois gelé)."""
+    if getattr(sys, "frozen", False):
+        res = os.environ.get("RESOURCEPATH")
+        if res:
+            return Path(res) / "assets" / "menubar-template.png"
+    return Path(__file__).resolve().parent / "assets" / "menubar-template.png"
+
+
+_ICON_PATH = _resolve_icon_path()
 
 # Dynamic-icon rendering: rewritten on every refresh, lives in tempdir so it
 # never mutates the bundled assets and gets cleaned by macOS periodically.
@@ -248,11 +258,19 @@ def _safe_int(val, default=0):
         return default
 
 
-def _epoch_to_iso(epoch):
-    """Convert epoch seconds (statusline resets_at) into an ISO string fmt_reset reads."""
+def _epoch_to_iso(value):
+    """Normalise `resets_at` (statusline) en string ISO que fmt_reset lit.
+
+    Le format varie selon la version de Claude Code (cf. anthropics/claude-code
+    #40094) : soit un epoch en secondes, soit déjà une string ISO. On tolère les
+    deux ; toute valeur ininterprétable → None (le compte à rebours affiche '--').
+    """
     try:
-        return datetime.fromtimestamp(float(epoch), timezone.utc).isoformat()
+        return datetime.fromtimestamp(float(value), timezone.utc).isoformat()
     except (TypeError, ValueError, OverflowError, OSError):
+        # Pas un epoch numérique → peut-être déjà une string ISO valide.
+        if isinstance(value, str) and _parse_iso(value) is not None:
+            return value.strip()
         return None
 
 # ---------------------------------------------------------------------------
