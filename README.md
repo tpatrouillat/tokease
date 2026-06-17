@@ -2,9 +2,17 @@
   <img src="assets/logo-256-demo.png" alt="Tokease" width="200" height="200">
   <h1>Tokease</h1>
   <p>A lightweight macOS menu bar app showing your Claude Code rate limits in real time<br/><strong>The only Claude Code limit tracker that never reads your token</strong></p>
+  <p>
+    <a href="https://github.com/tpatrouillat/tokease/actions/workflows/ci.yml"><img src="https://github.com/tpatrouillat/tokease/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+    <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
+    <img src="https://img.shields.io/badge/platform-macOS-lightgrey.svg" alt="Platform: macOS">
+    <img src="https://img.shields.io/badge/telemetry-none-success.svg" alt="No telemetry">
+  </p>
 </div>
 
 ![Tokease screenshot](docs/screenshot.png)
+
+<sub><em>Screenshot from an earlier build — an updated 2-ring capture is on the way.</em></sub>
 
 ## Why Tokease
 
@@ -14,7 +22,7 @@ Three things it does:
 
 1. **Compliant by construction, not by promise.** The only data source is the `rate_limits` feed Claude Code passes to its statusline script (a documented field). No token read, no endpoint call.
 2. **Shows the limit you have left, not the history you spent.** Your 5-hour and weekly remaining capacity, with reset countdowns — amber at 80%, red at 95%.
-3. **One file, zero telemetry, zero account.** A small single-file menu bar app, MIT-licensed. Nothing leaves your machine; nothing to sign up for.
+3. **One file, zero telemetry, zero account.** A small single-file menu bar app, MIT-licensed. It runs entirely on your machine — no telemetry, no account, nothing to sign up for.
 
 ## Features
 
@@ -84,6 +92,11 @@ venv/bin/python tracker.py
 
 After installing the app, wire up the statusline capture script — see [`statusline/README.md`](statusline/README.md).
 
+## Uninstall
+
+- **Homebrew:** `brew services stop tokease && brew uninstall tokease`
+- **From source:** `bash uninstall.sh` — removes the LaunchAgent, the `~/.tokease/` data, and the Tokease `statusLine` block from `~/.claude/settings.json` (with a backup). Then delete the cloned folder.
+
 ## A note on freshness
 
 The `rate_limits` feed only updates **while Claude Code is running** — its statusline ticks on activity. When Claude Code is closed, Tokease shows the last known values and flags them *stale*; it also detects reset windows that have already rolled over, so an old percentage is never shown as if it were fresh. This is an honest limitation of reading a statusline feed rather than calling an endpoint.
@@ -106,16 +119,10 @@ Tests cover statusline parsing, freshness/reset logic, time formatting, and disp
 
 ## Contributing
 
-Contributions are welcome! Here's how:
+Contributions are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for dev setup, the lint/test gate, and commit conventions. Please keep the codebase minimal; this is intentionally a small, focused tool.
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Make your changes
-4. Run the tests (`venv/bin/python -m pytest tests/ -v`)
-5. Commit and push
-6. Open a Pull Request
-
-Please keep the codebase minimal — this is intentionally a small, focused tool.
+- Security issues: [SECURITY.md](SECURITY.md) (don't open a public issue).
+- What Tokease reads and never touches: [PRIVACY.md](PRIVACY.md).
 
 ## Roadmap
 
