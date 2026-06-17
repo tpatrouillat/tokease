@@ -16,10 +16,13 @@ for the why.
    bash statusline/install-statusline.sh
    ```
 
-   (This only copies the script to `~/.tokease/` and prints instructions — it
-   never edits your `settings.json` automatically.)
+   (This copies the script to `~/.tokease/`, then **offers** to add the
+   `statusLine` block to your `settings.json` for you — with a timestamped
+   backup, and never overwriting an existing statusline. Answer `n` to just
+   print the snippet and do step 2 yourself.)
 
-2. Add this to `~/.claude/settings.json`:
+2. If you answered `n` (or have no `jq`), add this to `~/.claude/settings.json`
+   manually:
 
    ```json
    {

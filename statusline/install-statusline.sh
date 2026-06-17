@@ -66,7 +66,7 @@ write_with_jq() {
     mv "$tmp" "$SETTINGS"
     echo "✓ Bloc statusLine ajouté à $SETTINGS (backup : $backup)"
   else
-    rm -f "$tmp"
+    rm -f "$tmp" "$backup"   # aucune modif effectuée → pas de backup orphelin
     echo "error: jq a échoué — settings.json laissé intact." >&2
     print_manual_snippet
   fi
