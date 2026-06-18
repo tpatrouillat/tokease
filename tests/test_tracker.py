@@ -991,6 +991,59 @@ class TestStatuslineScript(unittest.TestCase):
         self.assertIn("five_hour", payload)
         self.assertNotIn("seven_day", payload)
 
+    def test_empty_stdin_is_safe(self):
+        proc, _, payload = self._run("")
+        self.assertEqual(proc.returncode, 0)
+        self.assertNotIn("five_hour", payload)
+        self.assertIn("captured_at", payload)
+
+    def test_garbage_stdin_preserves_existing_good_file(self):
+        # Garantie centrale : un tick corrompu ne doit PAS écraser un bon usage.json.
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        good = Path(td.name) / ".tokease" / "usage.json"
+        good.parent.mkdir(parents=True)
+        good.write_text('{"five_hour": {"used_percentage": 42}}', encoding="utf-8")
+        env = {**os.environ, "HOME": td.name, "TOKEASE_STATUSLINE_QUIET": "1"}
+        proc = subprocess.run(
+            [sys.executable, str(self.SCRIPT)], input="not json {{{",
+            capture_output=True, text=True, env=env, timeout=10,
+        )
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(json.loads(good.read_text())["five_hour"]["used_percentage"], 42)
+
+
+# ---------------------------------------------------------------------------
+# Tests: rendu réel de l'icône (Pillow) — sinon ce code prod n'est jamais exécuté
+# ---------------------------------------------------------------------------
+@unittest.skipUnless(tracker._PILLOW_AVAILABLE, "Pillow requis")
+class TestRenderIcon(unittest.TestCase):
+    def test_renders_real_png_at_final_size(self):
+        p = tracker._render_dynamic_icon(50, 30)
+        self.assertIsNotNone(p)
+        self.assertTrue(Path(p).exists())
+        size = tracker.Image.open(p).size
+        self.assertEqual(size, (tracker._ICON_SIZE_FINAL, tracker._ICON_SIZE_FINAL))
+
+    def test_renders_with_none_pcts(self):
+        # fenêtre absente/resetée (pct None) → anneaux vides, pas de crash
+        p = tracker._render_dynamic_icon(None, None)
+        self.assertTrue(Path(p).exists())
+
+    def test_renders_clamps_over_100(self):
+        p = tracker._render_dynamic_icon(150, 999)
+        self.assertTrue(Path(p).exists())
+
+
+# ---------------------------------------------------------------------------
+# Tests: freshness label avec captured_at malformé
+# ---------------------------------------------------------------------------
+class TestFreshnessLabel(unittest.TestCase):
+    def test_malformed_captured_at_returns_default(self):
+        now = datetime.now(timezone.utc)
+        self.assertEqual(tracker.App._freshness_label("garbage", now), tracker.UPDATED_DEFAULT)
+        self.assertEqual(tracker.App._freshness_label(None, now), tracker.UPDATED_DEFAULT)
+
 
 if __name__ == "__main__":
     unittest.main()
