@@ -17,6 +17,7 @@ if [ ! -f "$SRC" ]; then
 fi
 
 mkdir -p "$DEST_DIR"
+chmod 700 "$DEST_DIR" 2>/dev/null || true  # données d'usage privées, pas lisibles par d'autres comptes
 cp "$SRC" "$DEST"
 echo "✓ Capture script installé : $DEST"
 echo
@@ -94,7 +95,7 @@ EOF
 }
 
 echo "Étape suivante : câbler le script dans Claude Code."
-read -r -p "Écrire automatiquement le bloc statusLine dans ~/.claude/settings.json ? (y/N) " reply
+read -r -p "Écrire automatiquement le bloc statusLine dans ~/.claude/settings.json ? (y/N) " reply || reply="n"  # EOF (non-interactif) → snippet manuel
 echo
 
 case "$reply" in

@@ -498,6 +498,9 @@ class TestEdgeCases(unittest.TestCase):
             app._update_display(_make_usage(five_hour_pct=150, seven_day_pct=130))
         self.assertEqual(app.title, "100%")
         render.assert_called_once_with(100, 100)
+        # la ligne de menu déroulant doit aussi être clampée (pas que le titre/icône)
+        self.assertIn("5-hour: 100%", app.m5h.title)
+        self.assertIn("Weekly: 100%", app.m7d.title)
 
 
 # ---------------------------------------------------------------------------
@@ -1022,7 +1025,8 @@ class TestRenderIcon(unittest.TestCase):
         p = tracker._render_dynamic_icon(50, 30)
         self.assertIsNotNone(p)
         self.assertTrue(Path(p).exists())
-        size = tracker.Image.open(p).size
+        with tracker.Image.open(p) as im:
+            size = im.size
         self.assertEqual(size, (tracker._ICON_SIZE_FINAL, tracker._ICON_SIZE_FINAL))
 
     def test_renders_with_none_pcts(self):

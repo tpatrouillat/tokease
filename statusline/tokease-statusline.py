@@ -35,10 +35,20 @@ _ERR = _DIR / "statusline.err"
 _SCHEMA = 1
 
 
+def _ensure_dir():
+    """Crée ~/.tokease en 0700 — l'usage est une donnée privée, pas lisible par
+    les autres comptes locaux (chmod resserre même si le dossier préexistait)."""
+    _DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+    try:
+        _DIR.chmod(0o700)
+    except OSError:
+        pass
+
+
 def _log_error(msg):
     """Record an error without crashing Claude Code's statusline."""
     try:
-        _DIR.mkdir(parents=True, exist_ok=True)
+        _ensure_dir()
         with open(_ERR, "a", encoding="utf-8") as fh:
             fh.write(f"{int(time.time())} {msg}\n")
     except OSError:
@@ -63,7 +73,7 @@ def _atomic_write(payload):
     """Write JSON atomically (temp in same dir + os.replace) so the reader
     never sees a partially-written file. Cleans up the temp file on failure
     instead of leaking a .usage.<pid>.tmp behind."""
-    _DIR.mkdir(parents=True, exist_ok=True)
+    _ensure_dir()
     tmp = _DIR / f".usage.{os.getpid()}.tmp"
     try:
         with open(tmp, "w", encoding="utf-8") as fh:
@@ -78,7 +88,7 @@ def main():
     raw = sys.stdin.read()
     try:
         data = json.loads(raw) if raw.strip() else {}
-    except (json.JSONDecodeError, ValueError) as exc:
+    except ValueError as exc:  # JSONDecodeError dérive de ValueError
         _log_error(f"stdin not JSON: {exc!r}")
         return  # don't overwrite a good file with garbage
 
@@ -103,10 +113,14 @@ def main():
     if os.environ.get("TOKEASE_STATUSLINE_QUIET"):
         return
     bits = []
-    if "five_hour" in payload:
-        bits.append(f"5h {int(payload['five_hour']['used_percentage'])}%")
-    if "seven_day" in payload:
-        bits.append(f"7d {int(payload['seven_day']['used_percentage'])}%")
+    for key, lbl in (("five_hour", "5h"), ("seven_day", "7d")):
+        win = payload.get(key)
+        if not win:
+            continue
+        try:  # un % non numérique ne doit pas faire disparaître toute la sortie
+            bits.append(f"{lbl} {int(float(win['used_percentage']))}%")
+        except (KeyError, TypeError, ValueError):
+            pass
     if bits:
         sys.stdout.write("⛁ " + " · ".join(bits))
 

@@ -642,7 +642,10 @@ class App(rumps.App):
         la capture : le % stocké n'est plus valide, donc l'appelant saute cet
         anneau et affiche '—' plutôt qu'un chiffre périmé.
         """
-        pct = _safe_int(section.get("utilization"))
+        # Clamp 0..100 à la source : le feed peut renvoyer un % aberrant au
+        # démarrage (bug Claude Code #52326) — sinon il fuit dans la ligne de
+        # menu déroulant et la notification (pas seulement le titre/icône).
+        pct = min(100, _safe_int(section.get("utilization")))
         dt = _parse_iso(section.get("resets_at"))
         if dt is not None and dt <= now:
             return f"{label}: — (reset; awaiting Claude Code)", None
@@ -655,7 +658,7 @@ class App(rumps.App):
             return UPDATED_DEFAULT
         try:
             cap = datetime.fromtimestamp(float(captured_at), timezone.utc)
-            local = datetime.fromtimestamp(float(captured_at)).strftime("%H:%M")
+            local = cap.astimezone().strftime("%H:%M")
         except (TypeError, ValueError, OverflowError, OSError):
             return UPDATED_DEFAULT
         age = (now - cap).total_seconds()
@@ -684,11 +687,9 @@ class App(rumps.App):
 
         self.mupd.title = self._freshness_label(meta.get("captured_at"), now)
 
-        # Clamp 0..100 avant le titre et l'icône (le feed peut dépasser 100).
-        session_clamped = min(100, session_pct) if session_pct is not None else None
-        weekly_clamped = min(100, weekly_pct) if weekly_pct is not None else None
-        icon_path = _render_dynamic_icon(session_clamped, weekly_clamped)
-        title_pct = f"{session_clamped}%" if session_clamped is not None else "—"
+        # % déjà clampé 0..100 dans _window_row (cf. bug #52326).
+        icon_path = _render_dynamic_icon(session_pct, weekly_pct)
+        title_pct = f"{session_pct}%" if session_pct is not None else "—"
         self._apply_display(title_pct, icon_path)
 
         self._schedule_reset_refresh(data)

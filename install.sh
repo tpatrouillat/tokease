@@ -59,7 +59,7 @@ echo "$BANNER"
 echo "   Auto-Start Setup"
 echo "$BANNER"
 echo ""
-read -r -p "Start the tracker automatically at login? (y/n): " auto_start
+read -r -p "Start the tracker automatically at login? (y/n): " auto_start || auto_start="n"
 
 if [[ "$auto_start" =~ ^[Yy]$ ]]; then
     mkdir -p "$LAUNCH_AGENT_DIR"
@@ -111,7 +111,7 @@ echo "To start manually:"
 echo "  \"$VENV_DIR/bin/python\" \"$SCRIPT_DIR/tracker.py\""
 echo ""
 
-read -r -p "Start the tracker now? (y/n): " start_now
+read -r -p "Start the tracker now? (y/n): " start_now || start_now="n"
 if [[ "$start_now" =~ ^[Yy]$ ]]; then
     echo "Starting Tokease..."
     nohup "$VENV_DIR/bin/python" "$SCRIPT_DIR/tracker.py" >/dev/null 2>&1 &
