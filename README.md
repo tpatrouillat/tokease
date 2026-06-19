@@ -32,7 +32,7 @@ Three things it does:
 - **Customizable display** — icon + percentage, icon only, or percentage only
 - **Settings menu** — launch at login, display modes, alert thresholds (amber 80% / red 95%), refresh interval
 - **Lightweight** — pure Python, two small dependencies (`rumps` + `Pillow`)
-- **No telemetry** — no account, no config files, nothing phones home
+- **No telemetry** — no account, no tracking, nothing phones home
 
 ## Prerequisites
 
@@ -106,7 +106,7 @@ The `rate_limits` feed only updates **while Claude Code is running** — its sta
 - **Reads no token, ever.** Tokease only reads `~/.tokease/usage.json`, written by the Claude Code statusline. It never touches the Keychain or your OAuth token.
 - **No API calls of its own.** The only network call involved is the one Claude Code already makes — Tokease just reads the result Claude Code wrote locally.
 - **No data collection** — the app runs entirely on your machine.
-- **No secrets stored** — no config files, no `.env`, no credentials on disk.
+- **No secrets stored** — no `.env`, no tokens, no credentials on disk.
 - **Open source** — audit the code yourself: `tracker.py` plus a small statusline script.
 
 ## Running Tests
