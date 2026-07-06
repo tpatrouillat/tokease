@@ -702,6 +702,8 @@
         .notify-form input[type="email"]:focus { outline: none; border-color: var(--purple); }
         .notify-form button { padding: 0.75rem 1.25rem; }
         .notify-note { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.85rem; }
+        .notify-cta { display: flex; gap: 0.6rem; justify-content: center; flex-wrap: wrap; }
+        .notify-cta .btn { padding: 0.8rem 1.4rem; font-size: 0.95rem; }
 
         /* --- Footer ------------------------------------------------------ */
         footer {
@@ -845,10 +847,10 @@
         <figure class="showcase-frame" id="showcaseFrame">
             <div class="showcase-glow" aria-hidden="true"></div>
             <div class="showcase-inner">
-                <img id="showcaseImg" src="screenshot.png" alt="Tokease menu bar dropdown on macOS showing the Claude Code 5-hour and weekly limits as percentages with reset times" loading="lazy" width="281" height="281">
+                <img id="showcaseImg" src="screenshot.png" alt="Tokease menu bar dropdown on macOS showing the Claude Code 5-hour limit at 77% and weekly limit at 35% with reset times" loading="lazy" width="1480" height="660">
             </div>
         </figure>
-        <figcaption class="showcase-cap">Screenshot from an earlier build — an updated 2-ring capture is on the way.</figcaption>
+        <figcaption class="showcase-cap">Your 5-hour and weekly limits, one click away in the menu bar.</figcaption>
     </div>
 </section>
 
@@ -1021,19 +1023,16 @@
 <!-- Notify -->
 <section id="notify">
     <div class="notify-card reveal">
-        <h3>Get a heads-up on big changes</h3>
-        <p>One email when something material happens — a new release, or a change to how Claude Code's statusline feed works that Tokease has to follow. No newsletter, no marketing.</p>
-        <!--
-          To make this form live: create a free form at https://formspree.io
-          and replace YOUR_FORM_ID below with your form's ID. Works without JavaScript.
-        -->
-        <form class="notify-form" action="https://formspree.io/f/YOUR_FORM_ID" method="POST">
-            <label for="notify-email" style="position:absolute;left:-9999px;">Email address</label>
-            <input id="notify-email" type="email" name="email" placeholder="you@example.com" required autocomplete="email">
-            <input type="hidden" name="_subject" value="Tokease — notify list signup">
-            <button type="submit" class="btn btn-primary">Notify me</button>
-        </form>
-        <p class="notify-note">Used only for release and breaking-change alerts. Unsubscribe in one click.</p>
+        <h3>Get a heads-up on new releases</h3>
+        <p>No email, no newsletter, no account to hand over — that would be off-brand for a tool that never reads your token. Watch the repo and GitHub tells you when a new version ships, or when a change to Claude Code's statusline feed means Tokease has to follow.</p>
+        <div class="notify-cta">
+            <a href="https://github.com/tpatrouillat/tokease" class="btn btn-primary" rel="noopener">
+                <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3C4.5 3 1.7 5.1 0 8c1.7 2.9 4.5 5 8 5s6.3-2.1 8-5c-1.7-2.9-4.5-5-8-5zm0 8.3A3.3 3.3 0 118 4.7a3.3 3.3 0 010 6.6zM8 6a2 2 0 100 4 2 2 0 000-4z"/></svg>
+                Watch on GitHub
+            </a>
+            <a href="https://github.com/tpatrouillat/tokease/releases.atom" class="btn btn-ghost" rel="noopener">Releases RSS</a>
+        </div>
+        <p class="notify-note">On GitHub, choose <strong style="color:var(--text-dim)">Watch → Custom → Releases</strong> to get only what matters.</p>
     </div>
 </section>
 

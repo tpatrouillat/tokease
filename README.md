@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/logo-256-demo.png" alt="Tokease" width="200" height="200">
   <h1>Tokease</h1>
-  <p>A lightweight macOS menu bar app showing your Claude Code rate limits in real time<br/><strong>The only Claude Code limit tracker that never reads your token</strong></p>
+  <p>A lightweight macOS menu bar app showing your Claude Code rate limits in real time<br/><strong>The Claude Code limit tracker that never touches your token or Keychain — it reads only what Claude Code already publishes</strong></p>
   <p>
     <a href="https://github.com/tpatrouillat/tokease/actions/workflows/ci.yml"><img src="https://github.com/tpatrouillat/tokease/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
@@ -10,9 +10,7 @@
   </p>
 </div>
 
-![Tokease screenshot](docs/screenshot.png)
-
-<sub><em>Screenshot from an earlier build — an updated 2-ring capture is on the way.</em></sub>
+![Tokease menu bar dropdown showing the Claude Code 5-hour and weekly limits with reset times](docs/screenshot.png)
 
 ## Why Tokease
 
