@@ -145,6 +145,12 @@ class TestSafeInt(unittest.TestCase):
     def test_large_value(self):
         self.assertEqual(tracker._safe_int(999999), 999999)
 
+    def test_overflow_value_returns_default(self):
+        # Feed hostile : un nombre débordant (1e400 → inf) ne doit pas crasher
+        # le refresh (int(inf) lève OverflowError). Cf. durcissement _safe_int.
+        self.assertEqual(tracker._safe_int("1e400"), 0)
+        self.assertEqual(tracker._safe_int(float("inf")), 0)
+
 
 # ---------------------------------------------------------------------------
 # Tests: fmt_reset

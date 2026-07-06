@@ -13,6 +13,7 @@
 #
 set -euo pipefail
 
+SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/com.tpatrouillat.tokease.plist"
 TOKEASE_DIR="$HOME/.tokease"
 SETTINGS="$HOME/.claude/settings.json"
@@ -27,7 +28,9 @@ if [ -f "$LAUNCH_AGENT_PLIST" ]; then
   rm -f "$LAUNCH_AGENT_PLIST"
   echo "✓ LaunchAgent retiré"
 fi
-pkill -f "tracker.py" 2>/dev/null || true
+# Scopé au tracker.py de CE dossier (= le chemin lancé par le LaunchAgent),
+# pour ne pas tuer un tracker.py sans rapport tournant ailleurs.
+pkill -f "$SELF_DIR/tracker.py" 2>/dev/null || true
 
 # 2. Bloc statusLine dans settings.json — uniquement si c'est le nôtre
 if [ -f "$SETTINGS" ] && grep -q "$STATUSLINE_MARK" "$SETTINGS" 2>/dev/null; then

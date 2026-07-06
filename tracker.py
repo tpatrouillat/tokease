@@ -254,7 +254,9 @@ def _safe_int(val, default=0):
     """Convert an API value to a clamped non-negative int, never crash."""
     try:
         return max(0, int(float(val))) if val is not None else default
-    except (ValueError, TypeError):
+    except (ValueError, TypeError, OverflowError):
+        # OverflowError : un feed hostile peut renvoyer un nombre débordant
+        # (ex. 1e400 → inf), int(inf) lèverait sinon hors du try du refresh.
         return default
 
 
