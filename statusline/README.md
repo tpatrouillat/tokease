@@ -21,8 +21,13 @@ for the why.
    backup, and never overwriting an existing statusline. Answer `n` to just
    print the snippet and do step 2 yourself.)
 
-2. If you answered `n` (or have no `jq`), add this to `~/.claude/settings.json`
-   manually:
+   (If `~/.claude/settings.json` doesn't exist yet, the installer creates it
+   with the block below automatically — even without `jq`. The manual step 2 is
+   only needed if you answered `n`, or if the file already exists and `jq`
+   isn't installed — in that case the installer won't touch it, to avoid
+   corrupting your existing JSON.)
+
+2. If that applies to you, add this to `~/.claude/settings.json` manually:
 
    ```json
    {

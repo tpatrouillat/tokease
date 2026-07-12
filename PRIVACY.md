@@ -22,10 +22,14 @@ doesn't touch.
 
 - App preferences (display mode, refresh interval, alert toggle) in the standard
   macOS `NSUserDefaults` for the app.
-- The captured usage windows in `~/.tokease/usage.json`, and a best-effort error
-  log in `~/.tokease/statusline.err`.
+- The captured usage windows in `~/.tokease/usage.json`, a best-effort error
+  log in `~/.tokease/statusline.err`, and the rendered menu bar icon in
+  `~/.tokease/tokease-icon.png`.
 
-To remove everything, run `uninstall.sh` (or `brew uninstall tokease`), which
-deletes `~/.tokease/` and the statusline wiring.
+To remove the app's files, run `uninstall.sh` (or `brew uninstall tokease`),
+which deletes `~/.tokease/`, the LaunchAgent, and the statusline wiring. The
+`NSUserDefaults` preferences (display mode, refresh interval, alert toggle) are
+left in place by macOS convention; clear them with
+`defaults delete com.tpatrouillat.tokease` if you want a fully clean slate.
 
 Not affiliated with Anthropic.

@@ -51,7 +51,7 @@ avalée silencieusement côté script **mais** rien n'est écrit si le JSON est 
 
 ## Consommateur — `tracker.py`
 
-`get_usage()` lit le fichier `~/.tokease/usage.json` (source unique, statusline) et
+`fetch_usage()` lit le fichier `~/.tokease/usage.json` (source unique, statusline) et
 normalise vers la forme interne attendue par `_update_display`
 (`{"five_hour": {"utilization": …, "resets_at": ISO}, …}`, `used_percentage`→`utilization`,
 epoch→ISO), en ajoutant `_meta`. Il n'y a plus d'aiguillage de source : le mode endpoint

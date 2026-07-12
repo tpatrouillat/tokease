@@ -17,12 +17,14 @@ assignees: ''
 - Tokease version:
 
 **`~/.tokease/usage.json`** (anonymise if needed)
+
 ```json
 
 ```
 
 **`~/.tokease/statusline.err`** (last few lines, if it exists)
-```
+
+```text
 
 ```
 
