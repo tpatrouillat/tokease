@@ -19,7 +19,7 @@ Tokease reads the `rate_limits` data **Claude Code itself publishes to its statu
 Three things it does:
 
 1. **Compliant by construction, not by promise.** The only data source is the `rate_limits` feed Claude Code passes to its statusline script (a documented field). No token read, no endpoint call.
-2. **Shows the limit you have left, not the history you spent.** Your 5-hour and weekly remaining capacity, with reset countdowns — amber at 80%, red at 95%.
+2. **Shows the limit you have left, not the history you spent.** Your 5-hour and weekly remaining capacity, with reset countdowns and opt-in alerts at 80% and 95%.
 3. **One file, zero telemetry, zero account.** A small single-file menu bar app, MIT-licensed. It runs entirely on your machine — no telemetry, no account, nothing to sign up for.
 
 ## Features
@@ -28,7 +28,7 @@ Three things it does:
 - **Reset countdowns** — see when each window rolls over
 - **Honest freshness** — shows when Claude Code last refreshed the data, and flags it *stale* when Claude Code isn't running
 - **Customizable display** — icon + percentage, icon only, or percentage only
-- **Settings menu** — launch at login, display modes, alert thresholds (amber 80% / red 95%), refresh interval
+- **Settings menu** — launch at login, display modes, alert thresholds (notify at 80% / 95%), refresh interval
 - **Lightweight** — pure Python, two small dependencies (`rumps` + `Pillow`)
 - **No telemetry** — no account, no tracking, nothing phones home
 
