@@ -103,7 +103,7 @@ def _make_usage(
             "utilization": seven_day_pct,
             "resets_at": seven_day_resets,
         },
-        "_meta": {"source": tracker.SOURCE_STATUSLINE, "captured_at": captured_at},
+        "_meta": {"captured_at": captured_at},
     }
 
 
@@ -238,7 +238,7 @@ class TestAppDisplay(unittest.TestCase):
         data = _make_usage()
         del data["five_hour"]
         app._update_display(data)
-        self.assertEqual(app.title, "0%")
+        self.assertEqual(app.title, "—")  # fenêtre absente → badge "—", pas "0%"
         self.assertEqual(app.m5h.title, tracker.FIVE_HOUR_DEFAULT)
 
     def test_missing_seven_day(self):
@@ -251,7 +251,7 @@ class TestAppDisplay(unittest.TestCase):
     def test_all_sections_missing(self):
         app = self._make_app()
         app._update_display({})
-        self.assertEqual(app.title, "0%")
+        self.assertEqual(app.title, "—")  # aucune fenêtre → badge "—", pas "0%"
         self.assertEqual(app.m5h.title, tracker.FIVE_HOUR_DEFAULT)
         self.assertEqual(app.m7d.title, tracker.WEEKLY_DEFAULT)
 
@@ -836,7 +836,6 @@ class TestStatuslineSource(unittest.TestCase):
         self.assertIsNone(err)
         self.assertEqual(data["five_hour"]["utilization"], 23.5)
         self.assertIn("seven_day", data)
-        self.assertEqual(data["_meta"]["source"], tracker.SOURCE_STATUSLINE)
         self.assertEqual(data["_meta"]["captured_at"], 1799999000)
         self.assertIsNotNone(tracker._parse_iso(data["five_hour"]["resets_at"]))
 
@@ -881,7 +880,7 @@ class TestStatuslineDisplay(unittest.TestCase):
         return {
             "five_hour": {"utilization": five, "resets_at": five_reset or future},
             "seven_day": {"utilization": week, "resets_at": future},
-            "_meta": {"source": tracker.SOURCE_STATUSLINE, "captured_at": captured_at},
+            "_meta": {"captured_at": captured_at},
         }
 
     def test_two_rings_passed_to_icon(self):

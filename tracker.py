@@ -18,7 +18,6 @@ import json
 import os
 import subprocess
 import sys
-import tempfile
 import threading
 import webbrowser
 from datetime import datetime, timezone
@@ -64,9 +63,11 @@ def _resolve_icon_path():
 
 _ICON_PATH = _resolve_icon_path()
 
-# Dynamic-icon rendering: rewritten on every refresh, lives in tempdir so it
-# never mutates the bundled assets and gets cleaned by macOS periodically.
-_DYNAMIC_ICON_PATH = Path(tempfile.gettempdir()) / "tokease-icon.png"
+# Dynamic-icon rendering: rewritten on every refresh, kept inside ~/.tokease so
+# every write stays confined to the app's own dir (privacy invariant) and never
+# mutates the bundled assets.
+_TOKEASE_DIR = Path.home() / ".tokease"
+_DYNAMIC_ICON_PATH = _TOKEASE_DIR / "tokease-icon.png"
 
 # Icon geometry — must stay consistent with assets/build-menubar-icon.py so
 # the dynamic and fallback static icons have the same visual footprint.
@@ -109,6 +110,7 @@ def _render_dynamic_icon(session_pct, weekly_pct):
                      fill=(0, 0, 0, 255), width=stroke)
 
     img = img.resize((_ICON_SIZE_FINAL, _ICON_SIZE_FINAL), Image.LANCZOS)
+    _TOKEASE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
     img.save(_DYNAMIC_ICON_PATH)
     return _DYNAMIC_ICON_PATH
 
@@ -137,12 +139,9 @@ _KEY_DISPLAY_MODE = "display_mode"
 _KEY_ALERTS = "alerts_enabled"
 _KEY_INTERVAL = "interval_secs"
 
-# Tag de la donnée dans _meta — source unique désormais.
-SOURCE_STATUSLINE = "statusline"
-
 # File written by the Claude Code statusline capture script
 # (statusline/tokease-statusline.py). Read on every refresh in statusline mode.
-_STATUSLINE_FILE = Path.home() / ".tokease" / "usage.json"
+_STATUSLINE_FILE = _TOKEASE_DIR / "usage.json"
 
 # Captured statusline data older than this (seconds) is shown as stale —
 # the signal that Claude Code isn't running to refresh it.
@@ -310,7 +309,7 @@ def fetch_usage():
             }
     if not data:
         return None, "waiting"
-    data["_meta"] = {"source": SOURCE_STATUSLINE, "captured_at": payload.get("captured_at")}
+    data["_meta"] = {"captured_at": payload.get("captured_at")}
     return data, None
 
 
@@ -671,7 +670,7 @@ class App(rumps.App):
     def _update_display(self, data):
         now = datetime.now(timezone.utc)
         meta = data.get("_meta", {})
-        session_pct = weekly_pct = 0
+        session_pct = weekly_pct = None  # None = fenêtre absente → badge/anneau "—", pas "0%"
 
         # Session 5h (pilote aussi le titre menu bar et les alertes de seuil)
         if h := data.get("five_hour"):
