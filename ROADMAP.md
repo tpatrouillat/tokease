@@ -30,6 +30,7 @@ Pick **one** of the following based on what the comments actually ask for. Not b
 1. **iPhone companion app (native Swift)** — read-only view backed by a small local sync helper on the Mac. Nothing sensitive leaves the Mac; the phone pulls the same `usage.json` from a local HTTP server on the LAN. Estimated 4–6 weeks.
 2. **Second-tool support (most likely: Cursor or Lovable)** — only if that tool's vendor exposes a stable, authorized way to read remaining limits, or the community surfaces one with a known cadence. Estimated 1–2 weeks per tool.
 3. **Per-window context tracker** — parses `~/.claude/projects/*.jsonl` to surface "this conversation has used X/200K context." Estimated 2–3 weeks; fragile by design.
+4. **Opt-in drift estimator (Desktop/Cowork gap)** — between two official captures, estimate quota drift by counting tokens in the local `~/.claude/projects/*.jsonl` session logs (written by *every* surface, Desktop and Cowork included) and show "~71% *(estimated)*" until the next exact capture. Still 100% local, zero network, zero token read — but it widens the read surface beyond `~/.tokease`, so it ships **opt-in, off by default**, behind a dedicated privacy note and ADR. Estimated 1–2 weeks. Front-runner if launch comments ask "why don't the rings refresh from Desktop?"
 
 ### Trigger: 200–500 stars in the first week
 

@@ -39,7 +39,7 @@ Three things it does:
 - **Claude Code ≥ 2.1.x** installed and logged in — Tokease reads its statusline `rate_limits` feed
 - **Claude Pro or Max** subscription — `rate_limits` only appears for these plans. Claude **Free** doesn't expose it; **Team/Enterprise** use credit-based billing, so the rings don't map and it isn't supported.
 
-> **Note on Desktop & Cowork.** The statusline is a feature of the **Claude Code CLI only** — Claude Desktop and Cowork can't feed Tokease. But rate limits are tracked at the **account level**, so running the CLI now and then also reflects what you consumed in Desktop/Cowork. Tokease targets CLI users.
+> **Note on Desktop, Cowork & VS Code.** Your quota is account-level, so everything you consume there **is counted** in the percentages — but only an interactive CLI session can *refresh* them. Details in [A note on freshness](#a-note-on-freshness).
 
 ## How It Works
 
@@ -97,7 +97,21 @@ After installing the app, wire up the statusline capture script — see [`status
 
 ## A note on freshness
 
-The `rate_limits` feed only updates **while Claude Code is running** — its statusline ticks on activity. When Claude Code is closed, Tokease shows the last known values and flags them *stale*; it also detects reset windows that have already rolled over, so an old percentage is never shown as if it were fresh. This is an honest limitation of reading a statusline feed rather than calling an endpoint.
+Two facts define what the rings can and can't do:
+
+1. **The numbers are account-level.** The 5-hour and weekly percentages cover everything on your subscription — claude.ai chat, Claude Desktop (Cowork included), the VS Code extension, and the CLI. The ring is never wrong about how much quota you've used.
+2. **Only the interactive CLI refreshes them.** The statusline is a feature of the Claude Code CLI running in a terminal. Claude Desktop, headless `claude -p`, and the VS Code extension panel never execute it — and Claude Code exposes `rate_limits` nowhere else (not in hooks, not in telemetry, not on disk).
+
+So if you mostly work in Desktop or Cowork, Tokease shows the *last captured* value, visibly flagged **stale** — it also detects reset windows that have already rolled over, so an old percentage is never shown as if it were fresh. To refresh: send one message from any `claude` terminal session.
+
+> **Tip:** the VS Code *integrated terminal* running `claude` counts as an interactive CLI session — keep a tab open there and the rings stay fresh without leaving your editor.
+
+Upstream feature requests that would close this gap (Tokease benefits automatically if any of them ships):
+- [anthropics/claude-code#38380](https://github.com/anthropics/claude-code/issues/38380) — expose usage/rate-limit data via a CLI flag or hook event
+- [anthropics/claude-code#55643](https://github.com/anthropics/claude-code/issues/55643) — statusline support in the VS Code extension
+- [anthropics/claude-code#33257](https://github.com/anthropics/claude-code/issues/33257) — native usage indicator
+
+A local, opt-in **drift estimator** (estimate usage between captures from the local session logs all surfaces write) is a v1.1 candidate — see [ROADMAP.md](ROADMAP.md).
 
 ## Security
 
