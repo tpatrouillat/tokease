@@ -797,9 +797,16 @@ class TestStatuslineSource(unittest.TestCase):
         self._file = Path(self._td.name) / "usage.json"
         self._patcher = patch.object(tracker, "_STATUSLINE_FILE", self._file)
         self._patcher.start()
+        # Isole la source desktop : la machine de dev peut avoir le vrai fichier.
+        self._desktop = Path(self._td.name) / "plan-usage-history.json"
+        self._desktop_patcher = patch.object(
+            tracker, "_DESKTOP_HISTORY_FILE", self._desktop
+        )
+        self._desktop_patcher.start()
 
     def tearDown(self):
         self._patcher.stop()
+        self._desktop_patcher.stop()
         self._td.cleanup()
 
     def _write(self, payload):
@@ -861,6 +868,113 @@ class TestStatuslineSource(unittest.TestCase):
         data, err = tracker.fetch_usage()
         self.assertIsNone(err)
         self.assertIsNotNone(tracker._parse_iso(data["five_hour"]["resets_at"]))
+
+
+# ---------------------------------------------------------------------------
+# Tests: source secondaire app desktop + fusion (ADR 0003)
+# ---------------------------------------------------------------------------
+class TestDesktopSource(TestStatuslineSource):
+    """Réutilise l'isolation fichiers de TestStatuslineSource (les tests parents
+    re-tournent ici sur les mêmes patchs — redondance bénigne et voulue : ils
+    doivent rester verts avec la source desktop branchée mais absente)."""
+
+    def _write_desktop(self, payload):
+        self._desktop.write_text(json.dumps(payload), encoding="utf-8")
+
+    def _sample(self, t_ms, fh=None, sd=None):
+        u = {}
+        if fh is not None:
+            u["fh"] = fh
+        if sd is not None:
+            u["sd"] = sd
+        return {"t": t_ms, "org": "org-1", "u": u}
+
+    def test_desktop_only_no_statusline(self):
+        # Zéro config : app desktop présente, statusline jamais branchée.
+        self._write_desktop({"version": 2, "samples": [self._sample(1800000000000, fh=34, sd=24)]})
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(err)
+        self.assertEqual(data["five_hour"]["utilization"], 34)
+        self.assertEqual(data["seven_day"]["utilization"], 24)
+        self.assertIsNone(data["five_hour"]["resets_at"])
+        self.assertEqual(data["_meta"]["captured_at"], 1800000000.0)
+        self.assertEqual(data["_meta"]["source"], "desktop")
+
+    def test_last_valid_sample_wins_skipping_malformed(self):
+        self._write_desktop({"version": 2, "samples": [
+            self._sample(1000_000, fh=10),
+            self._sample(2000_000, fh=20),
+            {"t": "corrompu", "u": {"fh": 99}},
+            {"pas": "un sample"},
+        ]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 20)
+
+    def test_unknown_version_is_ignored(self):
+        self._write_desktop({"version": 3, "samples": [self._sample(1, fh=50)]})
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(data)
+        self.assertEqual(err, "nostatusline")  # comportement inchangé sans desktop
+
+    def test_invalid_desktop_file_is_ignored(self):
+        self._desktop.write_text("pas du json{{{", encoding="utf-8")
+        _, err = tracker.fetch_usage()
+        self.assertEqual(err, "nostatusline")
+
+    def test_samples_not_a_list_is_ignored(self):
+        self._write_desktop({"version": 2, "samples": {"fh": 12}})
+        _, err = tracker.fetch_usage()
+        self.assertEqual(err, "nostatusline")
+
+    def test_merge_fresher_desktop_keeps_future_reset(self):
+        future = "2099-01-01T00:00:00+00:00"
+        self._write({
+            "captured_at": 1000,
+            "five_hour": {"used_percentage": 10, "resets_at": future},
+        })
+        self._write_desktop({"version": 2, "samples": [self._sample(2000_000, fh=42, sd=7)]})
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(err)
+        self.assertEqual(data["five_hour"]["utilization"], 42)
+        self.assertEqual(data["five_hour"]["resets_at"], future)  # reset statusline conservé
+        self.assertEqual(data["seven_day"]["utilization"], 7)
+        self.assertEqual(data["_meta"]["source"], "desktop")
+
+    def test_merge_fresher_desktop_drops_past_reset(self):
+        # Un resets_at déjà passé ne doit pas masquer le % frais du desktop.
+        self._write({
+            "captured_at": 1000,
+            "five_hour": {"used_percentage": 10, "resets_at": 2000},  # epoch 1970 → passé
+        })
+        self._write_desktop({"version": 2, "samples": [self._sample(2000_000, fh=42)]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 42)
+        self.assertIsNone(data["five_hour"]["resets_at"])
+
+    def test_merge_fresher_statusline_wins(self):
+        self._write({
+            "captured_at": 3000,
+            "five_hour": {"used_percentage": 10, "resets_at": None},
+        })
+        self._write_desktop({"version": 2, "samples": [self._sample(2000_000, fh=42)]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 10)
+        self.assertEqual(data["_meta"]["source"], "statusline")
+
+    def test_merge_window_missing_from_desktop_kept_from_statusline(self):
+        self._write({
+            "captured_at": 1000,
+            "seven_day": {"used_percentage": 55, "resets_at": None},
+        })
+        self._write_desktop({"version": 2, "samples": [self._sample(2000_000, fh=42)]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 42)
+        self.assertEqual(data["seven_day"]["utilization"], 55)
+
+    def test_freshness_label_names_desktop_source(self):
+        now = datetime.now(timezone.utc)
+        self.assertIn("Claude app", tracker.App._freshness_label(now.timestamp(), now, "desktop"))
+        self.assertIn("Claude Code", tracker.App._freshness_label(now.timestamp(), now, "statusline"))
 
 
 # ---------------------------------------------------------------------------
@@ -930,9 +1044,9 @@ class TestStatuslineErrorStates(unittest.TestCase):
         app = self._make_app()
         app._apply_usage(None, "nostatusline")
         self.assertEqual(app.title, "⚙")
-        # Onboarding pas-à-pas : install → settings.json → message.
-        self.assertIn("install-statusline.sh", app.m5h.title)
-        self.assertIn("settings.json", app.m7d.title)
+        # Onboarding : chemin zéro-config (app desktop) d'abord, statusline ensuite.
+        self.assertIn("desktop app", app.m5h.title)
+        self.assertIn("install-statusline.sh", app.m7d.title)
         self.assertIn("Claude Code", app.mupd.title)
 
     def test_waiting_state(self):

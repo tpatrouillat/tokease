@@ -36,20 +36,17 @@ Three things it does:
 
 - **macOS** (menu bar app using `rumps`)
 - **Python 3.10+**
-- **Claude Code ≥ 2.1.x** installed and logged in — Tokease reads its statusline `rate_limits` feed
-- **Claude Pro or Max** subscription — `rate_limits` only appears for these plans. Claude **Free** doesn't expose it; **Team/Enterprise** use credit-based billing, so the rings don't map and it isn't supported.
-
-> **Note on Desktop, Cowork & VS Code.** Your quota is account-level, so everything you consume there **is counted** in the percentages — but only an interactive CLI session can *refresh* them. Details in [A note on freshness](#a-note-on-freshness).
+- **Claude Desktop** running (zero-config source), and/or **Claude Code ≥ 2.1.x** with the statusline wired up (adds reset countdowns)
+- **Claude Pro or Max** subscription — the quota feeds only exist for these plans. Claude **Free** doesn't expose them; **Team/Enterprise** use credit-based billing, so the rings don't map and it isn't supported.
 
 ## How It Works
 
-The only data source is the Claude Code statusline:
+Tokease merges two local, read-only sources — whichever is fresher wins:
 
-1. A small capture script ([`statusline/tokease-statusline.py`](statusline/tokease-statusline.py)) runs as your Claude Code statusline command.
-2. Claude Code passes it `rate_limits.five_hour` / `.seven_day` on stdin; the script writes them to `~/.tokease/usage.json`.
-3. The menu bar reads that file and shows the two rings + reset countdowns.
+1. **Claude Desktop history (zero config).** While the Claude desktop app runs, it samples your account quota every ~5 minutes into a local file (`~/Library/Application Support/Claude/plan-usage-history.json`). Tokease reads it as-is. No setup: if the desktop app is running, the rings stay fresh — whatever surface you're using (VS Code extension, claude.ai, Cowork, CLI). See [ADR 0003](docs/adr/0003-source-secondaire-plan-usage-desktop.md).
+2. **Claude Code statusline (adds reset countdowns).** A small capture script ([`statusline/tokease-statusline.py`](statusline/tokease-statusline.py)) runs as your Claude Code statusline command; Claude Code passes it `rate_limits.five_hour` / `.seven_day` on stdin and the script writes them to `~/.tokease/usage.json`. This is the only feed carrying the *reset times* shown next to each ring.
 
-Because the data is handed over *by Claude Code*, Tokease stays within the authorized "use with Claude Code" scope: no token read, no endpoint call. Setup details: [`statusline/README.md`](statusline/README.md).
+In both cases the data is written locally *by an official Claude client* for its own use — Tokease never reads your token and never calls any endpoint. Statusline setup: [`statusline/README.md`](statusline/README.md).
 
 > The legacy endpoint mode (which read the OAuth token) is frozen at the git tag `v0.9.0-endpoint`; v1.0 never reads the token.
 
@@ -97,16 +94,17 @@ After installing the app, wire up the statusline capture script — see [`status
 
 ## A note on freshness
 
-Two facts define what the rings can and can't do:
+The percentages are **account-level**: they cover everything on your subscription — claude.ai chat, Claude Desktop (Cowork included), the VS Code extension, and the CLI. The ring is never wrong about how much quota you've used; the only question is how fresh the last reading is.
 
-1. **The numbers are account-level.** The 5-hour and weekly percentages cover everything on your subscription — claude.ai chat, Claude Desktop (Cowork included), the VS Code extension, and the CLI. The ring is never wrong about how much quota you've used.
-2. **Only the interactive CLI refreshes them.** The statusline is a feature of the Claude Code CLI running in a terminal. Claude Desktop, headless `claude -p`, and the VS Code extension panel never execute it — and Claude Code exposes `rate_limits` nowhere else (not in hooks, not in telemetry, not on disk).
+- **Claude Desktop running** → readings every ~5 minutes, whatever surface you work in. This is the recommended setup: just keep the desktop app open (it lives in your menu bar anyway).
+- **Only the statusline wired** → readings refresh while an interactive `claude` terminal session is active (the CLI, or the VS Code *integrated terminal*). The VS Code extension panel, Claude Desktop and headless `claude -p` never execute statuslines ([#55643](https://github.com/anthropics/claude-code/issues/55643), closed "not planned") — with the statusline as sole source, the rings go stale between CLI sessions.
+- **Both** (best): desktop history keeps the rings fresh; statusline captures add the reset countdowns whenever you use the CLI.
 
-So if you mostly work in Desktop or Cowork, Tokease shows the *last captured* value, visibly flagged **stale** — it also detects reset windows that have already rolled over, so an old percentage is never shown as if it were fresh. To refresh: send one message from any `claude` terminal session.
+Stale data is always visibly flagged, and reset windows that have already rolled over are detected — an old percentage is never shown as if it were fresh.
 
-> **Tip:** the VS Code *integrated terminal* running `claude` counts as an interactive CLI session — keep a tab open there and the rings stay fresh without leaving your editor.
+One caveat on the desktop history file: its format is internal to the Claude app and undocumented, so a future update could change it. Tokease parses it defensively (any anomaly → falls back to the statusline feed) and pins its expectations to the observed `version: 2`.
 
-Upstream feature requests that would close this gap (Tokease benefits automatically if any of them ships):
+Upstream feature requests that would make this cleaner (Tokease benefits automatically if any of them ships):
 - [anthropics/claude-code#38380](https://github.com/anthropics/claude-code/issues/38380) — expose usage/rate-limit data via a CLI flag or hook event
 - [anthropics/claude-code#55643](https://github.com/anthropics/claude-code/issues/55643) — statusline support in the VS Code extension
 - [anthropics/claude-code#33257](https://github.com/anthropics/claude-code/issues/33257) — native usage indicator
@@ -115,8 +113,8 @@ A local, opt-in **drift estimator** (estimate usage between captures from the lo
 
 ## Security
 
-- **Reads no token, ever.** Tokease only reads `~/.tokease/usage.json`, written by the Claude Code statusline. It never touches the Keychain or your OAuth token.
-- **No API calls of its own.** The only network call involved is the one Claude Code already makes — Tokease just reads the result Claude Code wrote locally.
+- **Reads no token, ever.** Tokease only reads two local files: `~/.tokease/usage.json` (written by the Claude Code statusline) and the Claude desktop app's own `plan-usage-history.json` (read-only). It never touches the Keychain or your OAuth token.
+- **No API calls of its own.** The only network calls involved are the ones official Claude clients already make — Tokease just reads the results they wrote locally.
 - **No data collection** — the app runs entirely on your machine.
 - **No secrets stored** — no `.env`, no tokens, no credentials on disk.
 - **Open source** — audit the code yourself: `tracker.py` plus a small statusline script.

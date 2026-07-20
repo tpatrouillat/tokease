@@ -2,12 +2,14 @@
 """
 Tokease — macOS menu bar app.
 
-Source de données UNIQUE : le feed statusline de Claude Code
-(voir docs/adr/0001-pivot-source-statusline.md). Claude Code (>= 2.1.x)
-transmet `rate_limits.five_hour` / `.seven_day` à son script statusline.
-Un script de capture (statusline/tokease-statusline.py) écrit ces fenêtres
-dans ~/.tokease/usage.json ; cette app lit ce fichier. La donnée nous est
-fournie PAR Claude Code, donc on reste dans le cadre "usage avec Claude Code" :
+Deux sources de données locales, fusionnées par fraîcheur :
+1. le feed statusline de Claude Code (docs/adr/0001-pivot-source-statusline.md) —
+   capturé dans ~/.tokease/usage.json par statusline/tokease-statusline.py ;
+   source primaire, la seule à fournir les heures de reset ;
+2. l'historique de quota échantillonné par l'app desktop Claude
+   (docs/adr/0003-source-secondaire-plan-usage-desktop.md) — lecture seule,
+   rafraîchi ~5 min tant que l'app tourne, quelle que soit la surface utilisée.
+Dans les deux cas la donnée est écrite localement par un client officiel Claude :
 jamais de lecture du token OAuth, jamais d'appel à l'endpoint Anthropic.
 
 Conséquence : seules les fenêtres 5h et hebdo sont disponibles (2 anneaux).
@@ -144,6 +146,12 @@ _KEY_INTERVAL = "interval_secs"
 # (statusline/tokease-statusline.py). Read on every refresh in statusline mode.
 _STATUSLINE_FILE = _TOKEASE_DIR / "usage.json"
 
+# Historique de quota échantillonné (~5 min) par l'app desktop Claude — source
+# secondaire lecture seule, format interne non documenté (cf. ADR 0003).
+_DESKTOP_HISTORY_FILE = (
+    Path.home() / "Library" / "Application Support" / "Claude" / "plan-usage-history.json"
+)
+
 # Captured statusline data older than this (seconds) is shown as stale —
 # the signal that Claude Code isn't running to refresh it.
 _STALE_AFTER_SECS = 15 * 60
@@ -276,10 +284,10 @@ def _epoch_to_iso(value):
         return None
 
 # ---------------------------------------------------------------------------
-# Data fetching — lecture pure du fichier statusline (source unique)
+# Data fetching — statusline (primaire) + app desktop Claude (secondaire)
 # ---------------------------------------------------------------------------
 
-def fetch_usage():
+def _read_statusline_usage():
     """Lit l'usage capturé par le script statusline de Claude Code.
 
     Normalise vers la forme attendue par _update_display (used_percentage→
@@ -310,8 +318,99 @@ def fetch_usage():
             }
     if not data:
         return None, "waiting"
-    data["_meta"] = {"captured_at": payload.get("captured_at")}
+    data["_meta"] = {"captured_at": payload.get("captured_at"), "source": "statusline"}
     return data, None
+
+
+def _desktop_sample_to_data(sample):
+    """Normalise un échantillon desktop {t: epoch ms, u: {fh, sd}} ; None si malformé."""
+    if not isinstance(sample, dict):
+        return None
+    t, u = sample.get("t"), sample.get("u")
+    if not isinstance(t, (int, float)) or not isinstance(u, dict):
+        return None
+    data = {}
+    for src, dst in (("fh", "five_hour"), ("sd", "seven_day")):
+        if isinstance(u.get(src), (int, float)):
+            data[dst] = {"utilization": u[src], "resets_at": None}
+    if not data:
+        return None
+    data["_meta"] = {"captured_at": t / 1000.0, "source": "desktop"}
+    return data
+
+
+def _read_desktop_usage():
+    """Lit le dernier échantillon de quota écrit par l'app desktop Claude.
+
+    Format interne non documenté (ADR 0003) → parsing ultra-défensif : toute
+    anomalie (fichier absent, version inconnue, échantillon malformé) rend None
+    et on retombe sur la statusline. Ce feed n'a pas de resets_at.
+    """
+    try:
+        payload = json.loads(_DESKTOP_HISTORY_FILE.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(payload, dict) or payload.get("version") != 2:
+        return None
+    samples = payload.get("samples")
+    if not isinstance(samples, list):
+        return None
+    for sample in reversed(samples):  # les échantillons sont chronologiques
+        data = _desktop_sample_to_data(sample)
+        if data is not None:
+            return data
+    return None
+
+
+def _captured_at(data):
+    """Epoch de capture d'une source normalisée ; 0.0 si absent/invalide."""
+    try:
+        return float(data.get("_meta", {}).get("captured_at") or 0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _merge_usage(statusline, desktop):
+    """Fusionne les deux sources : les % de la plus fraîche gagnent.
+
+    Quand le desktop est plus récent, on conserve quand même le resets_at de la
+    statusline s'il est encore dans le futur (le feed desktop ne fournit pas les
+    heures de reset) ; un resets_at déjà passé est abandonné pour que le % frais
+    s'affiche au lieu de « awaiting Claude Code ».
+    """
+    if _captured_at(desktop) <= _captured_at(statusline):
+        return statusline
+    merged = {"_meta": desktop["_meta"]}
+    now = datetime.now(timezone.utc)
+    for key in ("five_hour", "seven_day"):
+        win = desktop.get(key)
+        if win is None:  # fenêtre absente du feed desktop → on garde la statusline
+            if statusline.get(key):
+                merged[key] = statusline[key]
+            continue
+        win = dict(win)
+        reset = (statusline.get(key) or {}).get("resets_at")
+        dt = _parse_iso(reset)
+        if dt is not None and dt > now:
+            win["resets_at"] = reset
+        merged[key] = win
+    return merged
+
+
+def fetch_usage():
+    """Source primaire : statusline ; secondaire : app desktop (ADR 0003).
+
+    Le desktop comble les trous de la statusline (extension VS Code, Claude.ai…)
+    et supprime toute config obligatoire : app desktop lancée = données
+    affichées, même sans statusline branchée.
+    """
+    statusline, err = _read_statusline_usage()
+    desktop = _read_desktop_usage()
+    if desktop is None:
+        return statusline, err
+    if statusline is None:
+        return desktop, None
+    return _merge_usage(statusline, desktop), None
 
 
 # ---------------------------------------------------------------------------
@@ -601,11 +700,12 @@ class App(rumps.App):
             self.icon = None
 
         if err == "nostatusline":
-            # Fichier de capture absent → statusline pas encore branchée. On guide pas-à-pas.
+            # Aucune source dispo (ni desktop, ni statusline). Le chemin zéro-config
+            # d'abord, le câblage statusline ensuite.
             self.title = "⚙"
-            self.m5h.title = "1. lance statusline/install-statusline.sh"
-            self.m7d.title = "2. ajoute le bloc à ~/.claude/settings.json"
-            self.mupd.title = "3. envoie un message dans Claude Code"
+            self.m5h.title = "Easiest: open the Claude desktop app (auto-detected)"
+            self.m7d.title = "Or wire the CLI: run statusline/install-statusline.sh"
+            self.mupd.title = "then send a message in a Claude Code terminal"
             return
 
         if err == "waiting":
@@ -654,8 +754,8 @@ class App(rumps.App):
         return f"{label}: {pct}% (resets {fmt_reset(section.get('resets_at'))})", pct
 
     @staticmethod
-    def _freshness_label(captured_at, now):
-        """'Updated' line for statusline mode, flagging stale (Claude Code idle) data."""
+    def _freshness_label(captured_at, now, source=None):
+        """'Updated' line, flagging stale data (no Claude client refreshing it)."""
         if not captured_at:
             return UPDATED_DEFAULT
         try:
@@ -664,9 +764,10 @@ class App(rumps.App):
         except (TypeError, ValueError, OverflowError, OSError):
             return UPDATED_DEFAULT
         age = (now - cap).total_seconds()
+        via = "Claude app" if source == "desktop" else "Claude Code"
         if age > _STALE_AFTER_SECS:
-            return f"⚠ {local} · stale {int(age // 60)}m (Claude Code idle?)"
-        return f"Updated: {local} (via Claude Code)"
+            return f"⚠ {local} · stale {int(age // 60)}m ({via} idle?)"
+        return f"Updated: {local} (via {via})"
 
     def _update_display(self, data):
         now = datetime.now(timezone.utc)
@@ -687,7 +788,9 @@ class App(rumps.App):
         else:
             self.m7d.title = WEEKLY_DEFAULT
 
-        self.mupd.title = self._freshness_label(meta.get("captured_at"), now)
+        self.mupd.title = self._freshness_label(
+            meta.get("captured_at"), now, meta.get("source")
+        )
 
         # % déjà clampé 0..100 dans _window_row (cf. bug #52326).
         icon_path = _render_dynamic_icon(session_pct, weekly_pct)
