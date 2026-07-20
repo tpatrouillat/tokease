@@ -36,8 +36,8 @@ _SCHEMA = 1
 
 
 def _ensure_dir():
-    """Crée ~/.tokease en 0700 — l'usage est une donnée privée, pas lisible par
-    les autres comptes locaux (chmod resserre même si le dossier préexistait)."""
+    """Create ~/.tokease with mode 0700 — usage is private data, not readable
+    by other local accounts (chmod tightens it even if the dir pre-existed)."""
     _DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
     try:
         _DIR.chmod(0o700)
@@ -88,7 +88,7 @@ def main():
     raw = sys.stdin.read()
     try:
         data = json.loads(raw) if raw.strip() else {}
-    except ValueError as exc:  # JSONDecodeError dérive de ValueError
+    except ValueError as exc:  # JSONDecodeError derives from ValueError
         _log_error(f"stdin not JSON: {exc!r}")
         return  # don't overwrite a good file with garbage
 
@@ -117,7 +117,7 @@ def main():
         win = payload.get(key)
         if not win:
             continue
-        try:  # un % non numérique ne doit pas faire disparaître toute la sortie
+        try:  # a non-numeric % must not wipe out the whole output
             bits.append(f"{lbl} {int(float(win['used_percentage']))}%")
         except (KeyError, TypeError, ValueError):
             pass

@@ -1,39 +1,39 @@
-# Spec — Source de données « statusline »
+# Spec — "statusline" data source
 
-Réf. : [ADR 0001](../adr/0001-pivot-source-statusline.md) et
-[ADR 0002](../adr/0002-retrait-mode-endpoint.md). Décrit le contrat entre le script de
-statusline (producteur) et l'app menu bar (consommateur).
+Ref: [ADR 0001](../adr/0001-pivot-source-statusline.md) and
+[ADR 0002](../adr/0002-retrait-mode-endpoint.md). Describes the contract
+between the statusline script (producer) and the menu bar app (consumer).
 
-> Depuis l'[ADR 0002](../adr/0002-retrait-mode-endpoint.md), la statusline est la
-> **seule** source de données : le mode endpoint est retiré de v1.0 (figé au tag
-> `v0.9.0-endpoint`). Tokease ne lit donc jamais le token.
+> Since [ADR 0002](../adr/0002-retrait-mode-endpoint.md), the statusline is the
+> **only** data source: the endpoint mode is removed from v1.0 (frozen at the
+> tag `v0.9.0-endpoint`). Tokease therefore never reads the token.
 
-## Vue d'ensemble
+## Overview
 
 ```
-Claude Code  ──(JSON stdin à chaque tick)──▶  tokease-statusline.py  ──(écriture atomique)──▶  ~/.tokease/usage.json
+Claude Code  ──(JSON stdin on every tick)──▶  tokease-statusline.py  ──(atomic write)──▶  ~/.tokease/usage.json
                                                                                                       │
-                                                                              tracker.py (toutes les N s) ──┘  lit, affiche
+                                                                              tracker.py (every N s) ──┘  reads, displays
 ```
 
-## Producteur — `statusline/tokease-statusline.py`
+## Producer — `statusline/tokease-statusline.py`
 
-Invoqué par Claude Code comme commande de statusline. À chaque exécution :
+Invoked by Claude Code as the statusline command. On every run it:
 
-1. lit le JSON sur stdin (`{ ..., "rate_limits": { "five_hour": {...}, "seven_day": {...} } }`) ;
-2. extrait les fenêtres présentes (chacune peut être absente — cf. doc Claude Code :
-   `rate_limits` n'apparaît qu'**après le 1er échange** de la session, abonnés Pro/Max) ;
-3. écrit `~/.tokease/usage.json` de façon **atomique** (écriture dans un fichier temp
-   du même dossier puis `os.replace`) pour que le lecteur ne voie jamais un fichier
-   partiel ;
-4. imprime une ligne de statusline minimale (ou rien) — l'affichage statusline n'est
-   pas le but, la capture l'est.
+1. reads the JSON on stdin (`{ ..., "rate_limits": { "five_hour": {...}, "seven_day": {...} } }`)
+2. extracts the windows present (each may be absent, per the Claude Code doc:
+   `rate_limits` only appears **after the first exchange** of a session, for Pro/Max subscribers)
+3. writes `~/.tokease/usage.json` **atomically** (write to a temp file in the
+   same directory, then `os.replace`) so the reader never sees a partial file
+4. prints a minimal statusline line (or nothing). The statusline display is not
+   the goal, the capture is.
 
-Contraintes : Python 3 stdlib uniquement (pas de `jq`), ne **jamais** échouer
-bruyamment (un crash polluerait la statusline de Claude Code) — toute erreur est
-avalée silencieusement côté script **mais** rien n'est écrit si le JSON est invalide.
+Constraints: Python 3 stdlib only (no `jq`), and it must **never** fail loudly
+(a crash would pollute the Claude Code statusline). Every error is swallowed
+silently on the script side, **but** nothing is written when the JSON is
+invalid.
 
-## Format de fichier `~/.tokease/usage.json` (schema 1)
+## File format `~/.tokease/usage.json` (schema 1)
 
 ```json
 {
@@ -45,50 +45,52 @@ avalée silencieusement côté script **mais** rien n'est écrit si le JSON est 
 }
 ```
 
-- `captured_at` : epoch s au moment de l'écriture (sert au calcul de péremption).
-- chaque fenêtre est **optionnelle** ; `used_percentage` ∈ [0,100], `resets_at` epoch s.
-- pas de split sonnet/opus ni d'overage : non fournis par la statusline.
+- `captured_at`: epoch seconds at write time (used to compute staleness).
+- each window is **optional**. `used_percentage` ∈ [0,100], `resets_at` epoch s.
+- no sonnet/opus split and no overage: not provided by the statusline.
 
-## Consommateur — `tracker.py`
+## Consumer — `tracker.py`
 
-`fetch_usage()` lit le fichier `~/.tokease/usage.json` (source unique, statusline) et
-normalise vers la forme interne attendue par `_update_display`
+`fetch_usage()` reads the `~/.tokease/usage.json` file (single source,
+statusline) and normalizes it into the internal shape `_update_display`
+expects
 (`{"five_hour": {"utilization": …, "resets_at": ISO}, …}`, `used_percentage`→`utilization`,
-epoch→ISO), en ajoutant `_meta`. Il n'y a plus d'aiguillage de source : le mode endpoint
-a été retiré (cf. [ADR 0002](../adr/0002-retrait-mode-endpoint.md)).
+epoch→ISO), adding `_meta`. There is no source switching anymore: the endpoint
+mode was removed (see [ADR 0002](../adr/0002-retrait-mode-endpoint.md)).
 
-### États d'erreur
+### Error states
 
-| Code | Déclencheur | Affichage |
-|------|-------------|-----------|
-| `nostatusline` | fichier absent | titre ⚙ + guide 3 étapes dans le menu (non câblé) |
-| `waiting` | fichier présent, aucune fenêtre captée | « Waiting for Claude Code… » |
-| `error` | fichier illisible / JSON invalide | « ? » |
+| Code | Trigger | Display |
+|------|---------|---------|
+| `nostatusline` | file missing | ⚙ title + 3-step guide in the menu (not wired) |
+| `waiting` | file present, no window captured | "Waiting for Claude Code…" |
+| `error` | unreadable file / invalid JSON | "?" |
 
-### Fraîcheur & reset
+### Freshness & reset
 
-- **Péremption** : si `now − captured_at > 15 min`, marquer la donnée « périmée »
-  (ligne *Updated* préfixée ⚠) — signal que Claude Code ne tourne pas.
-- **Fenêtre réinitialisée** : si `resets_at < now`, la fenêtre a roulé depuis la
-  capture → le `used_percentage` stocké n'est plus valide. On affiche « (reset) » et
-  on ne dessine pas l'anneau comme s'il était à jour.
+- **Staleness**: if `now − captured_at > 15 min`, flag the data as stale (the
+  *Updated* line gets a ⚠ prefix). This signals that Claude Code is not
+  running.
+- **Window reset**: if `resets_at < now`, the window has rolled over since the
+  capture, so the stored `used_percentage` is no longer valid. We display
+  "(reset)" and do not draw the ring as if it were current.
 
-### Rendu
+### Rendering
 
-- **2 anneaux** (5 h externe, hebdo interne).
-- pas de split Sonnet / Opus ni d'overage : non fournis par la statusline, et le mode
-  endpoint qui les exposait a été retiré (cf. [ADR 0002](../adr/0002-retrait-mode-endpoint.md)).
+- **2 rings** (5h outer, weekly inner).
+- no Sonnet / Opus split and no overage: not provided by the statusline, and
+  the endpoint mode that exposed them was removed (see [ADR 0002](../adr/0002-retrait-mode-endpoint.md)).
 
-## Câblage côté utilisateur (friction #2)
+## User-side wiring (friction #2)
 
-Claude Code n'autorise **qu'une** commande de statusline (`settings.json` →
-`statusLine.command`). Deux cas :
+Claude Code allows only **one** statusline command (`settings.json` →
+`statusLine.command`). Two cases:
 
-1. **Pas de statusline existante** : pointer `statusLine.command` sur
-   `python3 ~/.tokease/tokease-statusline.py` (l'installeur copie le script là).
-2. **Statusline existante** : insérer le *snippet* de capture (3 lignes) au début du
-   script existant — il écrit le fichier puis laisse l'affichage d'origine intact.
-   (On ne modifie jamais `settings.json` automatiquement : risque d'écraser une
-   statusline existante.)
+1. **No existing statusline**: point `statusLine.command` at
+   `python3 ~/.tokease/tokease-statusline.py` (the installer copies the script there).
+2. **Existing statusline**: insert the capture *snippet* (3 lines) at the top
+   of the existing script. It writes the file, then leaves the original
+   display intact. (We never modify `settings.json` automatically: the risk is
+   overwriting an existing statusline.)
 
-Détails et snippet : `statusline/README.md`.
+Details and snippet: `statusline/README.md`.

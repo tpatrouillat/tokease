@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 #
-# Tokease — Désinstallation (install depuis les sources / LaunchAgent).
+# Tokease — Uninstall (source install / LaunchAgent).
 #
-# Retire tout ce que install.sh + statusline/install-statusline.sh ont créé :
-#   - le LaunchAgent (auto-start) et tout process tracker en cours
-#   - le bloc `statusLine` Tokease dans ~/.claude/settings.json (backup d'abord)
-#   - le dossier de données capturées ~/.tokease/
-# Ne touche NI à ton install Claude Code, NI à ton abonnement.
+# Removes everything install.sh + statusline/install-statusline.sh created:
+#   - the LaunchAgent (auto-start) and any running tracker process
+#   - the Tokease `statusLine` block in ~/.claude/settings.json (backup first)
+#   - the captured-data directory ~/.tokease/
+# Touches NEITHER your Claude Code install NOR your subscription.
 #
-# Installé via Homebrew à la place ? Utilise :
+# Installed via Homebrew instead? Use:
 #   brew services stop tokease && brew uninstall tokease
 #
 set -euo pipefail
@@ -19,20 +19,20 @@ TOKEASE_DIR="$HOME/.tokease"
 SETTINGS="$HOME/.claude/settings.json"
 STATUSLINE_MARK="tokease-statusline.py"
 
-echo "Tokease — désinstallation"
+echo "Tokease — uninstall"
 echo
 
-# 1. LaunchAgent + process en cours
+# 1. LaunchAgent + running process
 if [ -f "$LAUNCH_AGENT_PLIST" ]; then
   launchctl unload "$LAUNCH_AGENT_PLIST" 2>/dev/null || true
   rm -f "$LAUNCH_AGENT_PLIST"
-  echo "✓ LaunchAgent retiré"
+  echo "✓ LaunchAgent removed"
 fi
-# Scopé au tracker.py de CE dossier (= le chemin lancé par le LaunchAgent),
-# pour ne pas tuer un tracker.py sans rapport tournant ailleurs.
+# Scoped to THIS directory's tracker.py (= the path the LaunchAgent runs),
+# so we don't kill an unrelated tracker.py running elsewhere.
 pkill -f "$SELF_DIR/tracker.py" 2>/dev/null || true
 
-# 2. Bloc statusLine dans settings.json — uniquement si c'est le nôtre
+# 2. statusLine block in settings.json — only if it is ours
 if [ -f "$SETTINGS" ] && grep -q "$STATUSLINE_MARK" "$SETTINGS" 2>/dev/null; then
   if command -v jq >/dev/null 2>&1; then
     backup="$SETTINGS.bak.$(date +%Y%m%d-%H%M%S)"
@@ -40,25 +40,25 @@ if [ -f "$SETTINGS" ] && grep -q "$STATUSLINE_MARK" "$SETTINGS" 2>/dev/null; the
     tmp="$SETTINGS.tokease.tmp"
     if jq 'del(.statusLine)' "$SETTINGS" > "$tmp"; then
       mv "$tmp" "$SETTINGS"
-      echo "✓ Bloc statusLine retiré de $SETTINGS (backup : $backup)"
+      echo "✓ statusLine block removed from $SETTINGS (backup: $backup)"
     else
       rm -f "$tmp" "$backup"
-      echo "! jq a échoué — retire le bloc \"statusLine\" à la main dans $SETTINGS" >&2
+      echo "! jq failed — remove the \"statusLine\" block by hand in $SETTINGS" >&2
     fi
   else
-    echo "! 'jq' absent — retire le bloc \"statusLine\" à la main dans $SETTINGS"
+    echo "! 'jq' not found — remove the \"statusLine\" block by hand in $SETTINGS"
   fi
 elif [ -f "$SETTINGS" ]; then
-  echo "note: si tu as collé le snippet Tokease dans TON propre script statusline,"
-  echo "      retire-le là (settings.json ne pointe pas directement vers Tokease)."
+  echo "note: if you pasted the Tokease snippet into YOUR own statusline script,"
+  echo "      remove it there (settings.json does not point directly at Tokease)."
 fi
 
-# 3. Données capturées
+# 3. Captured data
 if [ -d "$TOKEASE_DIR" ]; then
   rm -rf "$TOKEASE_DIR"
-  echo "✓ $TOKEASE_DIR supprimé"
+  echo "✓ $TOKEASE_DIR deleted"
 fi
 
 echo
-echo "Désinstallation terminée."
-echo "Install depuis les sources ? Supprime aussi le dossier cloné (venv inclus)."
+echo "Uninstall complete."
+echo "Installed from source? Also delete the cloned directory (venv included)."

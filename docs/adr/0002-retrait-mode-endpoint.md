@@ -1,81 +1,86 @@
-# ADR 0002 — Retrait du mode endpoint de la build v1.0
+# ADR 0002 — Removal of the endpoint mode from the v1.0 build
 
-- **Statut** : Accepté (2026-06-16)
-- **Décideur** : Thibault
-- **Concerne** : `tracker.py` (acquisition des données), README, distribution Homebrew, positionnement
-- **Révise** : [ADR 0001](0001-pivot-source-statusline.md) (qui conservait l'endpoint en `legacy`)
+- **Status**: Accepted (2026-06-16)
+- **Decision maker**: Thibault
+- **Affects**: `tracker.py` (data acquisition), README, Homebrew distribution, positioning
+- **Revises**: [ADR 0001](0001-pivot-source-statusline.md) (which kept the endpoint as `legacy`)
 
-## Contexte
+## Context
 
-L'[ADR 0001](0001-pivot-source-statusline.md) a fait de la statusline Claude Code la
-source par défaut, **tout en conservant l'ancien mode endpoint** comme `legacy`
-(désactivé par défaut, derrière un avertissement). Ce mode legacy :
+[ADR 0001](0001-pivot-source-statusline.md) made the Claude Code statusline the
+default source, **while keeping the old endpoint mode** as `legacy` (disabled
+by default, behind a warning). That legacy mode:
 
-1. lit le token OAuth d'abonnement dans le Keychain ;
-2. appelle un endpoint Anthropic non documenté avec un User-Agent imitant Claude Code.
+1. reads the subscription OAuth token from the Keychain
+2. calls an undocumented Anthropic endpoint with a User-Agent imitating Claude Code
 
-Trois constats au moment de figer v1.0 :
+Three observations at the time of freezing v1.0:
 
-- **Risque CGU non éteint.** Tant que le code de lecture du token est présent et
-  activable, le projet *invite* l'utilisateur à risquer son compte Claude payant —
-  exactement ce que l'ADR 0001 voulait éviter. Garder l'option, même éteinte, maintient
-  le risque produit et juridique.
-- **Le wedge se dilue.** Le positionnement de v1.0 est « le seul tracker de plafonds
-  Claude Code qui ne lit JAMAIS ton token ». Une formule comme « le token ne quitte
-  jamais ta machine » est *fausse* tant que le mode legacy existe (il lit le Keychain).
-  Un produit « token-free » qui contient quand même un lecteur de token n'est pas
-  crédible.
-- **Surface inutile.** Le mode legacy ajoute du code, des chemins d'erreur et une
-  surface de sécurité (manipulation de Bearer, blocage de redirections) pour une
-  donnée — split par modèle + overage — qui n'est pas le cœur de valeur (le plafond
-  restant), et que la statusline ne fournit de toute façon pas.
+- **The ToS risk is not gone.** As long as the token-reading code is present
+  and can be enabled, the project *invites* the user to risk their paid Claude
+  account. That is exactly what ADR 0001 wanted to avoid. Keeping the option,
+  even switched off, keeps the product and legal risk alive.
+- **The wedge gets diluted.** The v1.0 positioning is "the only Claude Code cap
+  tracker that NEVER reads your token". A claim like "the token never leaves
+  your machine" is *false* as long as the legacy mode exists (it reads the
+  Keychain). A "token-free" product that still ships a token reader is not
+  credible.
+- **Useless surface.** The legacy mode adds code, error paths, and a security
+  surface (Bearer handling, redirect blocking) for data (per-model split plus
+  overage) that is not the core value (the remaining cap is), and that the
+  statusline does not provide anyway.
 
-La donnée endpoint (split Sonnet/Opus, overage payant) reste accessible historiquement :
-la build endpoint complète est figée dans git au tag `v0.9.0-endpoint`.
+The endpoint data (Sonnet/Opus split, paid overage) remains accessible
+historically: the full endpoint build is frozen in git at the tag
+`v0.9.0-endpoint`.
 
-## Décision
+## Decision
 
-**Retirer entièrement le mode endpoint de la build v1.0.** La **seule** source de
-données est désormais la statusline Claude Code (champ documenté `rate_limits` via
+**Remove the endpoint mode entirely from the v1.0 build.** The **only** data
+source is now the Claude Code statusline (documented `rate_limits` field via
 stdin → `~/.tokease/usage.json`).
 
-- Plus de sélecteur « Data source » dans les Réglages : il n'y a qu'une source.
-- Plus de lecture du Keychain, plus d'appel d'endpoint, plus d'imitation de User-Agent
-  dans aucun chemin de code v1.0.
-- La build endpoint reste préservée et auditable au tag `v0.9.0-endpoint` ; elle n'est
-  plus distribuée ni maintenue.
-- Le positionnement assume le wedge **token-free** : « ne lit jamais ton token »,
-  conforme par construction (et non par promesse).
+- No more "Data source" selector in Settings: there is only one source.
+- No Keychain read, no endpoint call, no User-Agent imitation in any v1.0 code
+  path.
+- The endpoint build stays preserved and auditable at the tag
+  `v0.9.0-endpoint`. It is no longer shipped or maintained.
+- The positioning fully embraces the **token-free** wedge: "never reads your
+  token", compliant by construction (not by promise).
 
-## Conséquences
+## Consequences
 
-**Positives**
-- **Wedge token-free vrai et défendable** : il n'existe plus aucun chemin où Tokease lit
-  le token. La phrase « ne lit jamais ton token » devient littéralement exacte.
-- **Risque CGU éteint** pour l'utilisateur : impossible d'activer par erreur un mode
-  non autorisé.
-- **Code et surface de sécurité réduits** : plus de manipulation de Bearer ni de logique
-  anti-redirection à maintenir.
-- Message produit plus simple : une seule source, une seule histoire.
+**Positive**
+- **A true, defensible token-free wedge**: no code path exists anymore where
+  Tokease reads the token. The sentence "never reads your token" becomes
+  literally accurate.
+- **ToS risk eliminated** for the user: there is no way to enable an
+  unauthorized mode by mistake.
+- **Less code and a smaller security surface**: no Bearer handling or
+  anti-redirect logic to maintain.
+- A simpler product message: one source, one story.
 
-**Négatives / limites assumées**
-- **Perte du split par modèle et de l'overage** : la statusline ne les fournit pas →
-  UI à **2 anneaux** (5 h + hebdo), sans ligne Sonnet/Opus ni overage. Acté : ce
-  n'était pas le cœur de valeur (le plafond restant l'est).
-- **Fraîcheur** : la donnée ne se met à jour que pendant que Claude Code tourne
-  (inchangé depuis l'ADR 0001) — géré honnêtement par marquage « périmé » (stale) et
-  détection des fenêtres déjà réinitialisées.
-- **Prérequis durcis** : Claude Code ≥ 2.1.x + Pro/Max obligatoires (plus de repli
-  endpoint pour les cas non couverts).
+**Negative / accepted limits**
+- **Loss of the per-model split and the overage**: the statusline does not
+  provide them, so the UI has **2 rings** (5h + weekly), with no Sonnet/Opus
+  line and no overage. Accepted: that was not the core value (the remaining
+  cap is).
+- **Freshness**: the data only updates while Claude Code is running (unchanged
+  since ADR 0001). Handled honestly with a "stale" flag and detection of
+  windows that already reset.
+- **Stricter requirements**: Claude Code ≥ 2.1.x plus a Pro/Max plan are
+  mandatory (no endpoint fallback for uncovered cases).
 
-**Alternatives écartées**
-- *Garder le mode legacy éteint par défaut* (statu quo ADR 0001) : maintient le risque
-  CGU et casse le wedge token-free — c'est précisément ce que cet ADR corrige.
-- *Supprimer aussi l'historique git endpoint* : inutile et destructeur ; le tag
-  `v0.9.0-endpoint` documente d'où l'on vient sans risque pour les utilisateurs.
+**Rejected alternatives**
+- *Keep the legacy mode off by default* (ADR 0001 status quo): keeps the ToS
+  risk alive and breaks the token-free wedge. That is precisely what this ADR
+  fixes.
+- *Also delete the endpoint git history*: pointless and destructive. The
+  `v0.9.0-endpoint` tag documents where we come from without any risk for
+  users.
 
-## Références
+## References
 
-- [ADR 0001](0001-pivot-source-statusline.md) — pivot vers la statusline (révisé ici).
-- Tag git de préservation : `v0.9.0-endpoint`.
-- Doc officielle statusline (champs `rate_limits`) : https://code.claude.com/docs/en/statusline
+- [ADR 0001](0001-pivot-source-statusline.md): pivot to the statusline (revised here).
+- Preservation git tag: `v0.9.0-endpoint`.
+- Official statusline doc (`rate_limits` fields): https://code.claude.com/docs/en/statusline

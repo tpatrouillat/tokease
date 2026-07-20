@@ -2,18 +2,18 @@
 """
 Tokease — macOS menu bar app.
 
-Deux sources de données locales, fusionnées par fraîcheur :
-1. le feed statusline de Claude Code (docs/adr/0001-pivot-source-statusline.md) —
-   capturé dans ~/.tokease/usage.json par statusline/tokease-statusline.py ;
-   source primaire, la seule à fournir les heures de reset ;
-2. l'historique de quota échantillonné par l'app desktop Claude
-   (docs/adr/0003-source-secondaire-plan-usage-desktop.md) — lecture seule,
-   rafraîchi ~5 min tant que l'app tourne, quelle que soit la surface utilisée.
-Dans les deux cas la donnée est écrite localement par un client officiel Claude :
-jamais de lecture du token OAuth, jamais d'appel à l'endpoint Anthropic.
+Two local data sources, merged by freshness:
+1. the Claude Code statusline feed (docs/adr/0001-pivot-source-statusline.md),
+   captured into ~/.tokease/usage.json by statusline/tokease-statusline.py.
+   Primary source, the only one that provides reset times.
+2. the quota history sampled by the Claude desktop app
+   (docs/adr/0003-source-secondaire-plan-usage-desktop.md). Read-only,
+   refreshed ~5 min while the app runs, whatever surface is being used.
+In both cases the data is written locally by an official Claude client:
+never a read of the OAuth token, never a call to the Anthropic endpoint.
 
-Conséquence : seules les fenêtres 5h et hebdo sont disponibles (2 anneaux).
-Le split par modèle (Sonnet/Opus) et l'overage payant ne sont pas dans ce feed.
+Consequence: only the 5h and weekly windows are available (2 rings).
+The per-model split (Sonnet/Opus) and the paid overage are not in this feed.
 """
 
 import json
@@ -53,9 +53,10 @@ except ImportError:
     _DEFAULTS = None
 
 def _resolve_icon_path():
-    """Chemin de l'icône menu bar — depuis les sources (assets/ à côté du script)
-    OU depuis le bundle py2app gelé : py2app place DATA_FILES sous Resources/ et
-    l'expose via $RESOURCEPATH (Path(__file__) n'y pointe pas une fois gelé)."""
+    """Menu bar icon path, either from source (assets/ next to the script)
+    OR from the frozen py2app bundle: py2app puts DATA_FILES under Resources/
+    and exposes it via $RESOURCEPATH (Path(__file__) no longer points there
+    once frozen)."""
     if getattr(sys, "frozen", False):
         res = os.environ.get("RESOURCEPATH")
         if res:
@@ -76,21 +77,21 @@ _DYNAMIC_ICON_PATH = _TOKEASE_DIR / "tokease-icon.png"
 _ICON_SIZE_FINAL = 44
 _ICON_SCALE = 4
 _ICON_SIZE = _ICON_SIZE_FINAL * _ICON_SCALE
-_RING_RADII = (20, 14)         # externe (5h), interne (hebdo) — à l'échelle finale
+_RING_RADII = (20, 14)         # outer (5h), inner (weekly), at final scale
 _RING_STROKE = 3                # final-scale stroke width
 _TRACK_ALPHA = 76               # ~30% opacity (macOS secondary-track norm) — faint container, filled arc pops
 
 
 def _render_dynamic_icon(session_pct, weekly_pct):
     """
-    Dessine l'icône à 2 anneaux remplis selon l'usage courant.
+    Draw the 2-ring icon, filled according to current usage.
 
-    Anneau externe = % session 5h, anneau interne = % hebdo. Chaque arc part de
-    midi et tourne dans le sens horaire ; un anneau plein discret est tracé
-    derrière pour que 0% garde un contour visible.
+    Outer ring = 5h session %, inner ring = weekly %. Each arc starts at noon
+    and sweeps clockwise. A faint full circle is drawn behind so that 0% keeps
+    a visible outline.
 
-    Renvoie le chemin du PNG fraîchement écrit, ou None si Pillow est absent
-    (l'appelant garde alors l'icône statique existante).
+    Returns the path of the freshly written PNG, or None when Pillow is absent
+    (the caller then keeps the existing static icon).
     """
     if not _PILLOW_AVAILABLE:
         return None
@@ -102,7 +103,7 @@ def _render_dynamic_icon(session_pct, weekly_pct):
     for radius, pct in zip(_RING_RADII, (session_pct, weekly_pct)):
         r = radius * _ICON_SCALE
         bbox = (center - r, center - r, center + r, center + r)
-        # le rail est toujours dessiné : fenêtre absente/réinitialisée = anneau vide
+        # the track is always drawn: absent/reset window = empty ring
         draw.ellipse(bbox, outline=(0, 0, 0, _TRACK_ALPHA), width=stroke)
         if pct is None:
             continue
@@ -147,8 +148,8 @@ _KEY_TITLE_WEEKLY = "title_weekly"
 # (statusline/tokease-statusline.py). Read on every refresh in statusline mode.
 _STATUSLINE_FILE = _TOKEASE_DIR / "usage.json"
 
-# Historique de quota échantillonné (~5 min) par l'app desktop Claude — source
-# secondaire lecture seule, format interne non documenté (cf. ADR 0003).
+# Quota history sampled (~5 min) by the Claude desktop app. Read-only
+# secondary source, undocumented internal format (see ADR 0003).
 _DESKTOP_HISTORY_FILE = (
     Path.home() / "Library" / "Application Support" / "Claude" / "plan-usage-history.json"
 )
@@ -264,37 +265,38 @@ def _safe_int(val, default=0):
     try:
         return max(0, int(float(val))) if val is not None else default
     except (ValueError, TypeError, OverflowError):
-        # OverflowError : un feed hostile peut renvoyer un nombre débordant
-        # (ex. 1e400 → inf), int(inf) lèverait sinon hors du try du refresh.
+        # OverflowError: a hostile feed can return an overflowing number
+        # (e.g. 1e400 → inf); int(inf) would otherwise raise outside the
+        # refresh's try block.
         return default
 
 
 def _epoch_to_iso(value):
-    """Normalise `resets_at` (statusline) en string ISO que fmt_reset lit.
+    """Normalize `resets_at` (statusline) into the ISO string fmt_reset reads.
 
-    Le format varie selon la version de Claude Code (cf. anthropics/claude-code
-    #40094) : soit un epoch en secondes, soit déjà une string ISO. On tolère les
-    deux ; toute valeur ininterprétable → None (le compte à rebours affiche '--').
+    The format varies with the Claude Code version (see anthropics/claude-code
+    #40094): either an epoch in seconds, or already an ISO string. We tolerate
+    both; any uninterpretable value → None (the countdown shows '--').
     """
     try:
         return datetime.fromtimestamp(float(value), timezone.utc).isoformat()
     except (TypeError, ValueError, OverflowError, OSError):
-        # Pas un epoch numérique → peut-être déjà une string ISO valide.
+        # Not a numeric epoch → maybe already a valid ISO string.
         if isinstance(value, str) and _parse_iso(value) is not None:
             return value.strip()
         return None
 
 # ---------------------------------------------------------------------------
-# Data fetching — statusline (primaire) + app desktop Claude (secondaire)
+# Data fetching — statusline (primary) + Claude desktop app (secondary)
 # ---------------------------------------------------------------------------
 
 def _read_statusline_usage():
-    """Lit l'usage capturé par le script statusline de Claude Code.
+    """Read the usage captured by the Claude Code statusline script.
 
-    Normalise vers la forme attendue par _update_display (used_percentage→
-    utilization, epoch→ISO) et tague _meta. Codes d'erreur : 'nostatusline'
-    (fichier absent → pas encore branché), 'waiting' (fichier présent mais aucun
-    rate_limits capturé), 'error' (illisible / invalide).
+    Normalizes into the shape _update_display expects (used_percentage→
+    utilization, epoch→ISO) and tags _meta. Error codes: 'nostatusline'
+    (file missing → not wired yet), 'waiting' (file present but no
+    rate_limits captured), 'error' (unreadable / invalid).
     """
     try:
         raw = _STATUSLINE_FILE.read_text(encoding="utf-8")
@@ -324,12 +326,12 @@ def _read_statusline_usage():
 
 
 def _is_number(value):
-    """int/float strict — exclut bool (JSON true/false passerait isinstance int)."""
+    """Strict int/float — excludes bool (JSON true/false would pass isinstance int)."""
     return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _desktop_sample_to_data(sample):
-    """Normalise un échantillon desktop {t: epoch ms, u: {fh, sd}} ; None si malformé."""
+    """Normalize a desktop sample {t: epoch ms, u: {fh, sd}}; None when malformed."""
     if not isinstance(sample, dict):
         return None
     t, u = sample.get("t"), sample.get("u")
@@ -346,11 +348,11 @@ def _desktop_sample_to_data(sample):
 
 
 def _read_desktop_usage():
-    """Lit le dernier échantillon de quota écrit par l'app desktop Claude.
+    """Read the latest quota sample written by the Claude desktop app.
 
-    Format interne non documenté (ADR 0003) → parsing ultra-défensif : toute
-    anomalie (fichier absent, version inconnue, échantillon malformé) rend None
-    et on retombe sur la statusline. Ce feed n'a pas de resets_at.
+    Undocumented internal format (ADR 0003) → ultra-defensive parsing: any
+    anomaly (missing file, unknown version, malformed sample) returns None
+    and we fall back to the statusline. This feed has no resets_at.
     """
     try:
         payload = json.loads(_DESKTOP_HISTORY_FILE.read_text(encoding="utf-8"))
@@ -361,7 +363,7 @@ def _read_desktop_usage():
     samples = payload.get("samples")
     if not isinstance(samples, list):
         return None
-    for sample in reversed(samples):  # les échantillons sont chronologiques
+    for sample in reversed(samples):  # samples are in chronological order
         data = _desktop_sample_to_data(sample)
         if data is not None:
             return data
@@ -369,7 +371,7 @@ def _read_desktop_usage():
 
 
 def _captured_at(data):
-    """Epoch de capture d'une source normalisée ; 0.0 si absent/invalide."""
+    """Capture epoch of a normalized source; 0.0 when absent/invalid."""
     try:
         return float(data.get("_meta", {}).get("captured_at") or 0)
     except (TypeError, ValueError):
@@ -377,15 +379,15 @@ def _captured_at(data):
 
 
 def _merge_window(sl_win, desk_win, desk_at, sl_fresh, now):
-    """Fusionne UNE fenêtre : % desktop + resets_at statusline, honnêtement.
+    """Merge ONE window: desktop % + statusline resets_at, honestly.
 
-    - resets_at statusline conservé seulement s'il est encore dans le futur ;
-    - reset passé APRÈS l'échantillon desktop → son % décrit l'ancienne fenêtre :
-      on rend la version statusline, que _window_row affiche « — (reset;
-      awaiting Claude Code) » plutôt qu'un vieux % plausible ;
-    - fenêtre absente du feed desktop → reprise statusline seulement si sa
-      capture n'est pas périmée (sinon de la vieille donnée s'afficherait sous
-      un « Updated » tout frais).
+    - statusline resets_at kept only when it is still in the future;
+    - reset happened AFTER the desktop sample → its % describes the old window:
+      return the statusline version, which _window_row shows as "— (reset;
+      awaiting Claude Code)" rather than a plausible old %;
+    - window missing from the desktop feed → reuse the statusline one only if
+      its capture is not stale (otherwise old data would show up under a
+      perfectly fresh "Updated" line).
     """
     if desk_win is None:
         return sl_win if (sl_win and sl_fresh) else None
@@ -396,13 +398,13 @@ def _merge_window(sl_win, desk_win, desk_at, sl_fresh, now):
         if dt > now:
             win["resets_at"] = reset
         elif desk_at <= dt.timestamp():
-            return sl_win  # échantillon antérieur au reset → ancienne fenêtre
+            return sl_win  # sample predates the reset → old window
     return win
 
 
 def _merge_usage(statusline, desktop):
-    """Fusionne les deux sources : les % de la plus fraîche gagnent
-    (garde-fous d'honnêteté par fenêtre : cf. _merge_window)."""
+    """Merge the two sources: the fresher one's percentages win
+    (per-window honesty guards: see _merge_window)."""
     sl_at = _captured_at(statusline)
     desk_at = _captured_at(desktop)
     if desk_at <= sl_at:
@@ -418,11 +420,11 @@ def _merge_usage(statusline, desktop):
 
 
 def fetch_usage():
-    """Source primaire : statusline ; secondaire : app desktop (ADR 0003).
+    """Primary source: statusline. Secondary: desktop app (ADR 0003).
 
-    Le desktop comble les trous de la statusline (extension VS Code, Claude.ai…)
-    et supprime toute config obligatoire : app desktop lancée = données
-    affichées, même sans statusline branchée.
+    The desktop fills the statusline's gaps (VS Code extension, Claude.ai…)
+    and removes any mandatory config: desktop app running = data displayed,
+    even without a wired statusline.
     """
     statusline, err = _read_statusline_usage()
     desktop = _read_desktop_usage()
@@ -438,22 +440,22 @@ def fetch_usage():
 # ---------------------------------------------------------------------------
 
 def _parse_iso(iso):
-    """Parse un timestamp ISO-8601 (issu de _epoch_to_iso) en datetime tz-aware.
+    """Parse an ISO-8601 timestamp (from _epoch_to_iso) into a tz-aware datetime.
 
-    Renvoie None pour une entrée vide, non-str ou malformée — toutes les
-    exceptions de parsing sont rattrapées, jamais propagées. Centralisé ici pour
-    que les appelants qui ont besoin du datetime brut (planif. de reset) ne
-    dupliquent pas la normalisation Python que `fmt_reset` fait déjà.
+    Returns None for an empty, non-str or malformed input — every parsing
+    exception is caught, never propagated. Centralized here so callers that
+    need the raw datetime (reset scheduling) don't duplicate the Python
+    normalization `fmt_reset` already does.
     """
     if not iso or not isinstance(iso, str):
         return None
     try:
         clean = iso.strip()
-        # "Z" → offset UTC explicite (fromisoformat n'accepte "Z" qu'à partir de 3.11)
+        # "Z" → explicit UTC offset (fromisoformat only accepts "Z" from 3.11 on)
         if clean.endswith("Z"):
             clean = clean[:-1] + "+00:00"
-        # Strippe les sous-secondes (3.10 est strict sur le nb de chiffres) en
-        # préservant l'offset colon ±HH:MM, que 3.10 exige (et rejette ±HHMM).
+        # Strip sub-seconds (3.10 is strict about the digit count) while
+        # preserving the colon offset ±HH:MM, which 3.10 requires (it rejects ±HHMM).
         if "." in clean:
             head, _, tail = clean.partition(".")
             off = ""
@@ -545,8 +547,8 @@ class App(rumps.App):
             item._mode = mode  # stash mode on the item for the callback
             self._display_items[mode] = item
             display_menu.add(item)
-        # Toggle indépendant du groupe radio : compose avec both/pct (sans effet
-        # visible en mode icon, dont les 2 anneaux montrent déjà le weekly).
+        # Toggle independent from the radio group: composes with both/pct (no
+        # visible effect in icon mode, whose 2 rings already show the weekly).
         self.m_weekly = rumps.MenuItem(
             "Add weekly % (5h / weekly)", callback=self._toggle_title_weekly,
         )
@@ -626,7 +628,7 @@ class App(rumps.App):
         self.title_weekly = not self.title_weekly
         _settings_set(_KEY_TITLE_WEEKLY, self.title_weekly)
         sender.state = 1 if self.title_weekly else 0
-        # Re-render immédiat, comme _set_display_mode.
+        # Immediate re-render, like _set_display_mode.
         self._refresh(None)
 
     def _toggle_alerts(self, sender):
@@ -727,16 +729,16 @@ class App(rumps.App):
         _call_on_main(self._apply_usage, data, err)
 
     def _apply_usage(self, data, err):
-        # Les états d'erreur affichent toujours leur texte quel que soit le mode
-        # d'affichage — l'utilisateur doit voir *pourquoi* les chiffres ne bougent pas.
+        # Error states always display their text whatever the display mode —
+        # the user must see *why* the numbers aren't moving.
         if err or not data:
-            # Efface toute icône d'anneau périmée pour qu'elle ne contredise pas
-            # le glyphe d'erreur (en mode ICON le titre est vide → anneau figé trompeur).
+            # Clear any stale ring icon so it doesn't contradict the error
+            # glyph (in ICON mode the title is empty → a frozen ring misleads).
             self.icon = None
 
         if err == "nostatusline":
-            # Aucune source dispo (ni desktop, ni statusline). Le chemin zéro-config
-            # d'abord, le câblage statusline ensuite.
+            # No source available (neither desktop nor statusline). Zero-config
+            # path first, statusline wiring second.
             self.title = "⚙"
             self.m5h.title = "Easiest: open the Claude desktop app (auto-detected)"
             self.m7d.title = "Or wire the CLI: run statusline/install-statusline.sh"
@@ -744,8 +746,8 @@ class App(rumps.App):
             return
 
         if err == "waiting":
-            # Fichier présent mais Claude Code n'a pas encore remonté rate_limits
-            # (n'apparaît qu'après la 1re réponse API d'une session).
+            # File present but Claude Code hasn't reported rate_limits yet
+            # (it only appears after the first API response of a session).
             self.title = "…"
             self.m5h.title = "Waiting for Claude Code activity…"
             self.m7d.title = WEEKLY_DEFAULT
@@ -773,15 +775,15 @@ class App(rumps.App):
 
     @staticmethod
     def _window_row(label, section, now):
-        """Formate une ligne de fenêtre d'usage → (texte, pct_pour_anneau).
+        """Format one usage-window line → (text, pct_for_ring).
 
-        pct_pour_anneau vaut None quand la fenêtre s'est déjà réinitialisée depuis
-        la capture : le % stocké n'est plus valide, donc l'appelant saute cet
-        anneau et affiche '—' plutôt qu'un chiffre périmé.
+        pct_for_ring is None when the window already reset since the capture:
+        the stored % is no longer valid, so the caller skips that ring and
+        shows '—' rather than a stale number.
         """
-        # Clamp 0..100 à la source : le feed peut renvoyer un % aberrant au
-        # démarrage (bug Claude Code #52326) — sinon il fuit dans la ligne de
-        # menu déroulant et la notification (pas seulement le titre/icône).
+        # Clamp 0..100 at the source: the feed can return an aberrant % at
+        # startup (Claude Code bug #52326) — otherwise it leaks into the
+        # dropdown menu line and the notification (not just the title/icon).
         pct = min(100, _safe_int(section.get("utilization")))
         dt = _parse_iso(section.get("resets_at"))
         if dt is not None and dt <= now:
@@ -807,9 +809,9 @@ class App(rumps.App):
     def _update_display(self, data):
         now = datetime.now(timezone.utc)
         meta = data.get("_meta", {})
-        session_pct = weekly_pct = None  # None = fenêtre absente → badge/anneau "—", pas "0%"
+        session_pct = weekly_pct = None  # None = window absent → "—" badge/ring, not "0%"
 
-        # Session 5h (pilote aussi le titre menu bar et les alertes de seuil)
+        # 5h session (also drives the menu bar title and the threshold alerts)
         if h := data.get("five_hour"):
             self.m5h.title, session_pct = self._window_row("5-hour", h, now)
             if session_pct is not None:
@@ -817,7 +819,7 @@ class App(rumps.App):
         else:
             self.m5h.title = FIVE_HOUR_DEFAULT
 
-        # Hebdo 7 jours
+        # 7-day weekly window
         if d := data.get("seven_day"):
             self.m7d.title, weekly_pct = self._window_row("Weekly", d, now)
         else:
@@ -827,7 +829,7 @@ class App(rumps.App):
             meta.get("captured_at"), now, meta.get("source")
         )
 
-        # % déjà clampé 0..100 dans _window_row (cf. bug #52326).
+        # % already clamped 0..100 in _window_row (see bug #52326).
         icon_path = _render_dynamic_icon(session_pct, weekly_pct)
         title_pct = f"{session_pct}%" if session_pct is not None else "—"
         if self.title_weekly:

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """
-Tests pour Tokease.
+Tests for Tokease.
 
-Mocke rumps pour tourner sans GUI macOS. Source de données UNIQUE = le feed
-statusline de Claude Code (plus de mode endpoint). Couvre : helpers, formatage
-du temps, lecture du fichier statusline (chemins d'erreur + succès), logique
-d'affichage (2 anneaux), états vides, et la gestion de l'intervalle.
+Mocks rumps to run without the macOS GUI. Two local data sources: the Claude
+Code statusline feed and the Claude desktop app quota history (ADR 0003).
+Covers: helpers, time formatting, both source readers (error paths + success),
+the freshness merge, display logic (2 rings), empty states, and interval
+management.
 """
 
 import json
@@ -83,7 +84,7 @@ tracker._TITLE_SPACER = ""
 
 
 # ---------------------------------------------------------------------------
-# Fake usage data builder (forme normalisée par fetch_usage, source statusline)
+# Fake usage data builder (shape normalized by fetch_usage, statusline source)
 # ---------------------------------------------------------------------------
 def _make_usage(
     five_hour_pct=42,
@@ -146,8 +147,8 @@ class TestSafeInt(unittest.TestCase):
         self.assertEqual(tracker._safe_int(999999), 999999)
 
     def test_overflow_value_returns_default(self):
-        # Feed hostile : un nombre débordant (1e400 → inf) ne doit pas crasher
-        # le refresh (int(inf) lève OverflowError). Cf. durcissement _safe_int.
+        # Hostile feed: an overflowing number (1e400 → inf) must not crash the
+        # refresh (int(inf) raises OverflowError). See the _safe_int hardening.
         self.assertEqual(tracker._safe_int("1e400"), 0)
         self.assertEqual(tracker._safe_int(float("inf")), 0)
 
@@ -214,7 +215,7 @@ class TestFmtReset(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Tests: App display logic (2 anneaux, source statusline)
+# Tests: App display logic (2 rings, statusline source)
 # ---------------------------------------------------------------------------
 class TestAppDisplay(unittest.TestCase):
     def _make_app(self):
@@ -238,7 +239,7 @@ class TestAppDisplay(unittest.TestCase):
         data = _make_usage()
         del data["five_hour"]
         app._update_display(data)
-        self.assertEqual(app.title, "—")  # fenêtre absente → badge "—", pas "0%"
+        self.assertEqual(app.title, "—")  # window absent → "—" badge, not "0%"
         self.assertEqual(app.m5h.title, tracker.FIVE_HOUR_DEFAULT)
 
     def test_missing_seven_day(self):
@@ -251,12 +252,12 @@ class TestAppDisplay(unittest.TestCase):
     def test_all_sections_missing(self):
         app = self._make_app()
         app._update_display({})
-        self.assertEqual(app.title, "—")  # aucune fenêtre → badge "—", pas "0%"
+        self.assertEqual(app.title, "—")  # no window at all → "—" badge, not "0%"
         self.assertEqual(app.m5h.title, tracker.FIVE_HOUR_DEFAULT)
         self.assertEqual(app.m7d.title, tracker.WEEKLY_DEFAULT)
 
     def test_only_two_rings_rendered(self):
-        # _render_dynamic_icon ne prend que session + hebdo (plus d'anneau interne).
+        # _render_dynamic_icon only takes session + weekly (no more inner ring).
         app = self._make_app()
         with patch.object(tracker, "_render_dynamic_icon") as render:
             app._update_display(_make_usage(five_hour_pct=30, seven_day_pct=40))
@@ -450,7 +451,7 @@ class TestConstants(unittest.TestCase):
         self.assertIn("Weekly", tracker.WEEKLY_DEFAULT)
 
     def test_two_rings_only(self):
-        # Géométrie d'icône = 2 anneaux (externe 5h, interne hebdo).
+        # Icon geometry = 2 rings (outer 5h, inner weekly).
         self.assertEqual(len(tracker._RING_RADII), 2)
 
 
@@ -498,13 +499,13 @@ class TestEdgeCases(unittest.TestCase):
         self.assertEqual(app.title, "100%")
 
     def test_over_hundred_clamped_in_title(self):
-        # Le feed peut dépasser 100 ; le titre et l'icône doivent être clampés.
+        # The feed can go above 100; the title and the icon must be clamped.
         app = self._make_app()
         with patch.object(tracker, "_render_dynamic_icon") as render:
             app._update_display(_make_usage(five_hour_pct=150, seven_day_pct=130))
         self.assertEqual(app.title, "100%")
         render.assert_called_once_with(100, 100)
-        # la ligne de menu déroulant doit aussi être clampée (pas que le titre/icône)
+        # the dropdown menu line must be clamped too (not just the title/icon)
         self.assertIn("5-hour: 100%", app.m5h.title)
         self.assertIn("Weekly: 100%", app.m7d.title)
 
@@ -704,8 +705,8 @@ class TestCorruptedSettings(unittest.TestCase):
 # Tests: unknown buckets ignored
 # ---------------------------------------------------------------------------
 class TestUnknownBuckets(unittest.TestCase):
-    """Le feed pourrait contenir d'autres clés (codenames) — elles doivent être
-    ignorées, seules five_hour/seven_day comptent."""
+    """The feed could contain other keys (codenames) — they must be ignored,
+    only five_hour/seven_day count."""
 
     def _make_app(self):
         with patch.object(tracker.App, "_start_timer"), \
@@ -783,13 +784,13 @@ class TestEpochToIso(unittest.TestCase):
         self.assertIsNone(tracker._epoch_to_iso("not-a-number"))
 
     def test_iso_string_passes_through(self):
-        # claude-code#40094 : resets_at peut arriver déjà en ISO, pas en epoch.
+        # claude-code#40094: resets_at can already arrive as ISO, not epoch.
         out = tracker._epoch_to_iso("2026-03-28T15:00:00Z")
         self.assertIsNotNone(tracker._parse_iso(out))
 
 
 # ---------------------------------------------------------------------------
-# Tests: fetch_usage (lecture pure du fichier statusline)
+# Tests: fetch_usage (pure read of the statusline file)
 # ---------------------------------------------------------------------------
 class TestStatuslineSource(unittest.TestCase):
     def setUp(self):
@@ -797,7 +798,7 @@ class TestStatuslineSource(unittest.TestCase):
         self._file = Path(self._td.name) / "usage.json"
         self._patcher = patch.object(tracker, "_STATUSLINE_FILE", self._file)
         self._patcher.start()
-        # Isole la source desktop : la machine de dev peut avoir le vrai fichier.
+        # Isolate the desktop source: the dev machine may have the real file.
         self._desktop = Path(self._td.name) / "plan-usage-history.json"
         self._desktop_patcher = patch.object(
             tracker, "_DESKTOP_HISTORY_FILE", self._desktop
@@ -859,8 +860,8 @@ class TestStatuslineSource(unittest.TestCase):
         self.assertEqual(err, "waiting")
 
     def test_resets_at_as_iso_string(self):
-        # Contrat #40094 : si Claude Code passe resets_at en ISO (et non epoch),
-        # le compte à rebours ne doit pas disparaître en silence.
+        # Contract #40094: if Claude Code passes resets_at as ISO (not epoch),
+        # the countdown must not silently disappear.
         self._write({
             "captured_at": 1799999000,
             "five_hour": {"used_percentage": 12, "resets_at": "2099-01-01T00:00:00Z"},
@@ -871,12 +872,12 @@ class TestStatuslineSource(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Tests: source secondaire app desktop + fusion (ADR 0003)
+# Tests: desktop app secondary source + merge (ADR 0003)
 # ---------------------------------------------------------------------------
 class TestDesktopSource(TestStatuslineSource):
-    """Réutilise l'isolation fichiers de TestStatuslineSource (les tests parents
-    re-tournent ici sur les mêmes patchs — redondance bénigne et voulue : ils
-    doivent rester verts avec la source desktop branchée mais absente)."""
+    """Reuses TestStatuslineSource's file isolation (the parent tests re-run
+    here on the same patches — benign and intentional redundancy: they must
+    stay green with the desktop source wired but absent)."""
 
     def _write_desktop(self, payload):
         self._desktop.write_text(json.dumps(payload), encoding="utf-8")
@@ -890,7 +891,7 @@ class TestDesktopSource(TestStatuslineSource):
         return {"t": t_ms, "org": "org-1", "u": u}
 
     def test_desktop_only_no_statusline(self):
-        # Zéro config : app desktop présente, statusline jamais branchée.
+        # Zero config: desktop app present, statusline never wired.
         self._write_desktop({"version": 2, "samples": [self._sample(1800000000000, fh=34, sd=24)]})
         data, err = tracker.fetch_usage()
         self.assertIsNone(err)
@@ -914,7 +915,7 @@ class TestDesktopSource(TestStatuslineSource):
         self._write_desktop({"version": 3, "samples": [self._sample(1, fh=50)]})
         data, err = tracker.fetch_usage()
         self.assertIsNone(data)
-        self.assertEqual(err, "nostatusline")  # comportement inchangé sans desktop
+        self.assertEqual(err, "nostatusline")  # behavior unchanged without desktop
 
     def test_invalid_desktop_file_is_ignored(self):
         self._desktop.write_text("pas du json{{{", encoding="utf-8")
@@ -936,16 +937,16 @@ class TestDesktopSource(TestStatuslineSource):
         data, err = tracker.fetch_usage()
         self.assertIsNone(err)
         self.assertEqual(data["five_hour"]["utilization"], 42)
-        self.assertEqual(data["five_hour"]["resets_at"], future)  # reset statusline conservé
+        self.assertEqual(data["five_hour"]["resets_at"], future)  # statusline reset kept
         self.assertEqual(data["seven_day"]["utilization"], 7)
         self.assertEqual(data["_meta"]["source"], "desktop")
 
     def test_merge_desktop_sampled_after_reset_drops_past_reset(self):
-        # Reset passé mais échantillon desktop postérieur → son % décrit bien la
-        # fenêtre courante : affiché sans compte à rebours.
+        # Reset in the past but desktop sample after it → its % does describe
+        # the current window: displayed without a countdown.
         self._write({
             "captured_at": 1000,
-            "five_hour": {"used_percentage": 10, "resets_at": 2000},  # epoch 1970 → passé
+            "five_hour": {"used_percentage": 10, "resets_at": 2000},  # epoch 1970 → past
         })
         self._write_desktop({"version": 2, "samples": [self._sample(3000_000, fh=42)]})
         data, _ = tracker.fetch_usage()
@@ -953,9 +954,9 @@ class TestDesktopSource(TestStatuslineSource):
         self.assertIsNone(data["five_hour"]["resets_at"])
 
     def test_merge_desktop_sampled_before_reset_defers_to_statusline(self):
-        # Échantillon desktop antérieur au reset → son % décrit l'ANCIENNE
-        # fenêtre : on rend la version statusline (que l'affichage marque
-        # « reset; awaiting ») plutôt qu'un vieux % plausible.
+        # Desktop sample before the reset → its % describes the OLD window:
+        # return the statusline version (which the display marks as
+        # "reset; awaiting") rather than a plausible old %.
         now = datetime.now(timezone.utc).timestamp()
         self._write({
             "captured_at": int(now - 600),
@@ -965,7 +966,7 @@ class TestDesktopSource(TestStatuslineSource):
                              "samples": [self._sample(int((now - 120) * 1000), fh=80)]})
         data, _ = tracker.fetch_usage()
         self.assertEqual(data["five_hour"]["utilization"], 80)
-        # resets_at (passé) conservé → _window_row rendra l'état « reset »
+        # resets_at (past) kept → _window_row will render the "reset" state
         self.assertIsNotNone(data["five_hour"]["resets_at"])
 
     def test_merge_fresher_statusline_wins(self):
@@ -981,7 +982,7 @@ class TestDesktopSource(TestStatuslineSource):
     def test_merge_window_missing_from_desktop_kept_if_statusline_fresh(self):
         now = datetime.now(timezone.utc).timestamp()
         self._write({
-            "captured_at": int(now - 300),  # frais (< _STALE_AFTER_SECS)
+            "captured_at": int(now - 300),  # fresh (< _STALE_AFTER_SECS)
             "seven_day": {"used_percentage": 55, "resets_at": None},
         })
         self._write_desktop({"version": 2,
@@ -991,11 +992,11 @@ class TestDesktopSource(TestStatuslineSource):
         self.assertEqual(data["seven_day"]["utilization"], 55)
 
     def test_merge_window_missing_from_desktop_dropped_if_statusline_stale(self):
-        # Une fenêtre statusline périmée ne doit pas s'afficher sous le
-        # « Updated » tout frais du desktop.
+        # A stale statusline window must not show up under the desktop's
+        # perfectly fresh "Updated" line.
         now = datetime.now(timezone.utc).timestamp()
         self._write({
-            "captured_at": int(now - 3600),  # périmé (> _STALE_AFTER_SECS)
+            "captured_at": int(now - 3600),  # stale (> _STALE_AFTER_SECS)
             "seven_day": {"used_percentage": 55, "resets_at": None},
         })
         self._write_desktop({"version": 2,
@@ -1005,8 +1006,8 @@ class TestDesktopSource(TestStatuslineSource):
         self.assertNotIn("seven_day", data)
 
     def test_desktop_sample_rejects_json_booleans(self):
-        # bool est un sous-type d'int : true/false ne doivent pas passer pour
-        # des nombres (contrat « toute anomalie → rejet »).
+        # bool is a subtype of int: true/false must not pass for numbers
+        # (contract "any anomaly → reject").
         self.assertIsNone(tracker._desktop_sample_to_data({"t": True, "u": {"fh": 5}}))
         self.assertIsNone(tracker._desktop_sample_to_data({"t": 1000, "u": {"fh": True}}))
         partial = tracker._desktop_sample_to_data({"t": 1000, "u": {"fh": True, "sd": 7}})
@@ -1043,7 +1044,7 @@ class TestStatuslineDisplay(unittest.TestCase):
         app = self._make_app()
         with patch.object(tracker, "_render_dynamic_icon") as render:
             app._update_display(self._data(five=30, week=40))
-        # 2 arguments seulement (plus d'anneau interne).
+        # 2 arguments only (no more inner ring).
         self.assertEqual(render.call_args[0], (30, 40))
 
     def test_title_and_row_show_five_hour(self):
@@ -1105,7 +1106,7 @@ class TestStatuslineErrorStates(unittest.TestCase):
         app = self._make_app()
         app._apply_usage(None, "nostatusline")
         self.assertEqual(app.title, "⚙")
-        # Onboarding : chemin zéro-config (app desktop) d'abord, statusline ensuite.
+        # Onboarding: zero-config path (desktop app) first, statusline second.
         self.assertIn("desktop app", app.m5h.title)
         self.assertIn("install-statusline.sh", app.m7d.title)
         self.assertIn("Claude Code", app.mupd.title)
@@ -1181,7 +1182,7 @@ class TestStatuslineScript(unittest.TestCase):
         self.assertIn("captured_at", payload)
 
     def test_garbage_stdin_preserves_existing_good_file(self):
-        # Garantie centrale : un tick corrompu ne doit PAS écraser un bon usage.json.
+        # Core guarantee: a corrupted tick must NOT overwrite a good usage.json.
         td = tempfile.TemporaryDirectory()
         self.addCleanup(td.cleanup)
         good = Path(td.name) / ".tokease" / "usage.json"
@@ -1197,9 +1198,9 @@ class TestStatuslineScript(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Tests: rendu réel de l'icône (Pillow) — sinon ce code prod n'est jamais exécuté
+# Tests: real icon rendering (Pillow) — otherwise this prod code never runs
 # ---------------------------------------------------------------------------
-@unittest.skipUnless(tracker._PILLOW_AVAILABLE, "Pillow requis")
+@unittest.skipUnless(tracker._PILLOW_AVAILABLE, "Pillow required")
 class TestRenderIcon(unittest.TestCase):
     def test_renders_real_png_at_final_size(self):
         p = tracker._render_dynamic_icon(50, 30)
@@ -1210,14 +1211,14 @@ class TestRenderIcon(unittest.TestCase):
         self.assertEqual(size, (tracker._ICON_SIZE_FINAL, tracker._ICON_SIZE_FINAL))
 
     def test_renders_with_none_pcts(self):
-        # fenêtre absente/resetée (pct None) → les DEUX rails restent visibles (anneaux vides)
+        # absent/reset window (pct None) → BOTH tracks stay visible (empty rings)
         p = tracker._render_dynamic_icon(None, None)
         self.assertTrue(Path(p).exists())
         center = tracker._ICON_SIZE_FINAL // 2
         with tracker.Image.open(p) as im:
             for radius in tracker._RING_RADII:
                 alpha = im.getpixel((center, center - radius))[3]
-                self.assertGreater(alpha, 0, f"rail absent au rayon {radius}")
+                self.assertGreater(alpha, 0, f"missing track at radius {radius}")
 
     def test_renders_clamps_over_100(self):
         p = tracker._render_dynamic_icon(150, 999)
@@ -1225,7 +1226,7 @@ class TestRenderIcon(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
-# Tests: freshness label avec captured_at malformé
+# Tests: freshness label with a malformed captured_at
 # ---------------------------------------------------------------------------
 class TestFreshnessLabel(unittest.TestCase):
     def test_malformed_captured_at_returns_default(self):

@@ -18,7 +18,7 @@ SIZE_FINAL = 512         # Base size for logo variants
 SCALE = 4                # Oversample for antialiased edges
 SIZE = SIZE_FINAL * SCALE
 
-# Ring geometry (scaled to 512px). Même ratio (1:0.7) que l'icône runtime _RING_RADII.
+# Ring geometry (scaled to 512px). Same ratio (1:0.7) as the runtime icon's _RING_RADII.
 RING_RADII = [120, 84]   # outer (5h), inner (weekly) — at final 512 scale
 STROKE = 18              # stroke width at final scale
 INK = (0, 0, 0, 255)     # Black
@@ -113,7 +113,7 @@ def main() -> None:
     text_y = 150
 
     draw.text((text_x, text_y), "Tokease", fill=(0, 0, 0), font=font_large)
-    # Deux lignes pour tenir dans 1200px sans troncature, en gardant le wedge.
+    # Two lines to fit in 1200px without truncation, keeping the wedge.
     draw.text((text_x, text_y + 90), "Your Claude Code 5h & weekly limits, in the menu bar.",
               fill=(100, 100, 100), font=font_small)
     draw.text((text_x, text_y + 122), "No token read — conformant by construction.",

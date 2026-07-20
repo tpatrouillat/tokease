@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Installe le script de capture statusline de Tokease dans ~/.tokease et propose
-# de câbler automatiquement le bloc `statusLine` dans ~/.claude/settings.json.
-# On ne remplace JAMAIS une statusLine.command existante (Claude Code n'en
-# autorise qu'une) : si tu en as déjà une, on affiche le snippet à coller.
+# Installs the Tokease statusline capture script into ~/.tokease and offers to
+# wire the `statusLine` block into ~/.claude/settings.json automatically.
+# We NEVER replace an existing statusLine.command (Claude Code allows only
+# one): if you already have one, we print the snippet to paste instead.
 set -euo pipefail
 
 SRC="$(cd "$(dirname "$0")" && pwd)/tokease-statusline.py"
@@ -17,21 +17,21 @@ if [ ! -f "$SRC" ]; then
 fi
 
 mkdir -p "$DEST_DIR"
-chmod 700 "$DEST_DIR" 2>/dev/null || true  # données d'usage privées, pas lisibles par d'autres comptes
+chmod 700 "$DEST_DIR" 2>/dev/null || true  # usage data is private, not readable by other accounts
 cp "$SRC" "$DEST"
-echo "✓ Capture script installé : $DEST"
+echo "✓ Capture script installed: $DEST"
 echo
 
 if ! command -v claude >/dev/null 2>&1; then
-  echo "note: 'claude' absent du PATH — assure-toi que Claude Code >= 2.1.x est installé."
+  echo "note: 'claude' not found in PATH — make sure Claude Code >= 2.1.x is installed."
   echo
 fi
 
-# Snippet affiché quand on n'écrit pas (settings absent traité, snippet manuel).
+# Snippet printed when we don't write (missing settings handled, manual snippet).
 print_manual_snippet() {
   cat <<EOF
 
-À ajouter dans ~/.claude/settings.json :
+Add this to ~/.claude/settings.json:
 
   {
     "statusLine": {
@@ -40,21 +40,22 @@ print_manual_snippet() {
     }
   }
 
-Si tu as DÉJÀ une statusline, colle plutôt ce bloc en haut de ton script
-(voir statusline/README.md) :
+If you ALREADY have a statusline, paste this block at the top of your script
+instead (see statusline/README.md):
 
   input=\$(cat)
   printf '%s' "\$input" | TOKEASE_STATUSLINE_QUIET=1 python3 "\$HOME/.tokease/tokease-statusline.py"
 EOF
 }
 
-# Écrit le bloc statusLine via jq (JSON garanti valide). Idempotent : si la clé
-# existe déjà, on n'écrase rien. Backup horodaté avant toute modification.
+# Writes the statusLine block via jq (guaranteed valid JSON). Idempotent: if
+# the key already exists, we overwrite nothing. Timestamped backup before any
+# modification.
 write_with_jq() {
   local existing
   existing="$(jq -r '.statusLine.command // empty' "$SETTINGS" 2>/dev/null || true)"
   if [ -n "$existing" ]; then
-    echo "Une statusLine.command existe déjà dans $SETTINGS — on n'écrase pas."
+    echo "A statusLine.command already exists in $SETTINGS — not overwriting."
     print_manual_snippet
     return 0
   fi
@@ -65,15 +66,15 @@ write_with_jq() {
         '.statusLine = {"type": "command", "command": $cmd}' \
         "$SETTINGS" > "$tmp"; then
     mv "$tmp" "$SETTINGS"
-    echo "✓ Bloc statusLine ajouté à $SETTINGS (backup : $backup)"
+    echo "✓ statusLine block added to $SETTINGS (backup: $backup)"
   else
-    rm -f "$tmp" "$backup"   # aucune modif effectuée → pas de backup orphelin
-    echo "error: jq a échoué — settings.json laissé intact." >&2
+    rm -f "$tmp" "$backup"   # no change was made → no orphan backup
+    echo "error: jq failed — settings.json left untouched." >&2
     print_manual_snippet
   fi
 }
 
-# Cas settings.json absent : on le crée avec un JSON minimal valide.
+# settings.json missing: create it with a minimal valid JSON.
 create_settings() {
   local backup=""
   mkdir -p "$(dirname "$SETTINGS")"
@@ -81,7 +82,7 @@ create_settings() {
     printf '{}' | jq --arg cmd "$COMMAND" \
       '.statusLine = {"type": "command", "command": $cmd}' > "$SETTINGS"
   else
-    # Fallback sans jq : le fichier n'existe pas, on écrit un bloc complet sûr.
+    # No-jq fallback: the file doesn't exist, so writing a full safe block is fine.
     cat > "$SETTINGS" <<EOF
 {
   "statusLine": {
@@ -91,11 +92,11 @@ create_settings() {
 }
 EOF
   fi
-  echo "✓ $SETTINGS créé avec le bloc statusLine."
+  echo "✓ $SETTINGS created with the statusLine block."
 }
 
-echo "Étape suivante : câbler le script dans Claude Code."
-read -r -p "Écrire automatiquement le bloc statusLine dans ~/.claude/settings.json ? (y/N) " reply || reply="n"  # EOF (non-interactif) → snippet manuel
+echo "Next step: wire the script into Claude Code."
+read -r -p "Write the statusLine block into ~/.claude/settings.json automatically? (y/N) " reply || reply="n"  # EOF (non-interactive) → manual snippet
 echo
 
 case "$reply" in
@@ -105,10 +106,10 @@ case "$reply" in
     elif command -v jq >/dev/null 2>&1; then
       write_with_jq
     else
-      # settings.json existe mais pas de jq : on ne risque pas de corrompre un
-      # JSON existant à la main → on affiche le snippet à coller.
-      echo "note: 'jq' absent — pour ne pas corrompre un settings.json existant,"
-      echo "      on n'écrit pas automatiquement. Installe jq, ou colle le bloc :"
+      # settings.json exists but no jq: we won't risk corrupting an existing
+      # JSON by hand → print the snippet to paste.
+      echo "note: 'jq' not found — to avoid corrupting an existing settings.json,"
+      echo "      we don't write automatically. Install jq, or paste the block:"
       print_manual_snippet
     fi
     ;;
@@ -118,5 +119,5 @@ case "$reply" in
 esac
 
 echo
-echo "Puis ouvre Claude Code et envoie un message : la donnée rate_limits"
-echo "n'apparaît qu'après la 1re réponse API d'une session."
+echo "Then open Claude Code and send a message: the rate_limits data"
+echo "only appears after the first API response of a session."
