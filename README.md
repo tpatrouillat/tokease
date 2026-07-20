@@ -27,7 +27,7 @@ Three things it does:
 - **Two usage rings** — 5-hour session (outer) + weekly (inner) gauges, right in the menu bar
 - **Reset countdowns** — see when each window rolls over
 - **Honest freshness** — shows when Claude Code last refreshed the data, and flags it *stale* when Claude Code isn't running
-- **Customizable display** — icon + percentage, icon only, or percentage only
+- **Customizable display** — icon + percentage, icon only, or percentage only; optionally show both percentages (`5h / weekly`)
 - **Settings menu** — launch at login, display modes, alert thresholds (notify at 80% / 95%), refresh interval
 - **Lightweight** — pure Python, two small dependencies (`rumps` + `Pillow`)
 - **No telemetry** — no account, no tracking, nothing phones home

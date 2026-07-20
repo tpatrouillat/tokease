@@ -1015,6 +1015,25 @@ class TestStatuslineDisplay(unittest.TestCase):
         app._update_display(self._data())
         self.assertIn("via Claude Code", app.mupd.title)
 
+    def test_title_weekly_off_by_default(self):
+        app = self._make_app()
+        app._update_display(self._data(five=43, week=25))
+        self.assertNotIn("/", app.title)
+
+    def test_title_weekly_appends_weekly_pct(self):
+        app = self._make_app()
+        app.title_weekly = True
+        app._update_display(self._data(five=43, week=25))
+        self.assertIn("43% / 25%", app.title)
+
+    def test_title_weekly_dash_when_window_absent(self):
+        app = self._make_app()
+        app.title_weekly = True
+        data = self._data(five=43)
+        del data["seven_day"]
+        app._update_display(data)
+        self.assertIn("43% / —", app.title)
+
     def test_stale_when_capture_is_old(self):
         app = self._make_app()
         old = (datetime.now(timezone.utc) - timedelta(hours=1)).timestamp()

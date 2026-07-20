@@ -141,6 +141,7 @@ DISPLAY_ICON = "icon"
 _KEY_DISPLAY_MODE = "display_mode"
 _KEY_ALERTS = "alerts_enabled"
 _KEY_INTERVAL = "interval_secs"
+_KEY_TITLE_WEEKLY = "title_weekly"
 
 # File written by the Claude Code statusline capture script
 # (statusline/tokease-statusline.py). Read on every refresh in statusline mode.
@@ -480,6 +481,7 @@ class App(rumps.App):
         self.display_mode = str(_settings_get(_KEY_DISPLAY_MODE, DISPLAY_BOTH))
         if self.display_mode not in (DISPLAY_BOTH, DISPLAY_PCT, DISPLAY_ICON):
             self.display_mode = DISPLAY_BOTH
+        self.title_weekly = bool(_settings_get(_KEY_TITLE_WEEKLY, False))
 
         # template=True lets macOS auto-invert the icon for dark mode.
         # Pass the icon path only if it exists — a missing asset shouldn't
@@ -524,6 +526,13 @@ class App(rumps.App):
             item._mode = mode  # stash mode on the item for the callback
             self._display_items[mode] = item
             display_menu.add(item)
+        # Toggle indépendant du groupe radio : compose avec both/pct (sans effet
+        # visible en mode icon, dont les 2 anneaux montrent déjà le weekly).
+        self.m_weekly = rumps.MenuItem(
+            "Add weekly % (5h / weekly)", callback=self._toggle_title_weekly,
+        )
+        self.m_weekly.state = 1 if self.title_weekly else 0
+        display_menu.add(self.m_weekly)
         self._update_display_menu()
 
         # Notification toggle
@@ -592,6 +601,13 @@ class App(rumps.App):
         self._update_display_menu()
         # Re-render immediately so the menu bar reflects the change without
         # waiting for the next poll.
+        self._refresh(None)
+
+    def _toggle_title_weekly(self, sender):
+        self.title_weekly = not self.title_weekly
+        _settings_set(_KEY_TITLE_WEEKLY, self.title_weekly)
+        sender.state = 1 if self.title_weekly else 0
+        # Re-render immédiat, comme _set_display_mode.
         self._refresh(None)
 
     def _toggle_alerts(self, sender):
@@ -795,6 +811,9 @@ class App(rumps.App):
         # % déjà clampé 0..100 dans _window_row (cf. bug #52326).
         icon_path = _render_dynamic_icon(session_pct, weekly_pct)
         title_pct = f"{session_pct}%" if session_pct is not None else "—"
+        if self.title_weekly:
+            weekly_txt = f"{weekly_pct}%" if weekly_pct is not None else "—"
+            title_pct = f"{title_pct} / {weekly_txt}"
         self._apply_display(title_pct, icon_path)
 
         self._schedule_reset_refresh(data)
