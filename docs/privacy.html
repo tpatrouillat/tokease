@@ -4,14 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Privacy — Tokease</title>
-    <meta name="description" content="Tokease is local-only and collects nothing. Exactly what it reads, never does, and stores — no token, no Keychain, no network, no telemetry.">
+    <meta name="description" content="Tokease is local-only and collects nothing. Exactly what it reads, never does, and stores. No token, no Keychain, no network, no telemetry.">
     <meta name="theme-color" content="#09090b">
     <meta name="robots" content="index, follow">
     <meta name="author" content="Thibault Patrouillat">
     <link rel="canonical" href="https://tpatrouillat.github.io/tokease/privacy.html">
     <meta property="og:type" content="article">
     <meta property="og:title" content="Privacy — Tokease">
-    <meta property="og:description" content="Tokease is local-only and collects nothing. Exactly what it reads, never does, and stores — no token, no Keychain, no network, no telemetry.">
+    <meta property="og:description" content="Tokease is local-only and collects nothing. Exactly what it reads, never does, and stores. No token, no Keychain, no network, no telemetry.">
     <meta property="og:image" content="https://tpatrouillat.github.io/tokease/og-image.png">
     <meta property="og:url" content="https://tpatrouillat.github.io/tokease/privacy.html">
     <meta property="og:site_name" content="Tokease">
@@ -85,12 +85,13 @@
         <h2>What it reads</h2>
         <ul>
             <li><code>~/.tokease/usage.json</code> — the <code>rate_limits</code> windows (<code>five_hour</code>, <code>seven_day</code>: used percentage + reset time) that the Tokease statusline capture script writes from the data <strong>Claude Code hands to its statusline</strong>.</li>
+            <li><code>~/Library/Application Support/Claude/plan-usage-history.json</code> &mdash; the quota samples the <strong>official Claude desktop app</strong> writes locally for its own use (read-only; Tokease never writes to or modifies anything under the Claude app's folder).</li>
         </ul>
 
         <h2>What it never does</h2>
         <ul>
             <li class="no"><strong>Never reads your OAuth token</strong> and <strong>never opens the macOS Keychain.</strong></li>
-            <li class="no"><strong>Never calls any Anthropic endpoint</strong> (or any other server). Tokease itself makes no network requests — it only reads a local file. The only exception is the Support menu, which opens GitHub in your browser when <em>you</em> click it.</li>
+            <li class="no"><strong>Never calls any Anthropic endpoint</strong> (or any other server). Tokease itself makes no network requests. It only reads local files. The only exception is the Support menu, which opens GitHub in your browser when <em>you</em> click it.</li>
             <li class="no"><strong>No telemetry, no analytics, no account, no tracking.</strong> Nothing leaves your machine.</li>
             <li class="no">Stores no credentials or secrets on disk.</li>
         </ul>

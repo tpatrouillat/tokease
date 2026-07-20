@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tokease — your Claude Code 5h &amp; weekly limits in the menu bar</title>
-    <meta name="description" content="Free, open-source macOS menu bar app that shows your Claude Code 5-hour and weekly limits as two Activity rings — read directly from the statusline feed Claude Code already exposes. No token read, no hidden API call. No account, no telemetry, 100% local.">
+    <title>Tokease: your Claude 5h &amp; weekly limits in the menu bar</title>
+    <meta name="description" content="Free, open-source macOS menu bar app that shows your Claude 5-hour and weekly limits as two Activity rings. Zero config with the Claude desktop app, plus a statusline capture for Claude Code. No token read, no hidden API call. No account, no telemetry, 100% local.">
     <meta name="keywords" content="Claude Code usage, Claude Code limits, Claude Code menu bar, Claude Code statusline, Claude usage tracker, Claude Pro limits, Claude Max limits, macOS menu bar app, Claude 5-hour limit, Claude weekly limit">
     <meta name="theme-color" content="#09090b">
     <meta name="robots" content="index, follow">
@@ -18,19 +18,19 @@
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Tokease — your Claude Code 5h &amp; weekly limits in the menu bar">
-    <meta property="og:description" content="Free, open-source macOS menu bar app for Claude Pro and Max users. Two Activity rings show your 5-hour and weekly limits, read from the statusline feed Claude Code exposes. No token read, no account, runs 100% locally.">
+    <meta property="og:title" content="Tokease: your Claude 5h &amp; weekly limits in the menu bar">
+    <meta property="og:description" content="Free, open-source macOS menu bar app for Claude Pro and Max users. Two Activity rings show your 5-hour and weekly limits, read from files official Claude apps already publish on your Mac. No token read, no account, runs 100% locally.">
     <meta property="og:image" content="https://tpatrouillat.github.io/tokease/og-image.png">
-    <meta property="og:image:alt" content="Tokease — two concentric Activity rings alongside the product name">
+    <meta property="og:image:alt" content="Tokease: two concentric Activity rings alongside the product name">
     <meta property="og:url" content="https://tpatrouillat.github.io/tokease/">
     <meta property="og:site_name" content="Tokease">
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Tokease — your Claude Code 5h &amp; weekly limits in the menu bar">
-    <meta name="twitter:description" content="Free, open-source macOS menu bar app with a 2-ring Activity Display for Claude Pro and Max users. Reads the statusline feed Claude Code exposes — no token read, no hidden API call.">
+    <meta name="twitter:title" content="Tokease: your Claude 5h &amp; weekly limits in the menu bar">
+    <meta name="twitter:description" content="Free, open-source macOS menu bar app with a 2-ring Activity Display for Claude Pro and Max users. Zero config, reads only local files official Claude apps publish. No token read, no hidden API call.">
     <meta name="twitter:image" content="https://tpatrouillat.github.io/tokease/og-image.png">
-    <meta name="twitter:image:alt" content="Tokease — two concentric Activity rings alongside the product name">
+    <meta name="twitter:image:alt" content="Tokease: two concentric Activity rings alongside the product name">
 
     <!-- JSON-LD: SoftwareApplication -->
     <script type="application/ld+json">
@@ -45,7 +45,7 @@
         "softwareVersion": "1.0",
         "downloadUrl": "https://github.com/tpatrouillat/tokease",
         "url": "https://tpatrouillat.github.io/tokease/",
-        "description": "A lightweight macOS menu bar app with a 2-ring Activity Display that shows your Claude Code 5-hour and weekly limits, read from the statusline feed Claude Code exposes — no token read, no hidden API call.",
+        "description": "A lightweight macOS menu bar app with a 2-ring Activity Display that shows your Claude 5-hour and weekly limits, read from files official Claude apps publish locally. No token read, no hidden API call.",
         "image": "https://tpatrouillat.github.io/tokease/og-image.png",
         "author": { "@type": "Person", "name": "Thibault Patrouillat" }
     }
@@ -65,47 +65,52 @@
             {
                 "@type": "Question",
                 "name": "Does Tokease read my Claude token or call any hidden API?",
-                "acceptedAnswer": { "@type": "Answer", "text": "No. Tokease never reads your OAuth token and never calls any Anthropic endpoint. It only reads the usage figures that Claude Code itself writes to its statusline feed (the documented rate_limits fields). Conformant by construction, not by promise." }
+                "acceptedAnswer": { "@type": "Answer", "text": "No. Tokease never reads your OAuth token and never calls any Anthropic endpoint. It only reads usage data official Claude apps already write on your own Mac: the Claude desktop app's quota history, and the documented rate_limits fields Claude Code hands to its statusline. Conformant by construction, not by promise." }
             },
             {
                 "@type": "Question",
                 "name": "Does Tokease work on the free Claude plan?",
-                "acceptedAnswer": { "@type": "Answer", "text": "No. Tokease requires a Claude Pro or Max plan, because the rate_limits fields in the Claude Code statusline feed only appear for paid subscribers. Free, Team, and Enterprise plans are not supported." }
+                "acceptedAnswer": { "@type": "Answer", "text": "No. Tokease requires a Claude Pro or Max plan, because Anthropic only exposes these quota windows for paid subscribers. Free, Team, and Enterprise plans are not supported." }
             },
             {
                 "@type": "Question",
                 "name": "Where does Tokease get its numbers?",
-                "acceptedAnswer": { "@type": "Answer", "text": "From the statusline feed that Claude Code 2.1.x and later expose on standard input — the documented rate_limits.five_hour and rate_limits.seven_day fields. A small capture script reads them and Tokease displays them. No token read, no hidden API call." }
+                "acceptedAnswer": { "@type": "Answer", "text": "From two local files written by official Claude apps. The Claude desktop app refreshes a quota history about every 5 minutes while it runs. Claude Code 2.1.x and later hand the documented rate_limits fields to their statusline, which adds reset times. No token read, no hidden API call." }
             },
             {
                 "@type": "Question",
-                "name": "Claude Code already shows my usage in /usage and the statusline — why an app?",
-                "acceptedAnswer": { "@type": "Answer", "text": "Same numbers, different surface. /usage and the statusline show your limits while you're looking at the terminal. Tokease shows them in the menu bar while you're anywhere else, sends an optional notification before you hit 80% or 95%, and keeps the last known value (flagged stale) after Claude Code is closed." }
+                "name": "Claude Code already shows my usage in /usage and the statusline. Why an app?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Same numbers, different surface. /usage and the statusline show your limits while you're looking at the terminal. Tokease shows them in the menu bar while you're anywhere else, sends an optional notification before you hit 80% or 95%, and keeps the last known value (flagged stale) in between." }
             },
             {
                 "@type": "Question",
                 "name": "How is Tokease different from CodexBar or ClaudeBar?",
-                "acceptedAnswer": { "@type": "Answer", "text": "Those tools read your Claude credentials from the macOS Keychain. Tokease never touches your Keychain or your token — it only reads what Claude Code already publishes to its statusline. Conformant by construction, not by promise." }
+                "acceptedAnswer": { "@type": "Answer", "text": "Those tools read your Claude credentials from the macOS Keychain. Tokease never touches your Keychain or your token. It only reads what official Claude apps already publish locally. Conformant by construction, not by promise." }
             },
             {
                 "@type": "Question",
                 "name": "How is Tokease different from ccusage?",
-                "acceptedAnswer": { "@type": "Answer", "text": "ccusage parses your local Claude Code JSONL log files to estimate token spend — what you already used. Tokease shows the limit you have left: your remaining 5-hour and weekly windows as percentages, live in the menu bar, straight from Claude Code's statusline feed." }
+                "acceptedAnswer": { "@type": "Answer", "text": "ccusage parses your local Claude Code JSONL log files to estimate token spend, meaning what you already used. Tokease shows the limit you have left: your remaining 5-hour and weekly windows as percentages, live in the menu bar." }
             },
             {
                 "@type": "Question",
                 "name": "Does it work with Claude Desktop or Cowork?",
-                "acceptedAnswer": { "@type": "Answer", "text": "No. The statusline feed is CLI-only, so Claude Desktop and Cowork can't feed Tokease. Your limits are account-wide, so the numbers Tokease shows still reflect all your Claude Code usage — but Tokease only updates while the Claude Code CLI is running." }
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes. If the Claude desktop app is running, Tokease reads the quota history it refreshes about every 5 minutes. Your limits are account-wide, so the rings cover everything you consume: claude.ai, Cowork, the VS Code extension and the CLI." }
+            },
+            {
+                "@type": "Question",
+                "name": "I work in the VS Code extension. Does Tokease still update?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Yes, through the Claude desktop app. The VS Code extension panel never runs statusline scripts, so keep the desktop app open (or run claude in a terminal) and the rings stay fresh." }
             },
             {
                 "@type": "Question",
                 "name": "How fresh are the numbers?",
-                "acceptedAnswer": { "@type": "Answer", "text": "The statusline feed only ticks while Claude Code is running. When Claude Code is closed, Tokease shows the last known value with a timestamp and flags it as stale after 15 minutes — so you never mistake an old percentage for a live one." }
+                "acceptedAnswer": { "@type": "Answer", "text": "With the Claude desktop app running, the rings refresh about every 5 minutes. A Claude Code terminal session refreshes them too and adds reset countdowns. When neither runs, Tokease shows the last known value with a timestamp and flags it stale after 15 minutes, so you never mistake an old percentage for a live one." }
             },
             {
                 "@type": "Question",
                 "name": "How do I install Tokease?",
-                "acceptedAnswer": { "@type": "Answer", "text": "Run 'brew install tpatrouillat/tap/tokease', or clone the repository and run the install script. Then wire the one-line statusline capture script into Claude Code so Tokease can read your limits." }
+                "acceptedAnswer": { "@type": "Answer", "text": "Run 'brew install tpatrouillat/tap/tokease', or clone the repository and run the install script. If the Claude desktop app is running, you are done. Optionally wire the statusline capture script into Claude Code to add reset countdowns." }
             }
         ]
     }
@@ -803,10 +808,10 @@
     <header class="hero hero-anim" id="hero">
         <div class="hero-badge rise d1">
             <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true"><path d="M7 1l1.76 3.57L12.5 5.3l-2.75 2.68.65 3.78L7 10l-3.4 1.76.65-3.78L1.5 5.3l3.74-.73L7 1z" fill="#a855f7"/></svg>
-            <span>Free &amp; open source</span> &mdash; for Claude Pro &amp; Max
+            <span>Free &amp; open source</span> &middot; for Claude Pro &amp; Max
         </div>
         <h1 class="rise d2">Your Claude Code limits,<br><span class="highlight">in the menu bar</span></h1>
-        <p class="hero-sub rise d3">Tokease shows your <strong style="color:var(--text);font-weight:600;">5-hour &amp; weekly limits</strong> for Claude Code in the menu bar — read directly from the statusline feed Claude Code exposes itself. <strong style="color:var(--text);font-weight:600;">No token read, no hidden API call.</strong></p>
+        <p class="hero-sub rise d3">Tokease shows your <strong style="color:var(--text);font-weight:600;">5-hour &amp; weekly limits</strong> for Claude in the menu bar. Zero config: it reads only what official Claude apps already publish on your Mac. <strong style="color:var(--text);font-weight:600;">No token read, no hidden API call.</strong></p>
 
         <div class="hero-ctas rise d4">
             <a href="#install" class="btn btn-primary" id="magneticBtn">
@@ -851,7 +856,7 @@
     <div class="section-header reveal">
         <div class="section-label">See it in action</div>
         <h2 class="section-title">The limit you have left, one glance away</h2>
-        <p class="section-sub">Two rings fill as you spend your 5-hour and weekly windows, and an opt-in notification alerts you at 80% and again at 95% — so you see the wall coming before you hit it.</p>
+        <p class="section-sub">Two rings fill as you spend your 5-hour and weekly windows, and an opt-in notification alerts you at 80% and again at 95%. You see the wall coming before you hit it.</p>
     </div>
     <div class="reveal">
         <figure class="showcase-frame" id="showcaseFrame">
@@ -869,7 +874,7 @@
     <div class="section-header reveal">
         <div class="section-label">Setup</div>
         <h2 class="section-title">Up and running in a minute</h2>
-        <p class="section-sub">Install the app, wire one line into Claude Code's statusline, and read your limits. No account, no API keys.</p>
+        <p class="section-sub">Install the app and keep the Claude desktop app open. That's it. No account, no API keys, nothing to configure.</p>
     </div>
     <div class="steps stagger" id="steps">
         <div class="step">
@@ -879,13 +884,13 @@
         </div>
         <div class="step">
             <div class="step-num" aria-hidden="true">2</div>
-            <h3>Wire the statusline</h3>
-            <p>Point Claude Code's statusline at the included capture script (one line in <code>settings.json</code>). Tokease reads only what Claude Code already publishes there — nothing else.</p>
+            <h3>Let it find your data</h3>
+            <p>If the Claude desktop app is running, Tokease auto-detects the quota history it refreshes about every 5 minutes. Nothing to wire, nothing to configure.</p>
         </div>
         <div class="step">
             <div class="step-num" aria-hidden="true">3</div>
             <h3>Read the rings</h3>
-            <p>Send one message in Claude Code and your two rings light up in the menu bar — 5-hour and weekly. They fill as you spend, and an optional notification fires at 80% and 95%.</p>
+            <p>Your two rings light up in the menu bar, 5-hour and weekly, with an optional notification at 80% and 95%. Bonus for CLI users: wire the included statusline script into Claude Code to add reset countdowns.</p>
         </div>
     </div>
 </section>
@@ -895,7 +900,7 @@
     <div class="section-header reveal">
         <div class="section-label">Conformant by construction</div>
         <h2 class="section-title">No token read. No hidden API call.</h2>
-        <p class="section-sub">Other trackers read your Claude credentials from the Keychain. Tokease doesn't touch them — it only reads what Claude Code already publishes to its statusline.</p>
+        <p class="section-sub">Other trackers read your Claude credentials from the Keychain. Tokease doesn't touch them. It only reads what official Claude apps already publish on your own Mac.</p>
     </div>
     <div class="trust-card reveal">
         <div class="trust-icon" aria-hidden="true">
@@ -903,20 +908,20 @@
         </div>
         <div>
             <h3>Conformant by construction, not by promise.</h3>
-            <p>Claude Code 2.1.x and later hand their statusline script a small JSON payload that includes <strong style="color:var(--text)">documented <code>rate_limits</code> fields</strong> — your 5-hour and weekly utilization. Tokease's capture script reads exactly those, and nothing else. It <strong style="color:var(--text)">never reads your OAuth token</strong>, never opens your Keychain, and <strong style="color:var(--text)">never calls any Anthropic endpoint</strong>.</p>
-            <p>Because the data comes from a supported Claude Code integration surface, you stay inside Anthropic's terms. No server, no analytics, no telemetry, no phone-home. The whole thing is a short, MIT-licensed Python file: <a href="https://github.com/tpatrouillat/tokease/blob/main/tracker.py" rel="noopener">read <code>tracker.py</code> on GitHub</a> and verify it yourself.</p>
+            <p>Tokease reads two local files, both written by official Claude apps for their own use: the quota history the Claude desktop app refreshes while it runs, and the <strong style="color:var(--text)">documented <code>rate_limits</code> fields</strong> Claude Code 2.1.x and later hand to their statusline script. It reads exactly those, and nothing else. It <strong style="color:var(--text)">never reads your OAuth token</strong>, never opens your Keychain, and <strong style="color:var(--text)">never calls any Anthropic endpoint</strong>.</p>
+            <p>No server, no analytics, no telemetry, no phone-home. There is no token to misuse and nothing that leaves your Mac. The whole thing is a short, MIT-licensed Python file: <a href="https://github.com/tpatrouillat/tokease/blob/main/tracker.py" rel="noopener">read <code>tracker.py</code> on GitHub</a> and verify it yourself.</p>
         </div>
     </div>
     <div class="trust-grid stagger" id="trustGrid">
         <div class="trust-item">
             <div class="trust-item-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M12.75 8.25V6a3.75 3.75 0 10-7.5 0v2.25M4.5 8.25h9a1.5 1.5 0 011.5 1.5v5.25a1.5 1.5 0 01-1.5 1.5h-9a1.5 1.5 0 01-1.5-1.5V9.75a1.5 1.5 0 011.5-1.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
             <h4>No token, no Keychain</h4>
-            <p>Tokease never reads your OAuth token. CodexBar and ClaudeBar read the Keychain — Tokease doesn't.</p>
+            <p>Tokease never reads your OAuth token. CodexBar and ClaudeBar read the Keychain. Tokease doesn't.</p>
         </div>
         <div class="trust-item">
             <div class="trust-item-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1.5L2.25 5.25v4.5c0 3.94 2.88 7.62 6.75 8.25 3.87-.63 6.75-4.31 6.75-8.25v-4.5L9 1.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></div>
             <h4>100% local</h4>
-            <p>Runs entirely on your Mac. No backend, no cloud, no account — nothing to breach.</p>
+            <p>Runs entirely on your Mac. No backend, no cloud, no account. Nothing to breach.</p>
         </div>
         <div class="trust-item">
             <div class="trust-item-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M6 9l2 2 4-4M3 3h12a1.5 1.5 0 011.5 1.5v9A1.5 1.5 0 0115 15H3a1.5 1.5 0 01-1.5-1.5v-9A1.5 1.5 0 013 3z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
@@ -939,9 +944,9 @@
             <div class="pricing-price">$0<small> / forever</small></div>
             <ul class="pricing-list">
                 <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>All features, no paywall</li>
-                <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Open source — read, fork, contribute</li>
+                <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Open source: read, fork, contribute</li>
                 <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>No account, no telemetry, no token read</li>
-                <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Requires Claude Code &ge; 2.1.x and a Pro or Max plan</li>
+                <li><svg width="16" height="16" viewBox="0 0 16 16" fill="none"><path d="M3 8.5l3 3 7-7" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>Requires a Claude Pro or Max plan (Claude Desktop, or Claude Code &ge; 2.1.x)</li>
             </ul>
             <a href="#install" class="btn btn-primary">Install Tokease</a>
             <p style="margin-top:1rem; font-size:0.8rem; color:var(--text-muted)">Like it? A <a href="https://github.com/sponsors/tpatrouillat" rel="noopener">sponsorship</a> or a GitHub star is always welcome.</p>
@@ -959,43 +964,47 @@
     <div class="faq-list reveal">
         <details class="faq">
             <summary>Is Tokease free?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body">Yes — completely free and open source under the MIT license. There is no paid tier, no trial, and no account to create.</div>
+            <div class="faq-body">Yes. Completely free and open source under the MIT license. There is no paid tier, no trial, and no account to create.</div>
         </details>
         <details class="faq">
             <summary>Does Tokease read my Claude token or call any hidden API?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body"><strong style="color:var(--text)">No.</strong> Tokease never reads your OAuth token, never opens your Keychain, and never calls any Anthropic endpoint. It only reads the usage figures Claude Code itself writes to its statusline feed (the documented <code>rate_limits</code> fields). It's conformant by construction, not by promise.</div>
+            <div class="faq-body"><strong style="color:var(--text)">No.</strong> Tokease never reads your OAuth token, never opens your Keychain, and never calls any Anthropic endpoint. It only reads usage data official Claude apps already write on your own Mac: the Claude desktop app's quota history, and the documented <code>rate_limits</code> fields Claude Code hands to its statusline. Conformant by construction, not by promise.</div>
         </details>
         <details class="faq">
             <summary>Does it work on the free Claude plan?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body">No. Tokease requires a <strong style="color:var(--text)">Claude Pro or Max</strong> plan, because the <code>rate_limits</code> fields in Claude Code's statusline feed only appear for paid subscribers. Free, Team, and Enterprise plans are not supported.</div>
+            <div class="faq-body">No. Tokease requires a <strong style="color:var(--text)">Claude Pro or Max</strong> plan, because Anthropic only exposes these quota windows for paid subscribers. Free, Team, and Enterprise plans are not supported.</div>
         </details>
         <details class="faq">
             <summary>Where does Tokease get its numbers?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body">From the statusline feed that Claude Code 2.1.x and later expose on standard input — the documented <code>rate_limits.five_hour</code> and <code>rate_limits.seven_day</code> fields. A small capture script reads them and Tokease displays them as two rings. No token read, no hidden API call.</div>
+            <div class="faq-body">From two local files written by official Claude apps. The Claude desktop app refreshes a quota history about every 5 minutes while it runs. Claude Code 2.1.x and later hand the documented <code>rate_limits</code> fields to their statusline, which adds reset times. No token read, no hidden API call.</div>
         </details>
         <details class="faq">
-            <summary>Claude Code already shows my usage in <code>/usage</code> — why an app?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body">Same numbers, different surface. <code>/usage</code> and the statusline show your limits while you're looking at the terminal — which is when you least need the reminder. Tokease shows them in the menu bar while you're in your editor or a browser, sends an optional notification <em>before</em> you cross 80% or 95%, and keeps the last known value (flagged stale) after Claude Code is closed.</div>
+            <summary>Claude Code already shows my usage in <code>/usage</code>. Why an app?<span class="faq-plus" aria-hidden="true"></span></summary>
+            <div class="faq-body">Same numbers, different surface. <code>/usage</code> and the statusline show your limits while you're looking at the terminal, which is when you least need the reminder. Tokease shows them in the menu bar while you're in your editor or a browser, sends an optional notification <em>before</em> you cross 80% or 95%, and keeps the last known value (flagged stale) in between.</div>
         </details>
         <details class="faq">
             <summary>How is this different from CodexBar or ClaudeBar?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body">CodexBar and ClaudeBar read your Claude credentials from the macOS Keychain to query usage. Tokease deliberately doesn't touch your Keychain or your token — it only reads what Claude Code already publishes to its statusline. If staying clearly inside Anthropic's terms matters to you, that's the difference.</div>
+            <div class="faq-body">CodexBar and ClaudeBar read your Claude credentials from the macOS Keychain to query usage. Tokease deliberately doesn't touch your Keychain or your token. It only reads what official Claude apps already publish locally. If never handing your credentials to a third-party tool matters to you, that's the difference.</div>
         </details>
         <details class="faq">
             <summary>How is this different from ccusage?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body"><a href="https://github.com/ryoppippi/ccusage" rel="noopener">ccusage</a> parses your local Claude Code JSONL log files to estimate token spend — a great breakdown of what you already used. Tokease shows the complementary thing: the limit you have <em>left</em>. Your remaining 5-hour and weekly windows, live in the menu bar, straight from Claude Code's statusline feed.</div>
+            <div class="faq-body"><a href="https://github.com/ryoppippi/ccusage" rel="noopener">ccusage</a> parses your local Claude Code JSONL log files to estimate token spend, a great breakdown of what you already used. Tokease shows the complementary thing: the limit you have <em>left</em>. Your remaining 5-hour and weekly windows, live in the menu bar.</div>
         </details>
         <details class="faq">
             <summary>Does it work with Claude Desktop or Cowork?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body">No. The statusline feed is <strong style="color:var(--text)">CLI-only</strong>, so Claude Desktop and Cowork can't feed Tokease. Your limits are account-wide, so the percentages Tokease shows still reflect all your Claude usage — but Tokease only updates while the Claude Code CLI is running.</div>
+            <div class="faq-body"><strong style="color:var(--text)">Yes.</strong> If the Claude desktop app is running, Tokease reads the quota history it refreshes about every 5 minutes. Your limits are account-wide, so the rings cover everything you consume: claude.ai, Cowork, the VS Code extension and the CLI.</div>
+        </details>
+        <details class="faq">
+            <summary>I work in the VS Code extension. Does Tokease still update?<span class="faq-plus" aria-hidden="true"></span></summary>
+            <div class="faq-body">Yes, through the Claude desktop app. The VS Code extension panel never runs statusline scripts (<a href="https://github.com/anthropics/claude-code/issues/55643" rel="noopener">claude-code#55643</a>), so keep the desktop app open (or run <code>claude</code> in a terminal) and the rings stay fresh.</div>
         </details>
         <details class="faq">
             <summary>How fresh are the numbers?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body">The statusline feed only ticks while Claude Code is running. When Claude Code is closed, Tokease shows the last known value with a timestamp and flags it as stale after 15 minutes — so you never mistake an old percentage for a live one.</div>
+            <div class="faq-body">With the Claude desktop app running, the rings refresh about every 5 minutes. A Claude Code terminal session refreshes them too and adds reset countdowns. When neither runs, Tokease shows the last known value with a timestamp and flags it stale after 15 minutes, so you never mistake an old percentage for a live one.</div>
         </details>
         <details class="faq">
             <summary>How do I install it?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body">Run <code>brew install tpatrouillat/tap/tokease</code>, or clone the repo and run the install script. Then wire the one-line statusline capture script into Claude Code (full instructions are in the <a href="#install">Install section</a>).</div>
+            <div class="faq-body">Run <code>brew install tpatrouillat/tap/tokease</code>, or clone the repo and run the install script. If the Claude desktop app is running, you are done. Optionally wire the one-line statusline capture script into Claude Code for reset countdowns (see the <a href="#install">Install section</a>).</div>
         </details>
     </div>
 </section>
@@ -1005,23 +1014,23 @@
     <div class="section-header reveal">
         <div class="section-label">Install</div>
         <h2 class="section-title">Pick your path</h2>
-        <p class="section-sub">Both options are free. Requires macOS, Claude Code &ge; 2.1.x, and a Claude Pro or Max plan.</p>
+        <p class="section-sub">Both options are free. Requires macOS and a Claude Pro or Max plan.</p>
     </div>
     <div class="install-grid stagger" id="installGrid">
         <div class="install-card">
             <h3>Homebrew <span class="install-tag">Recommended</span></h3>
-            <p>One command. Installs a self-contained environment — no Apple Developer warnings.</p>
+            <p>One command. Installs a self-contained environment, with no Apple Developer warnings.</p>
             <div class="install-box">
                 <div class="install-lines">
                     <div><span class="prompt">$ </span><span class="cmd">brew install</span> <span class="arg">tpatrouillat/tap/tokease</span></div>
                 </div>
                 <button class="copy-btn" id="copyBtnBrew" type="button" aria-label="Copy the Homebrew install command to clipboard">Copy</button>
             </div>
-            <div class="install-meta">Then wire the statusline capture script into Claude Code — see the <a href="https://github.com/tpatrouillat/tokease/blob/main/statusline/README.md" rel="noopener">setup guide</a>.</div>
+            <div class="install-meta">Zero config if the Claude desktop app is running. Optional: wire the statusline capture script for reset countdowns, see the <a href="https://github.com/tpatrouillat/tokease/blob/main/statusline/README.md" rel="noopener">setup guide</a>.</div>
         </div>
         <div class="install-card">
             <h3>Build from source</h3>
-            <p>Audit every line. Clone, install, run — takes about 30 seconds.</p>
+            <p>Audit every line. Clone, install, run. About 30 seconds.</p>
             <div class="install-box">
                 <div class="install-lines">
                     <div><span class="prompt">$ </span><span class="cmd">git clone</span> <span class="arg">https://github.com/tpatrouillat/tokease.git</span></div>
@@ -1038,7 +1047,7 @@
 <section id="notify">
     <div class="notify-card reveal">
         <h3>Get a heads-up on new releases</h3>
-        <p>No email, no newsletter, no account to hand over — that would be off-brand for a tool that never reads your token. Watch the repo and GitHub tells you when a new version ships, or when a change to Claude Code's statusline feed means Tokease has to follow.</p>
+        <p>No email, no newsletter, no account to hand over. That would be off-brand for a tool that never reads your token. Watch the repo and GitHub tells you when a new version ships, or when a change in what Claude apps publish locally means Tokease has to follow.</p>
         <div class="notify-cta">
             <a href="https://github.com/tpatrouillat/tokease" class="btn btn-primary" rel="noopener">
                 <svg width="15" height="15" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 3C4.5 3 1.7 5.1 0 8c1.7 2.9 4.5 5 8 5s6.3-2.1 8-5c-1.7-2.9-4.5-5-8-5zm0 8.3A3.3 3.3 0 118 4.7a3.3 3.3 0 010 6.6zM8 6a2 2 0 100 4 2 2 0 000-4z"/></svg>
