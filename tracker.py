@@ -76,7 +76,7 @@ _ICON_SCALE = 4
 _ICON_SIZE = _ICON_SIZE_FINAL * _ICON_SCALE
 _RING_RADII = (20, 14)         # externe (5h), interne (hebdo) — à l'échelle finale
 _RING_STROKE = 3                # final-scale stroke width
-_TRACK_ALPHA = 180              # background ring opacity so 0% reads as an empty "container", not a ghost
+_TRACK_ALPHA = 76               # ~30% opacity (macOS secondary-track norm) — faint container, filled arc pops
 
 
 def _render_dynamic_icon(session_pct, weekly_pct):
@@ -98,11 +98,12 @@ def _render_dynamic_icon(session_pct, weekly_pct):
     stroke = _RING_STROKE * _ICON_SCALE
 
     for radius, pct in zip(_RING_RADII, (session_pct, weekly_pct)):
-        if pct is None:
-            continue  # fenêtre absente/réinitialisée depuis la capture
         r = radius * _ICON_SCALE
         bbox = (center - r, center - r, center + r, center + r)
+        # le rail est toujours dessiné : fenêtre absente/réinitialisée = anneau vide
         draw.ellipse(bbox, outline=(0, 0, 0, _TRACK_ALPHA), width=stroke)
+        if pct is None:
+            continue
         pct_clamped = max(0, min(100, int(pct)))
         if pct_clamped > 0:
             sweep = (pct_clamped / 100.0) * 360.0

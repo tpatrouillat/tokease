@@ -1035,9 +1035,14 @@ class TestRenderIcon(unittest.TestCase):
         self.assertEqual(size, (tracker._ICON_SIZE_FINAL, tracker._ICON_SIZE_FINAL))
 
     def test_renders_with_none_pcts(self):
-        # fenêtre absente/resetée (pct None) → anneaux vides, pas de crash
+        # fenêtre absente/resetée (pct None) → les DEUX rails restent visibles (anneaux vides)
         p = tracker._render_dynamic_icon(None, None)
         self.assertTrue(Path(p).exists())
+        center = tracker._ICON_SIZE_FINAL // 2
+        with tracker.Image.open(p) as im:
+            for radius in tracker._RING_RADII:
+                alpha = im.getpixel((center, center - radius))[3]
+                self.assertGreater(alpha, 0, f"rail absent au rayon {radius}")
 
     def test_renders_clamps_over_100(self):
         p = tracker._render_dynamic_icon(150, 999)
