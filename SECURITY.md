@@ -1,6 +1,7 @@
 # Security Policy
 
-Tokease reads local usage data that Claude Code writes to its statusline. It
+Tokease reads local usage data written by official Claude clients (the Claude
+Code statusline feed and the Claude desktop app's quota history file). It
 **never reads your OAuth token, never opens your Keychain, never makes a network
 call, and collects no telemetry** (see [`PRIVACY.md`](PRIVACY.md)). Security
 reports are still very welcome.
