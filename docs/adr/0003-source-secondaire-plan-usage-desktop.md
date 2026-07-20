@@ -68,6 +68,22 @@ fusionnée avec la statusline par fraîcheur :
 - **Multi-org** : le champ `org` doit être respecté si plusieurs orgs apparaissent
   (on prend l'échantillon le plus récent, org affichée non gérée en v1).
 
+**Conformité ToS (analyse vérifiée le 2026-07-20)**
+- Les Consumer Terms (8 oct. 2025) n'interdisent ni la lecture de fichiers
+  locaux créés par les apps Anthropic, ni rien d'analogue : la clause reverse
+  engineering vise la décompilation (« reduce our Services to human-readable
+  form » — un JSON en clair l'est déjà), les clauses automated access/scraping
+  visent l'accès aux **Services** (serveurs), pas au disque de l'utilisateur.
+- La clarification de février 2026 est scopée au **routage de requêtes vers les
+  serveurs d'Anthropic avec un token d'abonnement** (« route requests through
+  Free, Pro, or Max plan credentials ») — Tokease ne fait aucun appel réseau.
+- Précédent direct : ccusage & co. lisent les JSONL locaux non documentés de
+  Claude Code depuis mi-2025, à grande échelle, sans aucun enforcement connu —
+  y compris après la purge OAuth de janvier-février 2026.
+- Classification retenue : source statusline = autorisée (surface documentée) ;
+  source desktop = zone grise faible, aucune violation identifiable des termes
+  actuels. À re-vérifier si Anthropic fait évoluer ses Terms.
+
 **Alternatives écartées**
 - *Mode terminal de l'extension* (`"claudeCode.useTerminal": true`) : fonctionne
   mais impose un changement d'usage à l'utilisateur ; conservé comme conseil
