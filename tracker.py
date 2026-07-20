@@ -323,16 +323,21 @@ def _read_statusline_usage():
     return data, None
 
 
+def _is_number(value):
+    """int/float strict — exclut bool (JSON true/false passerait isinstance int)."""
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
+
+
 def _desktop_sample_to_data(sample):
     """Normalise un échantillon desktop {t: epoch ms, u: {fh, sd}} ; None si malformé."""
     if not isinstance(sample, dict):
         return None
     t, u = sample.get("t"), sample.get("u")
-    if not isinstance(t, (int, float)) or not isinstance(u, dict):
+    if not _is_number(t) or not isinstance(u, dict):
         return None
     data = {}
     for src, dst in (("fh", "five_hour"), ("sd", "seven_day")):
-        if isinstance(u.get(src), (int, float)):
+        if _is_number(u.get(src)):
             data[dst] = {"utilization": u[src], "resets_at": None}
     if not data:
         return None
@@ -371,30 +376,44 @@ def _captured_at(data):
         return 0.0
 
 
-def _merge_usage(statusline, desktop):
-    """Fusionne les deux sources : les % de la plus fraîche gagnent.
+def _merge_window(sl_win, desk_win, desk_at, sl_fresh, now):
+    """Fusionne UNE fenêtre : % desktop + resets_at statusline, honnêtement.
 
-    Quand le desktop est plus récent, on conserve quand même le resets_at de la
-    statusline s'il est encore dans le futur (le feed desktop ne fournit pas les
-    heures de reset) ; un resets_at déjà passé est abandonné pour que le % frais
-    s'affiche au lieu de « awaiting Claude Code ».
+    - resets_at statusline conservé seulement s'il est encore dans le futur ;
+    - reset passé APRÈS l'échantillon desktop → son % décrit l'ancienne fenêtre :
+      on rend la version statusline, que _window_row affiche « — (reset;
+      awaiting Claude Code) » plutôt qu'un vieux % plausible ;
+    - fenêtre absente du feed desktop → reprise statusline seulement si sa
+      capture n'est pas périmée (sinon de la vieille donnée s'afficherait sous
+      un « Updated » tout frais).
     """
-    if _captured_at(desktop) <= _captured_at(statusline):
-        return statusline
-    merged = {"_meta": desktop["_meta"]}
-    now = datetime.now(timezone.utc)
-    for key in ("five_hour", "seven_day"):
-        win = desktop.get(key)
-        if win is None:  # fenêtre absente du feed desktop → on garde la statusline
-            if statusline.get(key):
-                merged[key] = statusline[key]
-            continue
-        win = dict(win)
-        reset = (statusline.get(key) or {}).get("resets_at")
-        dt = _parse_iso(reset)
-        if dt is not None and dt > now:
+    if desk_win is None:
+        return sl_win if (sl_win and sl_fresh) else None
+    win = dict(desk_win)
+    reset = (sl_win or {}).get("resets_at")
+    dt = _parse_iso(reset)
+    if dt is not None:
+        if dt > now:
             win["resets_at"] = reset
-        merged[key] = win
+        elif desk_at <= dt.timestamp():
+            return sl_win  # échantillon antérieur au reset → ancienne fenêtre
+    return win
+
+
+def _merge_usage(statusline, desktop):
+    """Fusionne les deux sources : les % de la plus fraîche gagnent
+    (garde-fous d'honnêteté par fenêtre : cf. _merge_window)."""
+    sl_at = _captured_at(statusline)
+    desk_at = _captured_at(desktop)
+    if desk_at <= sl_at:
+        return statusline
+    now = datetime.now(timezone.utc)
+    sl_fresh = (now.timestamp() - sl_at) <= _STALE_AFTER_SECS
+    merged = {"_meta": desktop["_meta"]}
+    for key in ("five_hour", "seven_day"):
+        win = _merge_window(statusline.get(key), desktop.get(key), desk_at, sl_fresh, now)
+        if win is not None:
+            merged[key] = win
     return merged
 
 

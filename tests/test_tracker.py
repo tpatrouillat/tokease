@@ -940,16 +940,33 @@ class TestDesktopSource(TestStatuslineSource):
         self.assertEqual(data["seven_day"]["utilization"], 7)
         self.assertEqual(data["_meta"]["source"], "desktop")
 
-    def test_merge_fresher_desktop_drops_past_reset(self):
-        # Un resets_at déjà passé ne doit pas masquer le % frais du desktop.
+    def test_merge_desktop_sampled_after_reset_drops_past_reset(self):
+        # Reset passé mais échantillon desktop postérieur → son % décrit bien la
+        # fenêtre courante : affiché sans compte à rebours.
         self._write({
             "captured_at": 1000,
             "five_hour": {"used_percentage": 10, "resets_at": 2000},  # epoch 1970 → passé
         })
-        self._write_desktop({"version": 2, "samples": [self._sample(2000_000, fh=42)]})
+        self._write_desktop({"version": 2, "samples": [self._sample(3000_000, fh=42)]})
         data, _ = tracker.fetch_usage()
         self.assertEqual(data["five_hour"]["utilization"], 42)
         self.assertIsNone(data["five_hour"]["resets_at"])
+
+    def test_merge_desktop_sampled_before_reset_defers_to_statusline(self):
+        # Échantillon desktop antérieur au reset → son % décrit l'ANCIENNE
+        # fenêtre : on rend la version statusline (que l'affichage marque
+        # « reset; awaiting ») plutôt qu'un vieux % plausible.
+        now = datetime.now(timezone.utc).timestamp()
+        self._write({
+            "captured_at": int(now - 600),
+            "five_hour": {"used_percentage": 80, "resets_at": int(now - 30)},
+        })
+        self._write_desktop({"version": 2,
+                             "samples": [self._sample(int((now - 120) * 1000), fh=80)]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 80)
+        # resets_at (passé) conservé → _window_row rendra l'état « reset »
+        self.assertIsNotNone(data["five_hour"]["resets_at"])
 
     def test_merge_fresher_statusline_wins(self):
         self._write({
@@ -961,15 +978,40 @@ class TestDesktopSource(TestStatuslineSource):
         self.assertEqual(data["five_hour"]["utilization"], 10)
         self.assertEqual(data["_meta"]["source"], "statusline")
 
-    def test_merge_window_missing_from_desktop_kept_from_statusline(self):
+    def test_merge_window_missing_from_desktop_kept_if_statusline_fresh(self):
+        now = datetime.now(timezone.utc).timestamp()
         self._write({
-            "captured_at": 1000,
+            "captured_at": int(now - 300),  # frais (< _STALE_AFTER_SECS)
             "seven_day": {"used_percentage": 55, "resets_at": None},
         })
-        self._write_desktop({"version": 2, "samples": [self._sample(2000_000, fh=42)]})
+        self._write_desktop({"version": 2,
+                             "samples": [self._sample(int((now - 60) * 1000), fh=42)]})
         data, _ = tracker.fetch_usage()
         self.assertEqual(data["five_hour"]["utilization"], 42)
         self.assertEqual(data["seven_day"]["utilization"], 55)
+
+    def test_merge_window_missing_from_desktop_dropped_if_statusline_stale(self):
+        # Une fenêtre statusline périmée ne doit pas s'afficher sous le
+        # « Updated » tout frais du desktop.
+        now = datetime.now(timezone.utc).timestamp()
+        self._write({
+            "captured_at": int(now - 3600),  # périmé (> _STALE_AFTER_SECS)
+            "seven_day": {"used_percentage": 55, "resets_at": None},
+        })
+        self._write_desktop({"version": 2,
+                             "samples": [self._sample(int((now - 60) * 1000), fh=42)]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 42)
+        self.assertNotIn("seven_day", data)
+
+    def test_desktop_sample_rejects_json_booleans(self):
+        # bool est un sous-type d'int : true/false ne doivent pas passer pour
+        # des nombres (contrat « toute anomalie → rejet »).
+        self.assertIsNone(tracker._desktop_sample_to_data({"t": True, "u": {"fh": 5}}))
+        self.assertIsNone(tracker._desktop_sample_to_data({"t": 1000, "u": {"fh": True}}))
+        partial = tracker._desktop_sample_to_data({"t": 1000, "u": {"fh": True, "sd": 7}})
+        self.assertNotIn("five_hour", partial)
+        self.assertEqual(partial["seven_day"]["utilization"], 7)
 
     def test_freshness_label_names_desktop_source(self):
         now = datetime.now(timezone.utc)
