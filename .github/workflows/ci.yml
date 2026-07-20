@@ -6,7 +6,7 @@ on:
   push:
     branches: [main]
 
-# Annule le run précédent si tu repushes vite sur la même branche (économise des minutes)
+# Cancel the previous run when you push again quickly on the same branch (saves minutes)
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
@@ -22,14 +22,14 @@ jobs:
           python-version: "3.13"
       - run: pip install ruff
       - run: ruff check .
-      # Décommente ce gate APRÈS avoir lancé `ruff format .` une fois (voir explications)
+      # Uncomment this gate AFTER running `ruff format .` once
       # - run: ruff format --check .
 
   test:
     name: Test (py ${{ matrix.python-version }})
     runs-on: ubuntu-latest
     strategy:
-      fail-fast: false           # un échec sur une version ne coupe pas les autres
+      fail-fast: false           # one failing version does not cancel the others
       matrix:
         python-version: ["3.10", "3.11", "3.12", "3.13"]
     steps:
@@ -37,5 +37,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: pip install pytest Pillow   # rumps est mocké dans les tests, inutile de l'installer
+      - run: pip install pytest Pillow   # rumps is mocked in the tests, no need to install it
       - run: python -m pytest -q
