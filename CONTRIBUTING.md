@@ -1,7 +1,7 @@
 # Contributing to Tokease
 
 Thanks for considering a contribution. Tokease is intentionally small — a menu
-bar app that reads Claude Code's statusline feed, token-free. Please keep changes
+bar app that reads local usage files written by official Claude clients, token-free. Please keep changes
 minimal and in that spirit.
 
 ## Dev setup
