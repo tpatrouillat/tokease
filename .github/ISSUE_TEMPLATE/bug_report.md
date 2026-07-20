@@ -11,8 +11,10 @@ assignees: ''
 
 **Environment**
 - macOS version (`sw_vers`):
-- Claude Code version (`claude --version`):  <!-- needs ≥ 2.1.x -->
 - Claude plan: Pro / Max  <!-- Free, Team, Enterprise are not supported -->
+- Claude desktop app running? yes / no
+- Claude Code version (`claude --version`), if you use the statusline:  <!-- needs ≥ 2.1.x -->
+- Data source shown in the dropdown ("Updated: … via Claude app / via Claude Code"):
 - Install method: Homebrew / from source
 - Tokease version:
 

@@ -114,9 +114,9 @@ def main() -> None:
 
     draw.text((text_x, text_y), "Tokease", fill=(0, 0, 0), font=font_large)
     # Two lines to fit in 1200px without truncation, keeping the wedge.
-    draw.text((text_x, text_y + 90), "Your Claude Code 5h & weekly limits, in the menu bar.",
+    draw.text((text_x, text_y + 90), "Your Claude 5h & weekly limits, in the menu bar.",
               fill=(100, 100, 100), font=font_small)
-    draw.text((text_x, text_y + 122), "No token read — conformant by construction.",
+    draw.text((text_x, text_y + 122), "No token read. Conformant by construction.",
               fill=(100, 100, 100), font=font_small)
 
     out = assets_dir / "logo-social-preview.png"

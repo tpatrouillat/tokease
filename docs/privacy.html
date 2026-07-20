@@ -84,7 +84,7 @@
 
         <h2>What it reads</h2>
         <ul>
-            <li><code>~/.tokease/usage.json</code> — the <code>rate_limits</code> windows (<code>five_hour</code>, <code>seven_day</code>: used percentage + reset time) that the Tokease statusline capture script writes from the data <strong>Claude Code hands to its statusline</strong>.</li>
+            <li><code>~/.tokease/usage.json</code> &mdash; the <code>rate_limits</code> windows (<code>five_hour</code>, <code>seven_day</code>: used percentage + reset time) that the Tokease statusline capture script writes from the data <strong>Claude Code hands to its statusline</strong>.</li>
             <li><code>~/Library/Application Support/Claude/plan-usage-history.json</code> &mdash; the quota samples the <strong>official Claude desktop app</strong> writes locally for its own use (read-only; Tokease never writes to or modifies anything under the Claude app's folder).</li>
         </ul>
 
@@ -103,9 +103,9 @@
         </ul>
 
         <h2>Removing everything</h2>
-        <p>Run <code>uninstall.sh</code> (or <code>brew uninstall tokease</code>), which deletes <code>~/.tokease/</code> and the statusline wiring.</p>
+        <p>Run <code>uninstall.sh</code>: it deletes <code>~/.tokease/</code>, the LaunchAgent, and the Tokease <code>statusLine</code> block (with a backup). Homebrew users: run it first (<code>bash "$(brew --prefix)/opt/tokease/libexec/uninstall.sh"</code>), then <code>brew uninstall tokease</code>. <code>brew uninstall</code> alone removes the app but leaves <code>~/.tokease/</code> and the statusline wiring in place. UI preferences stay in macOS user defaults, see <a href="https://github.com/tpatrouillat/tokease/blob/main/PRIVACY.md" rel="noopener">PRIVACY.md</a> for the exact cleanup commands.</p>
 
-        <p>You don't have to take our word for it: Tokease is a short, MIT-licensed Python file — <a href="https://github.com/tpatrouillat/tokease/blob/main/tracker.py" rel="noopener">read <code>tracker.py</code> on GitHub</a> and verify it yourself.</p>
+        <p>You don't have to take our word for it: Tokease is a short, MIT-licensed Python file: <a href="https://github.com/tpatrouillat/tokease/blob/main/tracker.py" rel="noopener">read <code>tracker.py</code> on GitHub</a> and verify it yourself.</p>
 
         <p class="updated">Not affiliated with Anthropic. &middot; Last updated 2026-07-06 &middot; <a href="terms.html">Terms of Use</a></p>
     </div>

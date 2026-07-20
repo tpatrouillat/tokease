@@ -1,9 +1,10 @@
 # Tokease — Claude Code statusline setup
 
-Tokease's default (authorized) mode reads usage that **Claude Code itself**
-hands to its statusline script — no OAuth token, no API call. This guide wires
-that up. Requires **Claude Code ≥ 2.1.x** and a **Pro/Max** plan (the
-`rate_limits` fields only appear for subscribers).
+This wires up Tokease's optional Claude Code source: the usage data
+**Claude Code itself** hands to its statusline script. No OAuth token, no API
+call. It is the only feed that adds reset countdowns (the zero-config Claude
+desktop source provides percentages only). Requires **Claude Code ≥ 2.1.x**
+and a **Pro/Max** plan (the `rate_limits` fields only appear for subscribers).
 
 See [`../docs/adr/0001-pivot-source-statusline.md`](../docs/adr/0001-pivot-source-statusline.md)
 for the why.
@@ -70,9 +71,10 @@ printing anything, so it doesn't interfere with your statusline's output.
 
 ## Troubleshooting
 
-- Menu bar shows **⚙** (with a 3-step setup guide in the dropdown) → the file
-  `~/.tokease/usage.json` doesn't exist yet. Finish steps 1–2, then send a
-  message in Claude Code.
+- Menu bar shows **⚙** (with a setup guide in the dropdown) → no source is
+  available at all: the Claude desktop app isn't running (or doesn't write its
+  quota history) AND `~/.tokease/usage.json` doesn't exist yet. Open the
+  desktop app, or finish steps 1–2 and send a message in Claude Code.
 - Menu bar shows **"Waiting for Claude Code activity…"** → wired correctly, but
   no `rate_limits` captured yet. Send a message in Claude Code.
 - Errors are logged to `~/.tokease/statusline.err`.

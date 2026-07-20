@@ -1,25 +1,28 @@
 # Changelog
 
-## v1.0.0 — Token-free, statusline-only
+## v1.0.0 — Token-free: two local read-only sources
 
 ### Breaking
 
 - **Removed the legacy endpoint mode entirely.** v1.0 no longer reads the OAuth token from the Keychain and no longer calls Anthropic's usage endpoint. The full endpoint implementation is preserved at the git tag `v0.9.0-endpoint` for reference.
 
-### The only data source is now the Claude Code statusline
+### Data sources
 
-- Tokease reads the `rate_limits` data Claude Code itself publishes to its statusline (a documented field), written locally to `~/.tokease/usage.json` by the capture script.
-- **Reads no token, makes no API call of its own** — compliant with Anthropic's Terms by construction (other trackers read the Keychain; Tokease never does).
+- **Claude Desktop quota history (zero config).** Reads the local `plan-usage-history.json` the desktop app refreshes about every 5 minutes. Covers every surface (claude.ai, Cowork, VS Code extension, CLI). Defensive parsing pinned to the observed `version: 2`, with the statusline feed as fallback.
+- **Claude Code statusline (adds reset countdowns).** A capture script writes the documented `rate_limits` fields to `~/.tokease/usage.json`. This is the only feed with reset times.
+- The freshest source wins, with per-window honesty guards: a pre-reset desktop sample never masquerades as the current window, and stale windows are never shown under a fresh "Updated" line.
+- **Reads no token, makes no API call of its own.** Compliant by construction (other trackers read the Keychain, Tokease never does).
 
 ### UI
 
-- **Two rings** — 5-hour session (outer) + weekly (inner), with reset countdowns. Amber at 80%, red at 95%.
+- **Two rings**: 5-hour session (outer) and weekly (inner), with reset countdowns. Notification alerts at 80% and 95% (on by default, toggleable in Settings).
+- New display option: show both percentages in the menu bar title (`5h / weekly`), off by default.
+- Provenance in the dropdown ("via Claude app" / "via Claude Code") and a *stale* flag after 15 minutes without a refresh. Reset windows that already rolled over are detected.
 - Removed the Sonnet/Opus per-model split and the paid-overage line (those were endpoint-only data).
-- **Honest freshness** — flags data *stale* when Claude Code isn't running, and detects reset windows that have already rolled over.
 
 ### Requirements
 
-- Claude Code ≥ 2.1.x (statusline `rate_limits`), Claude Pro or Max (Free / Team / Enterprise not supported).
+- Claude Pro or Max (Free / Team / Enterprise not supported). Claude Desktop running and/or Claude Code ≥ 2.1.x with the statusline wired.
 
 ### Notes
 

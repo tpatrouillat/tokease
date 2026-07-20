@@ -7,9 +7,10 @@
 #   2. Optionally creates a macOS LaunchAgent for auto-start at login
 #   3. Optionally launches the app immediately
 #
-# No API keys, no token, no network call — the tracker reads only the usage
-# that Claude Code's statusline feed writes to ~/.tokease/usage.json.
-# Wire that up first with: bash statusline/install-statusline.sh
+# No API keys, no token, no network call. The tracker reads only local usage
+# files official Claude apps write: the Claude desktop app's quota history
+# (zero config) and, optionally, ~/.tokease/usage.json fed by Claude Code's
+# statusline (wire with: bash statusline/install-statusline.sh).
 #
 
 set -euo pipefail
@@ -50,8 +51,10 @@ chmod +x "$SCRIPT_DIR/tracker.py"
 
 # --- Prerequisite reminder --------------------------------------------------
 echo ""
-echo "Prerequisite: Claude Code (>= 2.1.x, Pro/Max) with the Tokease statusline."
-echo "If you haven't yet, run:  bash \"$SCRIPT_DIR/statusline/install-statusline.sh\""
+echo "Prerequisite: a Claude Pro or Max plan."
+echo "Zero config: keep the Claude desktop app running."
+echo "Optional (reset countdowns): wire the Claude Code (>= 2.1.x) statusline with"
+echo "  bash \"$SCRIPT_DIR/statusline/install-statusline.sh\""
 echo ""
 
 # --- LaunchAgent (auto-start) -----------------------------------------------
