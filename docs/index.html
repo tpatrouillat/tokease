@@ -3,9 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tokease: your Claude 5h &amp; weekly limits in the menu bar</title>
-    <meta name="description" content="Free, open-source macOS menu bar app that shows your Claude 5-hour and weekly limits as two Activity rings. Zero config with the Claude desktop app, plus a statusline capture for Claude Code. No token read, no hidden API call. No account, no telemetry, 100% local.">
-    <meta name="keywords" content="Claude Code usage, Claude Code limits, Claude Code menu bar, Claude Code statusline, Claude usage tracker, Claude Pro limits, Claude Max limits, macOS menu bar app, Claude 5-hour limit, Claude weekly limit">
+    <title>Tokease: Claude usage limit tracker for the Mac menu bar</title>
+    <meta name="description" content="Free open-source Mac menu bar app showing your remaining Claude 5-hour and weekly limits as two rings. No token read, no API call. Install with Homebrew.">
     <meta name="theme-color" content="#09090b">
     <meta name="robots" content="index, follow">
     <meta name="author" content="Thibault Patrouillat">
@@ -18,8 +17,8 @@
 
     <!-- Open Graph -->
     <meta property="og:type" content="website">
-    <meta property="og:title" content="Tokease: your Claude 5h &amp; weekly limits in the menu bar">
-    <meta property="og:description" content="Free, open-source macOS menu bar app for Claude Pro and Max users. Two Activity rings show your 5-hour and weekly limits, read from files official Claude apps already publish on your Mac. No token read, no account, runs 100% locally.">
+    <meta property="og:title" content="Tokease: Claude usage limit tracker for the Mac menu bar">
+    <meta property="og:description" content="Free open-source Mac menu bar app showing your remaining Claude 5-hour and weekly limits as two rings. Zero config, no token read, no API call. Install with Homebrew.">
     <meta property="og:image" content="https://tpatrouillat.github.io/tokease/og-image.png">
     <meta property="og:image:alt" content="Tokease: two concentric Activity rings alongside the product name">
     <meta property="og:url" content="https://tpatrouillat.github.io/tokease/">
@@ -27,8 +26,8 @@
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Tokease: your Claude 5h &amp; weekly limits in the menu bar">
-    <meta name="twitter:description" content="Free, open-source macOS menu bar app with a 2-ring Activity Display for Claude Pro and Max users. Zero config, reads only local files official Claude apps publish. No token read, no hidden API call.">
+    <meta name="twitter:title" content="Tokease: Claude usage limit tracker for the Mac menu bar">
+    <meta name="twitter:description" content="Free open-source Mac menu bar app showing your remaining Claude 5-hour and weekly limits as two rings. Zero config, no token read, no API call.">
     <meta name="twitter:image" content="https://tpatrouillat.github.io/tokease/og-image.png">
     <meta name="twitter:image:alt" content="Tokease: two concentric Activity rings alongside the product name">
 
@@ -43,6 +42,9 @@
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
         "license": "https://opensource.org/licenses/MIT",
         "softwareVersion": "1.0.0",
+        "softwareRequirements": "macOS, Claude Pro or Max subscription",
+        "screenshot": "https://tpatrouillat.github.io/tokease/screenshot.png",
+        "featureList": "5-hour and weekly usage rings, reset countdowns, alerts at 80% and 95%, launch at login, no token read, 100% local",
         "downloadUrl": "https://github.com/tpatrouillat/tokease",
         "url": "https://tpatrouillat.github.io/tokease/",
         "description": "A lightweight macOS menu bar app with a 2-ring Activity Display that shows your Claude 5-hour and weekly limits, read from files official Claude apps publish locally. No token read, no hidden API call.",
@@ -61,6 +63,11 @@
                 "@type": "Question",
                 "name": "Is Tokease free?",
                 "acceptedAnswer": { "@type": "Answer", "text": "Yes. Tokease is completely free and open source under the MIT license. There is no paid tier, no trial, and no account to create." }
+            },
+            {
+                "@type": "Question",
+                "name": "Is it safe to use a Claude usage tracker?",
+                "acceptedAnswer": { "@type": "Answer", "text": "It depends on what the tracker reads. Trackers that read your OAuth token from the Keychain act as you against Anthropic's API, which can put your account at risk. Tokease never reads your token. It only reads local files official Claude apps already write on your Mac, and you can verify that yourself in the code." }
             },
             {
                 "@type": "Question",
@@ -855,14 +862,14 @@
 <section id="showcase">
     <div class="section-header reveal">
         <div class="section-label">See it in action</div>
-        <h2 class="section-title">The limit you have left, one glance away</h2>
+        <h2 class="section-title">Your remaining 5-hour and weekly limits, one glance away</h2>
         <p class="section-sub">Two rings fill as you spend your 5-hour and weekly windows, and a notification (on by default, toggleable) alerts you at 80% and again at 95%. You see the wall coming before you hit it.</p>
     </div>
     <div class="reveal">
         <figure class="showcase-frame" id="showcaseFrame">
             <div class="showcase-glow" aria-hidden="true"></div>
             <div class="showcase-inner">
-                <img id="showcaseImg" src="screenshot.png" alt="Tokease menu bar dropdown on macOS showing the Claude Code 5-hour limit at 77% and weekly limit at 35% with reset times" loading="lazy" width="1480" height="660">
+                <picture><source srcset="screenshot.webp" type="image/webp"><img id="showcaseImg" src="screenshot.png" alt="Tokease menu bar dropdown on macOS showing the Claude 5-hour limit at 77% and weekly limit at 35% with reset times" loading="lazy" width="1480" height="660"></picture>
             </div>
         </figure>
         <figcaption class="showcase-cap">Your 5-hour and weekly limits, one click away in the menu bar.</figcaption>
@@ -965,6 +972,10 @@
         <details class="faq">
             <summary>Is Tokease free?<span class="faq-plus" aria-hidden="true"></span></summary>
             <div class="faq-body">Yes. Completely free and open source under the MIT license. There is no paid tier, no trial, and no account to create.</div>
+        </details>
+        <details class="faq">
+            <summary>Is it safe to use a Claude usage tracker?<span class="faq-plus" aria-hidden="true"></span></summary>
+            <div class="faq-body">It depends on what the tracker reads. Trackers that read your OAuth token from the Keychain act as you against Anthropic's API, which can put your account at risk. Tokease never reads your token. It only reads local files official Claude apps already write on your Mac, and you can verify that yourself: <a href="privacy.html">exactly what it reads</a>, or <a href="https://github.com/tpatrouillat/tokease/blob/main/tracker.py" rel="noopener">the code itself</a>.</div>
         </details>
         <details class="faq">
             <summary>Does Tokease read my Claude token or call any hidden API?<span class="faq-plus" aria-hidden="true"></span></summary>
