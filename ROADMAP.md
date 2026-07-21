@@ -40,6 +40,7 @@ Pick **one** of the following based on what the comments actually ask for. Not b
 No v1.1 work. v1.0.1 polish only — bug fixes, UX hardening, more tests around edge cases users report.
 
 **Tracked polish ideas:**
+- **Signed and notarized `.app` (double-click install)** — the py2app build already works (`build.sh` produces `Tokease.app`). What's missing is the Apple Developer Program (~99 USD/year) for codesigning and notarization. Without it, a downloaded `.app` hits Gatekeeper's "can't be opened" dialog, which is a worse first impression than the one-line brew install. Worth the yearly fee if launch traction justifies it.
 - **Ring clear-out animation** — when a 5-hour or weekly limit resets, briefly animate the affected ring from its previous fill back to empty (4–5 frames over ~400ms, driven by `rumps.Timer`). Pure cosmetic, but it makes resets feel earned.
 - **Enterprise / Team plan support** — credit-based billing instead of 5-hour/weekly windows, so the 2-ring UI doesn't map. Blocked on whether Claude Code's statusline ever exposes a credit-style signal for these plans; until then, Pro/Max only (the README says so).
 
