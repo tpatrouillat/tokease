@@ -52,6 +52,17 @@ try:
 except ImportError:
     _DEFAULTS = None
 
+# Menu bar app = no Dock icon. The py2app bundle sets LSUIElement in its
+# Info.plist, but source and Homebrew installs run under plain Python, whose
+# bundle doesn't — without this, a "Python" icon appears in the Dock.
+try:
+    from Foundation import NSBundle
+    _bundle_info = NSBundle.mainBundle().infoDictionary()
+    if _bundle_info is not None and not _bundle_info.get("LSUIElement"):
+        _bundle_info["LSUIElement"] = "1"
+except Exception as _exc:  # PyObjC absent (CI) or odd bundle: never block startup
+    print(f"tokease: dock-icon suppression unavailable: {_exc!r}", file=sys.stderr)
+
 def _resolve_icon_path():
     """Menu bar icon path, either from source (assets/ next to the script)
     OR from the frozen py2app bundle: py2app puts DATA_FILES under Resources/
