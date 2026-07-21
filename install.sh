@@ -29,6 +29,14 @@ echo ""
 # --- Python check -----------------------------------------------------------
 if ! command -v python3 &>/dev/null; then
     echo "Error: Python 3 is required but not installed." >&2
+    echo "Easiest fix: brew install tpatrouillat/tap/tokease (ships its own Python)." >&2
+    exit 1
+fi
+# macOS system python3 (Command Line Tools) can be 3.9, below our 3.10 minimum.
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+    echo "Error: Python 3.10+ required, found $(python3 --version 2>&1)." >&2
+    echo "Install a recent Python (brew install python) or use the Homebrew" >&2
+    echo "package instead, which ships its own: brew install tpatrouillat/tap/tokease" >&2
     exit 1
 fi
 echo "Found $(python3 --version)"

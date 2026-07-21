@@ -35,7 +35,7 @@ Three things it does:
 ## Prerequisites
 
 - **macOS** (menu bar app using `rumps`)
-- **Python 3.10+**
+- **Python 3.10+** (Homebrew installs bring their own, this only matters for source installs. Note: Apple's built-in python3 can be 3.9, which is too old)
 - **Claude Desktop** running (zero-config source), and/or **Claude Code ≥ 2.1.x** with the statusline wired up (adds reset countdowns)
 - **Claude Pro or Max** subscription. The quota feeds only exist for these plans: Claude **Free** doesn't expose them, and **Team/Enterprise** use credit-based billing, so the rings don't map and it isn't supported.
 
