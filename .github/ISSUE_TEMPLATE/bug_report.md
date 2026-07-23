@@ -24,7 +24,7 @@ assignees: ''
 
 ```
 
-**`~/.tokease/statusline.err`** (last few lines, if it exists)
+**`~/.tokease/statusline.err`** (last few lines, if it exists; redact paths, account details, and other sensitive data)
 
 ```text
 
