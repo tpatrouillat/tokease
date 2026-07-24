@@ -111,6 +111,15 @@ The percentages are **account-level**: they cover everything on your subscriptio
 
 Stale data is always visibly flagged, and reset windows that have already rolled over are detected. An old percentage is never shown as if it were fresh.
 
+### Who sees the reset countdowns
+
+Only the statusline feed carries reset times. The desktop history file has percentages but no reset timestamps, so the two profiles differ:
+
+- **Power users (any `claude` terminal use, even occasional).** Every message in an interactive CLI session captures both reset times. The weekly countdown then stays displayed until that reset passes (up to 7 days). The 5-hour countdown only lives as long as its window, so it needs a capture within the current 5 hours to show up.
+- **Desktop-only users.** Rings and percentages stay current, but the menu shows `resets --`. That is expected, not a bug. One message from any `claude` terminal session (the VS Code *integrated terminal* counts) brings both countdowns back.
+
+When a reset time has passed, Tokease shows `--` rather than guessing the next one. The weekly cycle could be extrapolated, but the 5-hour window anchors on your first message after the previous reset, and showing a made-up time would break the honesty rule above.
+
 Two caveats on the desktop history file. Its format is internal to the Claude app and undocumented, so a future update could change it. Tokease parses it defensively (any anomaly falls back to the statusline feed) and pins its expectations to the observed `version: 2`. And older Claude Desktop builds may not write this file at all: if `plan-usage-history.json` doesn't exist on your machine, update the desktop app or wire the statusline.
 
 Upstream feature requests that would make this cleaner (Tokease benefits automatically if any of them ships):
