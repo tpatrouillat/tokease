@@ -1,10 +1,14 @@
 name: CI
 
-# Quand lancer la CI : sur chaque Pull Request, et sur chaque push vers main
+# When to run: on every Pull Request, and on every push to main
 on:
   pull_request:
   push:
     branches: [main]
+
+# The CI only reads the repo; keep the GITHUB_TOKEN read-only
+permissions:
+  contents: read
 
 # Cancel the previous run when you push again quickly on the same branch (saves minutes)
 concurrency:

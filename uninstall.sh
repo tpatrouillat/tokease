@@ -29,8 +29,10 @@ if [ -f "$LAUNCH_AGENT_PLIST" ]; then
   echo "✓ LaunchAgent removed"
 fi
 # Scoped to THIS directory's tracker.py (= the path the LaunchAgent runs),
-# so we don't kill an unrelated tracker.py running elsewhere.
-pkill -f "$SELF_DIR/tracker.py" 2>/dev/null || true
+# so we don't kill an unrelated tracker.py running elsewhere. pkill -f matches
+# an extended regex, so escape the path's metacharacters first.
+SELF_DIR_RE=$(printf '%s' "$SELF_DIR/tracker.py" | sed 's/[.[\$()*+?{|^]/\\&/g')
+pkill -f "$SELF_DIR_RE" 2>/dev/null || true
 
 # 2. statusLine block in settings.json — only if it is ours
 if [ -f "$SETTINGS" ] && grep -q "$STATUSLINE_MARK" "$SETTINGS" 2>/dev/null; then
