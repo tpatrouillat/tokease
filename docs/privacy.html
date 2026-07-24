@@ -13,12 +13,14 @@
     <meta property="og:title" content="Privacy — Tokease">
     <meta property="og:description" content="Tokease is local-only and collects nothing. Exactly what it reads, never does, and stores. No token, no Keychain, no network, no telemetry.">
     <meta property="og:image" content="https://tpatrouillat.github.io/tokease/og-image.png">
+    <meta property="og:image:alt" content="Tokease: two concentric Activity rings alongside the product name">
     <meta property="og:url" content="https://tpatrouillat.github.io/tokease/privacy.html">
     <meta property="og:site_name" content="Tokease">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Privacy — Tokease">
     <meta name="twitter:description" content="Tokease is local-only and collects nothing. No token, no Keychain, no network, no telemetry.">
     <meta name="twitter:image" content="https://tpatrouillat.github.io/tokease/og-image.png">
+    <meta name="twitter:image:alt" content="Tokease: two concentric Activity rings alongside the product name">
     <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
     <style>
@@ -98,12 +100,14 @@
 
         <h2>What it stores</h2>
         <ul>
-            <li>App preferences (display mode, refresh interval, alert toggle) in the standard macOS <code>NSUserDefaults</code> for the app.</li>
+            <li>App preferences (display mode, weekly percentage toggle, refresh interval, alert toggle) in the standard macOS <code>NSUserDefaults</code> for the app.</li>
             <li>The captured usage windows in <code>~/.tokease/usage.json</code>, the rendered menu-bar icon in <code>~/.tokease/tokease-icon.png</code>, and a best-effort error log in <code>~/.tokease/statusline.err</code>.</li>
+            <li>If you enable auto-start: a LaunchAgent at <code>~/Library/LaunchAgents/com.tpatrouillat.tokease.plist</code>.</li>
+            <li>If you wire the optional statusline: a <code>statusLine</code> block in <code>~/.claude/settings.json</code>, with a timestamped backup (<code>settings.json.bak.*</code>) of your previous file made before any change.</li>
         </ul>
 
         <h2>Removing everything</h2>
-        <p>Run <code>uninstall.sh</code>: it deletes <code>~/.tokease/</code>, the LaunchAgent, and the Tokease <code>statusLine</code> block (with a backup). Homebrew users: run it first (<code>bash "$(brew --prefix)/opt/tokease/libexec/uninstall.sh"</code>), then <code>brew uninstall tokease</code>. <code>brew uninstall</code> alone removes the app but leaves <code>~/.tokease/</code> and the statusline wiring in place. UI preferences stay in macOS user defaults, see <a href="https://github.com/tpatrouillat/tokease/blob/main/PRIVACY.md" rel="noopener">PRIVACY.md</a> for the exact cleanup commands.</p>
+        <p>Run <code>uninstall.sh</code>: it deletes <code>~/.tokease/</code>, the LaunchAgent, and the Tokease <code>statusLine</code> block (with a backup). Homebrew users: run it first (<code>bash "$(brew --prefix)/opt/tokease/libexec/uninstall.sh"</code>), then <code>brew uninstall tokease</code>. <code>brew uninstall</code> alone removes the app but leaves <code>~/.tokease/</code> and the statusline wiring in place. UI preferences stay in macOS user defaults, and the <code>settings.json.bak.*</code> backups are deliberately kept as a safety net, see <a href="https://github.com/tpatrouillat/tokease/blob/main/PRIVACY.md" rel="noopener">PRIVACY.md</a> for the exact cleanup commands.</p>
 
         <p>You don't have to take our word for it: Tokease is a short, MIT-licensed Python file: <a href="https://github.com/tpatrouillat/tokease/blob/main/tracker.py" rel="noopener">read <code>tracker.py</code> on GitHub</a> and verify it yourself.</p>
 
