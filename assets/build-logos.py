@@ -91,7 +91,8 @@ def main() -> None:
         print(f"  ✓ {out.name}")
 
     print("\n📍 Generating social preview (1200x630)...")
-    social = Image.new("RGB", (1200, 630), (255, 255, 255))
+    # Dark background matching the landing (--bg: #09090b)
+    social = Image.new("RGB", (1200, 630), (9, 9, 11))
 
     rings = render_rings(250, fill_pcts=DEMO_USAGE)
     rings_x = 100
@@ -107,14 +108,14 @@ def main() -> None:
         font_small = ImageFont.load_default()
 
     text_x = 450
-    text_y = 150
+    text_y = 220
 
-    draw.text((text_x, text_y), "Tokease", fill=(0, 0, 0), font=font_large)
+    draw.text((text_x, text_y), "Tokease", fill=(250, 250, 250), font=font_large)
     # Two lines to fit in 1200px without truncation, keeping the wedge.
     draw.text((text_x, text_y + 90), "Your Claude 5h & weekly limits, in the menu bar.",
-              fill=(100, 100, 100), font=font_small)
-    draw.text((text_x, text_y + 122), "No token read. Conformant by construction.",
-              fill=(100, 100, 100), font=font_small)
+              fill=(161, 161, 170), font=font_small)
+    draw.text((text_x, text_y + 122), "No token read. Token-free by construction.",
+              fill=(161, 161, 170), font=font_small)
 
     out = assets_dir / "logo-social-preview.png"
     social.save(out)
