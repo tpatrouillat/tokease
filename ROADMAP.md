@@ -21,11 +21,11 @@ A single-file macOS menu bar app that shows your 5-hour / weekly remaining capac
 
 ## v1.1 — candidates
 
-These are real possibilities, not promises. Which one (if any) gets built depends on launch-week signal.
+These are real possibilities, not promises. Which one (if any) gets built depends on adoption and on what launch feedback actually asks for.
 
-### Trigger: >500 GitHub stars in the first week
+### If there's strong pull for more
 
-Pick **one** of the following based on what the comments actually ask for. Not both. Not all three.
+Pick **one** of the following based on what issues and comments actually ask for. Not both. Not all three.
 
 1. **iPhone companion app (native Swift)** — read-only view backed by a small local sync helper on the Mac. Nothing sensitive leaves the Mac; the phone pulls the same `usage.json` from a local HTTP server on the LAN. Estimated 4–6 weeks.
 2. **Second-tool support (most likely: Cursor or Lovable)** — only if that tool's vendor exposes a stable, authorized way to read remaining limits, or the community surfaces one with a known cadence. Estimated 1–2 weeks per tool.
@@ -35,7 +35,7 @@ Pick **one** of the following based on what the comments actually ask for. Not b
 
 6. **API-billing mode (Console/API-key users)** — a different product shape: API accounts have no 5-hour/weekly subscription windows, they have spend and RPM/TPM limits. The authorized path is Anthropic's documented Admin Usage & Cost API, but it needs an admin API key and network calls, which breaks the zero-network invariant. If ever built, it ships as a clearly separated opt-in mode behind its own ADR and privacy note. Post-launch evaluation only.
 
-### Trigger: 200–500 stars in the first week
+### If interest is steady but modest
 
 No v1.1 work. v1.0.1 polish only — bug fixes, UX hardening, more tests around edge cases users report.
 
@@ -44,13 +44,13 @@ No v1.1 work. v1.0.1 polish only — bug fixes, UX hardening, more tests around 
 - **Ring clear-out animation** — when a 5-hour or weekly limit resets, briefly animate the affected ring from its previous fill back to empty (4–5 frames over ~400ms, driven by `rumps.Timer`). Pure cosmetic, but it makes resets feel earned.
 - **Enterprise / Team plan support** — credit-based billing instead of 5-hour/weekly windows, so the 2-ring UI doesn't map. Blocked on whether Claude Code's statusline ever exposes a credit-style signal for these plans; until then, Pro/Max only (the README says so).
 
-### Trigger: <200 stars in the first week
+### If the hook doesn't land
 
-The hook didn't land. No expansion as a recovery move. Iterate on positioning, write a follow-up post in 4 weeks framed around something other than "I built another tool."
+No expansion as a recovery move. The scope stays where it is, and the focus shifts to understanding what didn't resonate before building anything new.
 
 ## Why this roadmap exists
 
-If you opened an issue or PR asking for one of the v1.1 candidates: thank you, your interest is the signal that decides what gets built. Please don't open a PR adding it yet — the v1.0 scope is deliberately narrow so the trust pitch ("read the one file") survives. After the v1.1 trigger fires, we'll open dedicated issues for the chosen track and label them `help-wanted`.
+If you opened an issue or PR asking for one of the v1.1 candidates: thank you, your interest is the signal that decides what gets built. Please don't open a PR adding it yet — the v1.0 scope is deliberately narrow so the trust pitch ("read the one file") survives. Once a v1.1 track is chosen, we'll open dedicated issues for it and label them `help-wanted`.
 
 If you want something not on this list, open an issue describing the use case. The roadmap updates monthly based on what people actually need vs. what I assumed they'd need.
 

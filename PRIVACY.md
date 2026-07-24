@@ -25,11 +25,17 @@ doesn't touch.
 
 ## What it stores
 
-- App preferences (display mode, refresh interval, alert toggle) in the standard
-  macOS `NSUserDefaults` for the app.
+- App preferences (display mode, weekly percentage toggle, refresh interval,
+  alert toggle) in the standard macOS `NSUserDefaults` for the app.
 - The captured usage windows in `~/.tokease/usage.json`, a best-effort error
   log in `~/.tokease/statusline.err`, and the rendered menu bar icon in
   `~/.tokease/tokease-icon.png`.
+- If you enable auto-start: a LaunchAgent at
+  `~/Library/LaunchAgents/com.tpatrouillat.tokease.plist`.
+- If you wire the optional statusline: a `statusLine` block in
+  `~/.claude/settings.json`, with a timestamped backup (`settings.json.bak.*`)
+  of your previous file made before any change. The backups are deliberately
+  kept by the uninstaller as a safety net.
 
 To remove the app's files, run `uninstall.sh`, which deletes `~/.tokease/`, the
 LaunchAgent, and the Tokease `statusLine` block (with a backup). Homebrew users:

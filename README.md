@@ -18,7 +18,7 @@ Tokease reads only two local files that official Claude apps already write on yo
 
 Three things it does:
 
-1. **Compliant by construction, not by promise.** The only data sources are files official Claude clients write locally for their own use. No token read, no endpoint call.
+1. **Token-free by construction, not by promise.** The only data sources are files official Claude clients write locally for their own use. No token read, no endpoint call.
 2. **Shows the limit you have left, not the history you spent.** Your 5-hour and weekly remaining capacity, with reset countdowns and alerts at 80% and 95% (on by default, toggleable in Settings).
 3. **One file, zero telemetry, zero account.** A small single-file menu bar app, MIT-licensed. It runs entirely on your machine. No telemetry, no account, nothing to sign up for.
 
@@ -96,6 +96,10 @@ If the Claude desktop app is running, you are done. Optionally wire up the statu
   brew services stop tokease && brew uninstall tokease
   ```
   `brew uninstall` alone removes the app but leaves `~/.tokease/` and any statusline wiring in place.
+
+## I don't see the icon
+
+Tokease is probably running fine and your menu bar is full. On notched MacBooks, macOS hides overflow menu bar icons without any indicator. Quit a menu bar app you don't need (or use a manager like [Ice](https://github.com/jordanbaird/Ice) or Bartender) and the rings appear. The percentage-only display mode in Settings also narrows Tokease's footprint, and Cmd-dragging the icon toward the clock keeps it visible.
 
 ## A note on freshness
 
