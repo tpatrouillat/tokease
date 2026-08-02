@@ -12,8 +12,9 @@ Please **do not** open a public issue for a security problem.
 
 1. Preferred: GitHub → **Security → Report a vulnerability** (private advisory)
    on this repository.
-2. Fallback: email **19765818+tpatrouillat@users.noreply.github.com** with `[tokease security]` in the
-   subject.
+2. Fallback: open a regular issue saying only that you found a security problem
+   and how to reach you — **without any technical details** — and a private
+   channel will be arranged.
 
 Include what you found, how to reproduce it, and the impact. Expect an initial
 response within a few days. Once a fix ships, you'll be credited in the release
