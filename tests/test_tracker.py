@@ -1110,12 +1110,16 @@ class TestStatuslineErrorStates(unittest.TestCase):
         self.assertIn("desktop app", app.m5h.title)
         self.assertIn("install-statusline.sh", app.m7d.title)
         self.assertIn("Claude Code", app.mupd.title)
+        # A Free/Team/Enterprise user must learn why nothing will ever show up.
+        self.assertIn("Pro or Max plan", app.mupd.title)
 
     def test_waiting_state(self):
         app = self._make_app()
         app._apply_usage(None, "waiting")
         self.assertEqual(app.title, "…")
         self.assertIn("Waiting", app.m5h.title)
+        # Free accounts stay in this state forever: say why, don't show "--".
+        self.assertIn("Pro or Max plan", app.m7d.title)
 
     def test_nostatusline_clears_stale_icon(self):
         app = self._make_app()

@@ -753,15 +753,16 @@ class App(rumps.App):
             self.title = "⚙"
             self.m5h.title = "Easiest: open the Claude desktop app (auto-detected)"
             self.m7d.title = "Or wire the CLI: run statusline/install-statusline.sh"
-            self.mupd.title = "then send a message in a Claude Code terminal"
+            self.mupd.title = "then message in Claude Code (Pro or Max plan required)"
             return
 
         if err == "waiting":
             # File present but Claude Code hasn't reported rate_limits yet
-            # (it only appears after the first API response of a session).
+            # (it only appears after the first API response of a session,
+            # and never on Free or Team/Enterprise plans).
             self.title = "…"
             self.m5h.title = "Waiting for Claude Code activity…"
-            self.m7d.title = WEEKLY_DEFAULT
+            self.m7d.title = "Quota data only exists on Pro or Max plans"
             return
 
         if err or not data:
