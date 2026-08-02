@@ -4,46 +4,54 @@ Where this project is, and where it might go.
 
 ## v1.0 — what ships now
 
-A single-file macOS menu bar app that reads your Claude Code OAuth token from the Keychain, hits the undocumented `/api/oauth/usage` endpoint, and shows your 5-hour / weekly / per-model utilization. That's it. ~750 lines of Python, MIT, two small dependencies (`rumps` for the menu bar, `Pillow` for the dynamic icon).
+A single-file macOS menu bar app that shows your 5-hour / weekly remaining capacity as two rings, read from two local files official Claude apps already write: the Claude desktop app's quota history (zero config, refreshed about every 5 minutes) and the `rate_limits` data Claude Code publishes to its statusline (optional, adds reset countdowns). That's it. No token read, no endpoint call. A small single-file Python app, MIT, two small dependencies (`rumps` for the menu bar, `Pillow` for the dynamic icon).
+
+> The legacy endpoint mode (which read the OAuth token from the Keychain and called an undocumented endpoint) is removed from v1.0 and frozen at the git tag `v0.9.0-endpoint`.
 
 ### Explicitly out of scope for v1.0
 
 | Ask | Why not now |
 |---|---|
 | **iPhone / iPad app** | Native iOS = Swift + Apple Developer cert + App Store review. 1–2 months of work before validating the menu bar version even resonates. |
-| **Web dashboard** | Would require a backend to relay OAuth tokens. Breaks the "audit one file, token never leaves your Mac" pitch — which is the whole trust argument. |
-| **Windows / Linux ports** | Depend on `rumps` (macOS-only NSStatusBar wrapper) and the macOS Keychain. The HTTP call itself is ~80 lines and portable — a fork-friendly target, but I won't maintain ports myself. |
-| **Lovable / Cursor / Codex / other AI tools** | Each tool has its own quota system. Most don't expose a public usage endpoint. Adding them = waiting on each vendor to publish (or reverse-engineering each one and inheriting N break-points). |
-| **Per-window / per-session token breakdown** | The `/api/oauth/usage` endpoint returns account-level aggregates, not per-conversation telemetry. Would require parsing local Claude Code JSONL logs, which drift whenever the CLI changes. |
+| **Web dashboard** | Would require a backend to relay data off your machine. Breaks the "audit one file, nothing leaves your Mac, no token read" pitch — which is the whole trust argument. |
+| **Windows / Linux ports** | Depend on `rumps` (macOS-only NSStatusBar wrapper). The statusline capture itself is small and portable — a fork-friendly target, but I won't maintain ports myself. |
+| **Lovable / Cursor / Codex / other AI tools** | Each tool has its own quota system. Most don't expose limits the way Claude Code's statusline does. Adding them = waiting on each vendor to publish (or reverse-engineering each one and inheriting N break-points). |
+| **Per-window / per-session token breakdown** | The statusline `rate_limits` feed reports account-level windows (5-hour / weekly), not per-conversation telemetry. Would require parsing local Claude Code JSONL logs, which drift whenever the CLI changes. |
 | **Auto-update / Sparkle** | Updates ship via `brew upgrade`. Sparkle would need code signing + notarization. |
 
 ## v1.1 — candidates
 
-These are real possibilities, not promises. Which one (if any) gets built depends on launch-week signal.
+These are real possibilities, not promises. Which one (if any) gets built depends on adoption and on what launch feedback actually asks for.
 
-### Trigger: >500 GitHub stars in the first week
+### If there's strong pull for more
 
-Pick **one** of the following based on what the comments actually ask for. Not both. Not all three.
+Pick **one** of the following based on what issues and comments actually ask for. Not both. Not all three.
 
-1. **iPhone companion app (native Swift)** — read-only view backed by a small local sync helper on the Mac. Token never leaves the Mac; the phone pulls from a local HTTP server on the LAN. Estimated 4–6 weeks.
-2. **Second-tool support (most likely: Cursor or Lovable)** — only if that tool's vendor publishes a stable usage endpoint, or the community reverse-engineers one with a known cadence. Estimated 1–2 weeks per tool.
+1. **iPhone companion app (native Swift)** — read-only view backed by a small local sync helper on the Mac. Nothing sensitive leaves the Mac; the phone pulls the same `usage.json` from a local HTTP server on the LAN. Estimated 4–6 weeks.
+2. **Second-tool support (most likely: Cursor or Lovable)** — only if that tool's vendor exposes a stable, authorized way to read remaining limits, or the community surfaces one with a known cadence. Estimated 1–2 weeks per tool.
 3. **Per-window context tracker** — parses `~/.claude/projects/*.jsonl` to surface "this conversation has used X/200K context." Estimated 2–3 weeks; fragile by design.
+4. **Opt-in drift estimator (nothing-running gap)** — between two official captures, estimate quota drift by counting tokens in the local `~/.claude/projects/*.jsonl` session logs and show "~71% *(estimated)*" until the next exact capture. Since the Claude Desktop history landed (ADR 0003), the remaining gap is only "no Claude client running at all", which shrinks the case for this. Still 100% local, zero network, zero token read — but it widens the read surface beyond `~/.tokease`, so it would ship **opt-in, off by default**, behind a dedicated privacy note and ADR. Estimated 1–2 weeks. Only if launch comments actually ask for it.
+5. **Per-model windows (Fable / Opus)** — Claude Fable 5 now has its own quota on Max plans, but Claude Code drops the model-scoped windows before serializing `rate_limits` to the statusline (only `five_hour` + `seven_day` reach us). **Blocked upstream** — tracked by [anthropics/claude-code#77453](https://github.com/anthropics/claude-code/issues/77453), [#78232](https://github.com/anthropics/claude-code/issues/78232) and [#79022](https://github.com/anthropics/claude-code/issues/79022). The day one ships, adding a third ring / menu line is a small change. The known workaround (reading `cachedUsageUtilization` from Claude Code's internal state files) is undocumented internal state — rejected for now, same reasoning as the privacy invariant: we only read what Claude Code deliberately publishes.
 
-### Trigger: 200–500 stars in the first week
+6. **Usage insights (what drives your limits)** — a local re-computation of the "What's contributing to your limits usage?" panel from Claude Code's `/usage` screen, always visible from the menu bar: share of usage coming from subagent-heavy sessions, from sessions active 8+ hours, from >150k-token contexts, from parallel sessions, plus per-skill / per-subagent / per-MCP-server breakdowns. Claude Code computes this on the fly from the local session transcripts (`~/.claude/projects/*.jsonl`) and stores it nowhere, so Tokease would parse the same files: metadata only (timestamps, token counts, tool names), never conversation content, still read-only and zero network. Same fragility caveat as candidates 3 and 4 (undocumented JSONL that drifts with CLI versions), and it widens the read surface beyond `~/.tokease`, so it ships opt-in behind its own ADR and privacy note. Estimated 2–3 weeks.
+7. **API-billing mode (Console/API-key users)** — a different product shape: API accounts have no 5-hour/weekly subscription windows, they have spend and RPM/TPM limits. The authorized path is Anthropic's documented Admin Usage & Cost API, but it needs an admin API key and network calls, which breaks the zero-network invariant. If ever built, it ships as a clearly separated opt-in mode behind its own ADR and privacy note. Post-launch evaluation only.
+
+### If interest is steady but modest
 
 No v1.1 work. v1.0.1 polish only — bug fixes, UX hardening, more tests around edge cases users report.
 
 **Tracked polish ideas:**
+- **Signed and notarized `.app` (double-click install)** — the py2app build already works (`build.sh` produces `Tokease.app`). What's missing is the Apple Developer Program (~99 USD/year) for codesigning and notarization. Without it, a downloaded `.app` hits Gatekeeper's "can't be opened" dialog, which is a worse first impression than the one-line brew install. Worth the yearly fee if launch traction justifies it.
 - **Ring clear-out animation** — when a 5-hour or weekly limit resets, briefly animate the affected ring from its previous fill back to empty (4–5 frames over ~400ms, driven by `rumps.Timer`). Pure cosmetic, but it makes resets feel earned.
-- **Enterprise / Team plan support** — credit-based billing instead of 5-hour/weekly quotas, so the 3-ring UI doesn't map. Blocked on a redacted `/api/oauth/usage` sample from a real Enterprise account; will likely render a single "credits spent" gauge plus running $ total. README needs a "Pro/Max only for now" note in the meantime.
+- **Enterprise / Team plan support** — credit-based billing instead of 5-hour/weekly windows, so the 2-ring UI doesn't map. Blocked on whether Claude Code's statusline ever exposes a credit-style signal for these plans; until then, Pro/Max only (the README says so).
 
-### Trigger: <200 stars in the first week
+### If the hook doesn't land
 
-The hook didn't land. No expansion as a recovery move. Iterate on positioning, write a follow-up post in 4 weeks framed around something other than "I built another tool."
+No expansion as a recovery move. The scope stays where it is, and the focus shifts to understanding what didn't resonate before building anything new.
 
 ## Why this roadmap exists
 
-If you opened an issue or PR asking for one of the v1.1 candidates: thank you, your interest is the signal that decides what gets built. Please don't open a PR adding it yet — the v1.0 scope is deliberately narrow so the trust pitch ("read the one file") survives. After the v1.1 trigger fires, we'll open dedicated issues for the chosen track and label them `help-wanted`.
+If you opened an issue or PR asking for one of the v1.1 candidates: thank you, your interest is the signal that decides what gets built. Please don't open a PR adding it yet — the v1.0 scope is deliberately narrow so the trust pitch ("read the one file") survives. Once a v1.1 track is chosen, we'll open dedicated issues for it and label them `help-wanted`.
 
 If you want something not on this list, open an issue describing the use case. The roadmap updates monthly based on what people actually need vs. what I assumed they'd need.
 
@@ -51,7 +59,7 @@ If you want something not on this list, open an issue describing the use case. T
 
 These are non-negotiables, not "maybe later" items.
 
-- **No backend server, no cloud relay.** The token never leaves your Mac.
+- **No backend server, no cloud relay.** Nothing leaves your Mac — and Tokease never reads your token in the first place.
 - **No telemetry, no analytics, no phone-home.** Not even anonymous usage counts.
 - **No paid tier, no premium features held back.** Fully MIT-licensed; the Homebrew build is identical to the source.
 - **No bundled `.app` requiring signed installation.** Homebrew + source install keeps the audit trail visible.

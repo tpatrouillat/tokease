@@ -4,9 +4,9 @@ Generate the menu bar template icon for tracker.py.
 Output: assets/menubar-template.png (44x44, black on transparent).
 macOS auto-inverts template images for dark mode — do NOT use any color.
 
-Design: three concentric rings (Activity-Ring metaphor) representing the
-three layers of usage data the app surfaces — 5-hour session, weekly
-window, per-model split.
+Design: two concentric rings (Activity-Ring metaphor) representing the
+two usage windows the app surfaces — 5-hour session (outer) and weekly
+window (inner). Matches the app's runtime icon (_RING_RADII).
 
 Run: venv/bin/python assets/build-menubar-icon.py
 """
@@ -20,7 +20,7 @@ SIZE = SIZE_FINAL * SCALE    # 176 internal canvas
 
 # Ring radii at FINAL scale (44x44). Stroke renders INWARD from the bbox edge,
 # so a bbox radius of 20 with stroke 3 produces a ring spanning r=17 to r=20.
-RING_RADII = [20, 14, 8]     # outer, middle, inner
+RING_RADII = [20, 14]        # outer (5h), inner (weekly) — same as runtime _RING_RADII
 STROKE = 3                   # stroke width at final scale (rendered as 12 at SCALE)
 INK = (0, 0, 0, 255)         # template images ignore color; macOS tints in render
 
@@ -38,7 +38,7 @@ def main() -> None:
     img = img.resize((SIZE_FINAL, SIZE_FINAL), Image.LANCZOS)
     out = Path(__file__).resolve().parent / "menubar-template.png"
     img.save(out)
-    print(f"Wrote {out} ({SIZE_FINAL}x{SIZE_FINAL} template image, 3 concentric rings)")
+    print(f"Wrote {out} ({SIZE_FINAL}x{SIZE_FINAL} template image, 2 concentric rings)")
 
 
 if __name__ == "__main__":

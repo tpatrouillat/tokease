@@ -3,12 +3,14 @@
 # Tokease — Installation Script
 #
 # What this does:
-#   1. Creates a Python virtualenv and installs rumps
+#   1. Creates a Python virtualenv and installs dependencies
 #   2. Optionally creates a macOS LaunchAgent for auto-start at login
 #   3. Optionally launches the app immediately
 #
-# No API keys are needed — the tracker reads Claude Code's OAuth token
-# directly from the macOS Keychain (set by `claude login`).
+# No API keys, no token, no network call. The tracker reads only local usage
+# files official Claude apps write: the Claude desktop app's quota history
+# (zero config) and, optionally, ~/.tokease/usage.json fed by Claude Code's
+# statusline (wire with: bash statusline/install-statusline.sh).
 #
 
 set -euo pipefail
@@ -27,6 +29,14 @@ echo ""
 # --- Python check -----------------------------------------------------------
 if ! command -v python3 &>/dev/null; then
     echo "Error: Python 3 is required but not installed." >&2
+    echo "Easiest fix: brew install tpatrouillat/tap/tokease (ships its own Python)." >&2
+    exit 1
+fi
+# macOS system python3 (Command Line Tools) can be 3.9, below our 3.10 minimum.
+if ! python3 -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)'; then
+    echo "Error: Python 3.10+ required, found $(python3 --version 2>&1)." >&2
+    echo "Install a recent Python (brew install python) or use the Homebrew" >&2
+    echo "package instead, which ships its own: brew install tpatrouillat/tap/tokease" >&2
     exit 1
 fi
 echo "Found $(python3 --version)"
@@ -49,8 +59,10 @@ chmod +x "$SCRIPT_DIR/tracker.py"
 
 # --- Prerequisite reminder --------------------------------------------------
 echo ""
-echo "Prerequisite: Claude Code must be installed and logged in."
-echo "If you haven't yet, run:  claude login"
+echo "Prerequisite: a Claude Pro or Max plan."
+echo "Zero config: keep the Claude desktop app running."
+echo "Optional (reset countdowns): wire the Claude Code (>= 2.1.x) statusline with"
+echo "  bash \"$SCRIPT_DIR/statusline/install-statusline.sh\""
 echo ""
 
 # --- LaunchAgent (auto-start) -----------------------------------------------
@@ -58,7 +70,17 @@ echo "$BANNER"
 echo "   Auto-Start Setup"
 echo "$BANNER"
 echo ""
-read -r -p "Start the tracker automatically at login? (y/n): " auto_start
+read -r -p "Start the tracker automatically at login? (y/n): " auto_start || auto_start="n"
+
+if [[ "$auto_start" =~ ^[Yy]$ ]]; then
+    # The paths get interpolated into XML below: & and < would corrupt the plist.
+    if [[ "$SCRIPT_DIR" == *"&"* || "$SCRIPT_DIR" == *"<"* ]]; then
+        echo "The install path contains '&' or '<', which breaks the LaunchAgent plist." >&2
+        echo "Skipping auto-start setup. Move the folder to a simpler path and re-run," >&2
+        echo "or start Tokease manually (command shown below)." >&2
+        auto_start="n"
+    fi
+fi
 
 if [[ "$auto_start" =~ ^[Yy]$ ]]; then
     mkdir -p "$LAUNCH_AGENT_DIR"
@@ -69,8 +91,8 @@ if [[ "$auto_start" =~ ^[Yy]$ ]]; then
         launchctl unload "$LAUNCH_AGENT_PLIST" 2>/dev/null || true
     fi
 
-    # PATH includes Homebrew (Intel + Apple Silicon) so `claude --version`
-    # resolves for the User-Agent header, plus system bins for `security`.
+    # PATH includes Homebrew (Intel + Apple Silicon) + system bins so python3
+    # and its dependencies resolve under the LaunchAgent's minimal environment.
     cat > "$LAUNCH_AGENT_PLIST" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
@@ -110,7 +132,7 @@ echo "To start manually:"
 echo "  \"$VENV_DIR/bin/python\" \"$SCRIPT_DIR/tracker.py\""
 echo ""
 
-read -r -p "Start the tracker now? (y/n): " start_now
+read -r -p "Start the tracker now? (y/n): " start_now || start_now="n"
 if [[ "$start_now" =~ ^[Yy]$ ]]; then
     echo "Starting Tokease..."
     nohup "$VENV_DIR/bin/python" "$SCRIPT_DIR/tracker.py" >/dev/null 2>&1 &
@@ -118,6 +140,6 @@ fi
 
 echo ""
 echo "Look for a percentage badge (e.g. \"42%\") in the top-right of your menu bar."
-echo "Click it to see your 5-hour, weekly, Sonnet, Opus, and overage limits."
+echo "Click it to see your 5-hour and weekly limits (2 rings)."
 echo ""
 echo "Done!"
