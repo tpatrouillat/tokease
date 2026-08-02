@@ -2,17 +2,21 @@
 """
 Tests for Tokease.
 
-Mocks rumps, subprocess, and urllib so tests run without macOS GUI or network.
-Covers: helpers, time formatting, API fetching (all error paths + success),
-display logic, security (redirect blocking, token cleanup), and interval mgmt.
+Mocks rumps to run without the macOS GUI. Two local data sources: the Claude
+Code statusline feed and the Claude desktop app quota history (ADR 0003).
+Covers: helpers, time formatting, both source readers (error paths + success),
+the freshness merge, display logic (2 rings), empty states, and interval
+management.
 """
 
-import io
 import json
+import os
 import subprocess
 import sys
+import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -80,21 +84,18 @@ tracker._TITLE_SPACER = ""
 
 
 # ---------------------------------------------------------------------------
-# Fake API response builder
+# Fake usage data builder (shape normalized by fetch_usage, statusline source)
 # ---------------------------------------------------------------------------
-def _make_api_response(
+def _make_usage(
     five_hour_pct=42,
     seven_day_pct=18,
-    sonnet_pct=5,
-    extra_enabled=False,
-    extra_used=500,
-    extra_limit=5000,
-    extra_pct=10,
-    five_hour_resets="2026-03-06T18:00:00Z",
-    seven_day_resets="2026-03-10T00:00:00Z",
-    sonnet_resets="2026-03-10T00:00:00Z",
+    five_hour_resets="2099-03-06T18:00:00Z",
+    seven_day_resets="2099-03-10T00:00:00Z",
+    captured_at=None,
 ):
-    data = {
+    if captured_at is None:
+        captured_at = datetime.now(timezone.utc).timestamp()
+    return {
         "five_hour": {
             "utilization": five_hour_pct,
             "resets_at": five_hour_resets,
@@ -103,45 +104,8 @@ def _make_api_response(
             "utilization": seven_day_pct,
             "resets_at": seven_day_resets,
         },
-        "seven_day_sonnet": {
-            "utilization": sonnet_pct,
-            "resets_at": sonnet_resets,
-        },
-        "extra_usage": {
-            "is_enabled": extra_enabled,
-            "used_credits": extra_used,
-            "monthly_limit": extra_limit,
-            "utilization": extra_pct,
-        },
+        "_meta": {"captured_at": captured_at},
     }
-    return data
-
-
-# ---------------------------------------------------------------------------
-# Helper to build a fake keychain subprocess result
-# ---------------------------------------------------------------------------
-def _keychain_result(token="fake-token-abc", returncode=0):
-    creds = json.dumps({"claudeAiOauth": {"accessToken": token}})
-    return SimpleNamespace(returncode=returncode, stdout=creds, stderr="")
-
-
-def _keychain_no_token():
-    creds = json.dumps({"claudeAiOauth": {}})
-    return SimpleNamespace(returncode=0, stdout=creds, stderr="")
-
-
-def _keychain_truncated_json(token="fake-token-abc"):
-    """Simulate macOS Keychain truncating the JSON blob at ~2KB."""
-    full = json.dumps({"claudeAiOauth": {"accessToken": token}, "extra": "x" * 3000})
-    return SimpleNamespace(returncode=0, stdout=full[:2014], stderr="")
-
-
-def _keychain_bad_json():
-    return SimpleNamespace(returncode=0, stdout="not-json{{{", stderr="")
-
-
-def _keychain_fail():
-    return SimpleNamespace(returncode=44, stdout="", stderr="not found")
 
 
 # ---------------------------------------------------------------------------
@@ -181,6 +145,12 @@ class TestSafeInt(unittest.TestCase):
 
     def test_large_value(self):
         self.assertEqual(tracker._safe_int(999999), 999999)
+
+    def test_overflow_value_returns_default(self):
+        # Hostile feed: an overflowing number (1e400 → inf) must not crash the
+        # refresh (int(inf) raises OverflowError). See the _safe_int hardening.
+        self.assertEqual(tracker._safe_int("1e400"), 0)
+        self.assertEqual(tracker._safe_int(float("inf")), 0)
 
 
 # ---------------------------------------------------------------------------
@@ -238,226 +208,14 @@ class TestFmtReset(unittest.TestCase):
         self.assertNotEqual(result, "?")
 
     def test_non_string_input_does_not_crash(self):
-        # A numeric resets_at (API regression) must degrade gracefully —
+        # A numeric resets_at (data regression) must degrade gracefully —
         # _parse_iso guards AttributeError/TypeError instead of raising.
         self.assertIsNone(tracker._parse_iso(1718304000))
         self.assertIn(tracker.fmt_reset(1718304000), ("--", "?"))
 
 
 # ---------------------------------------------------------------------------
-# Tests: get_usage — keychain errors
-# ---------------------------------------------------------------------------
-class TestGetUsageKeychain(unittest.TestCase):
-    @patch("tracker.subprocess.run", return_value=_keychain_fail())
-    def test_keychain_not_found(self, _):
-        data, err = tracker.get_usage()
-        self.assertIsNone(data)
-        self.assertEqual(err, "auth")
-
-    @patch("tracker.subprocess.run", return_value=_keychain_no_token())
-    def test_missing_token(self, _):
-        data, err = tracker.get_usage()
-        self.assertIsNone(data)
-        self.assertEqual(err, "auth")
-        self.assertNotEqual(err, "error", "Empty token is auth, not generic error")
-
-    @patch("tracker.subprocess.run", return_value=_keychain_bad_json())
-    def test_bad_json_no_token(self, _):
-        """Bad JSON with no accessToken pattern → auth error."""
-        data, err = tracker.get_usage()
-        self.assertIsNone(data)
-        self.assertEqual(err, "auth")
-
-    @patch("tracker.subprocess.run", return_value=_keychain_truncated_json("my-real-token"))
-    @patch("tracker._opener.open")
-    def test_truncated_json_regex_fallback(self, mock_open, _):
-        """macOS truncates keychain at ~2KB; regex extracts the token."""
-        api_data = _make_api_response(five_hour_pct=55)
-        resp = MagicMock()
-        resp.read.return_value = json.dumps(api_data).encode()
-        resp.__enter__ = lambda s: s
-        resp.__exit__ = MagicMock(return_value=False)
-        mock_open.return_value = resp
-        data, err = tracker.get_usage()
-        self.assertIsNone(err)
-        self.assertEqual(data["five_hour"]["utilization"], 55)
-        # Verify the Authorization header used the regex-extracted token
-        call_args = mock_open.call_args
-        req = call_args[0][0]
-        self.assertIn("my-real-token", req.get_header("Authorization"))
-
-    @patch("tracker.subprocess.run", side_effect=subprocess.TimeoutExpired("security", 5))
-    def test_keychain_timeout(self, _):
-        data, err = tracker.get_usage()
-        self.assertIsNone(data)
-        self.assertEqual(err, "error")
-
-    @patch("tracker.subprocess.run", side_effect=OSError("no such file"))
-    def test_keychain_os_error(self, _):
-        data, err = tracker.get_usage()
-        self.assertIsNone(data)
-        self.assertEqual(err, "error")
-        self.assertNotEqual(err, "auth", "OSError is generic error, not auth")
-
-
-# ---------------------------------------------------------------------------
-# Tests: get_usage — API responses
-# ---------------------------------------------------------------------------
-class TestGetUsageAPI(unittest.TestCase):
-    def _mock_http(self, response_data, status=200):
-        """Return a context-manager mock for _opener.open."""
-        body = json.dumps(response_data).encode()
-        resp = MagicMock()
-        resp.read.return_value = body
-        resp.__enter__ = lambda s: s
-        resp.__exit__ = MagicMock(return_value=False)
-        return resp
-
-    @patch("tracker.subprocess.run", return_value=_keychain_result())
-    @patch("tracker._opener.open")
-    def test_success(self, mock_open, _):
-        api_data = _make_api_response(five_hour_pct=42)
-        mock_open.return_value = self._mock_http(api_data)
-        data, err = tracker.get_usage()
-        self.assertIsNone(err)
-        self.assertEqual(data["five_hour"]["utilization"], 42)
-
-    @patch("tracker.subprocess.run", return_value=_keychain_result())
-    @patch("tracker._opener.open")
-    def test_http_401(self, mock_open, _):
-        mock_open.side_effect = tracker.urllib.error.HTTPError(
-            "url", 401, "Unauthorized", {}, io.BytesIO()
-        )
-        data, err = tracker.get_usage()
-        self.assertIsNone(data)
-        self.assertEqual(err, "auth")
-
-    @patch("tracker.subprocess.run", return_value=_keychain_result())
-    @patch("tracker._opener.open")
-    def test_http_403(self, mock_open, _):
-        mock_open.side_effect = tracker.urllib.error.HTTPError(
-            "url", 403, "Forbidden", {}, io.BytesIO()
-        )
-        data, err = tracker.get_usage()
-        self.assertIsNone(data)
-        self.assertEqual(err, "plan")
-
-    @patch("tracker.subprocess.run", return_value=_keychain_result())
-    @patch("tracker._opener.open")
-    def test_http_429(self, mock_open, _):
-        mock_open.side_effect = tracker.urllib.error.HTTPError(
-            "url", 429, "Too Many Requests", {}, io.BytesIO()
-        )
-        data, err = tracker.get_usage()
-        self.assertEqual(data, {"retry_after": 0})
-        self.assertEqual(err, "rate")
-
-    @patch("tracker.subprocess.run", return_value=_keychain_result())
-    @patch("tracker._opener.open")
-    def test_http_429_with_retry_after(self, mock_open, _):
-        headers = {"Retry-After": "120"}
-        mock_open.side_effect = tracker.urllib.error.HTTPError(
-            "url", 429, "Too Many Requests", headers, io.BytesIO()
-        )
-        data, err = tracker.get_usage()
-        self.assertEqual(data, {"retry_after": 120})
-        self.assertEqual(err, "rate")
-
-    @patch("tracker.subprocess.run", return_value=_keychain_result())
-    @patch("tracker._opener.open")
-    def test_http_500(self, mock_open, _):
-        mock_open.side_effect = tracker.urllib.error.HTTPError(
-            "url", 500, "Server Error", {}, io.BytesIO()
-        )
-        data, err = tracker.get_usage()
-        self.assertIsNone(data)
-        self.assertEqual(err, "error")
-
-    @patch("tracker.subprocess.run", return_value=_keychain_result())
-    @patch("tracker._opener.open")
-    def test_non_dict_response(self, mock_open, _):
-        mock_open.return_value = self._mock_http([1, 2, 3])
-        data, err = tracker.get_usage()
-        self.assertIsNone(data)
-        self.assertEqual(err, "error")
-
-    @patch("tracker.subprocess.run", return_value=_keychain_result())
-    @patch("tracker._opener.open")
-    def test_network_error(self, mock_open, _):
-        mock_open.side_effect = tracker.urllib.error.URLError("DNS failed")
-        data, err = tracker.get_usage()
-        self.assertIsNone(data)
-        self.assertEqual(err, "error")
-
-    @patch("tracker.subprocess.run", return_value=_keychain_result())
-    @patch("tracker._opener.open")
-    def test_malformed_json_response(self, mock_open, _):
-        resp = MagicMock()
-        resp.read.return_value = b"not json{{"
-        resp.__enter__ = lambda s: s
-        resp.__exit__ = MagicMock(return_value=False)
-        mock_open.return_value = resp
-        data, err = tracker.get_usage()
-        self.assertIsNone(data)
-        self.assertEqual(err, "error")
-
-    @patch("tracker.subprocess.run", return_value=_keychain_result())
-    @patch("tracker._opener.open")
-    def test_non_utf8_response(self, mock_open, _):
-        # A 200 body that isn't valid UTF-8 (captive portal, proxy, binary) must
-        # surface as "error", not raise UnicodeDecodeError and kill the worker.
-        resp = MagicMock()
-        resp.read.return_value = b"\xe9\xff\x00garbage"
-        resp.__enter__ = lambda s: s
-        resp.__exit__ = MagicMock(return_value=False)
-        mock_open.return_value = resp
-        data, err = tracker.get_usage()
-        self.assertIsNone(data)
-        self.assertEqual(err, "error")
-
-
-# ---------------------------------------------------------------------------
-# Tests: Security — redirect blocking
-# ---------------------------------------------------------------------------
-class TestRedirectBlocking(unittest.TestCase):
-    def test_redirect_raises(self):
-        handler = tracker._NoRedirectHandler()
-        fake_req = MagicMock()
-        fake_req.full_url = "https://api.anthropic.com/api/oauth/usage"
-        with self.assertRaises(tracker.urllib.error.HTTPError) as ctx:
-            handler.redirect_request(
-                fake_req, None, 302, "Found", {}, "https://evil.com/steal"
-            )
-        self.assertEqual(ctx.exception.code, 302)
-        self.assertIn("Redirect blocked", ctx.exception.msg)
-
-
-# ---------------------------------------------------------------------------
-# Tests: Security — token cleanup in finally block
-# ---------------------------------------------------------------------------
-class TestTokenCleanup(unittest.TestCase):
-    @patch("tracker.subprocess.run", return_value=_keychain_result())
-    @patch("tracker._opener.open")
-    def test_token_cleared_on_success(self, mock_open, _):
-        mock_open.return_value = TestGetUsageAPI._mock_http(
-            None, _make_api_response()
-        )
-        tracker.get_usage()
-        # If we got here without error, the finally block ran.
-        # We can't inspect locals after return, but we verify no exception.
-
-    @patch("tracker.subprocess.run", return_value=_keychain_result())
-    @patch("tracker._opener.open")
-    def test_token_cleared_on_error(self, mock_open, _):
-        mock_open.side_effect = tracker.urllib.error.HTTPError(
-            "url", 500, "Error", {}, io.BytesIO()
-        )
-        tracker.get_usage()
-        # finally block should have run without raising
-
-
-# ---------------------------------------------------------------------------
-# Tests: App display logic (with mocked rumps)
+# Tests: App display logic (2 rings, statusline source)
 # ---------------------------------------------------------------------------
 class TestAppDisplay(unittest.TestCase):
     def _make_app(self):
@@ -469,67 +227,45 @@ class TestAppDisplay(unittest.TestCase):
 
     def test_full_data_display(self):
         app = self._make_app()
-        data = _make_api_response(
-            five_hour_pct=42, seven_day_pct=18, sonnet_pct=5
-        )
+        data = _make_usage(five_hour_pct=42, seven_day_pct=18)
         app._update_display(data)
         self.assertEqual(app.title, "42%")
         self.assertIn("5-hour: 42%", app.m5h.title)
         self.assertIn("Weekly: 18%", app.m7d.title)
-        self.assertIn("Sonnet: 5%", app.mson.title)
-        self.assertEqual(app.mext.title, tracker.EXTRA_DEFAULT)
-        self.assertIn("Updated:", app.mupd.title)
-
-    def test_extra_usage_enabled(self):
-        app = self._make_app()
-        data = _make_api_response(
-            extra_enabled=True, extra_used=1250, extra_limit=5000, extra_pct=25
-        )
-        app._update_display(data)
-        self.assertIn("$12.50", app.mext.title)
-        self.assertIn("50", app.mext.title)  # limit
-        self.assertIn("25%", app.mext.title)
-
-    def test_extra_usage_disabled(self):
-        app = self._make_app()
-        data = _make_api_response(extra_enabled=False)
-        app._update_display(data)
-        self.assertEqual(app.mext.title, tracker.EXTRA_DEFAULT)
+        self.assertIn("via Claude Code", app.mupd.title)
 
     def test_missing_five_hour(self):
         app = self._make_app()
-        data = _make_api_response()
+        data = _make_usage()
         del data["five_hour"]
         app._update_display(data)
-        self.assertEqual(app.title, "0%")
+        self.assertEqual(app.title, "—")  # window absent → "—" badge, not "0%"
         self.assertEqual(app.m5h.title, tracker.FIVE_HOUR_DEFAULT)
 
     def test_missing_seven_day(self):
         app = self._make_app()
-        data = _make_api_response()
+        data = _make_usage()
         del data["seven_day"]
         app._update_display(data)
         self.assertEqual(app.m7d.title, tracker.WEEKLY_DEFAULT)
 
-    def test_missing_sonnet(self):
-        app = self._make_app()
-        data = _make_api_response()
-        del data["seven_day_sonnet"]
-        app._update_display(data)
-        self.assertEqual(app.mson.title, tracker.SONNET_DEFAULT)
-
     def test_all_sections_missing(self):
         app = self._make_app()
         app._update_display({})
-        self.assertEqual(app.title, "0%")
+        self.assertEqual(app.title, "—")  # no window at all → "—" badge, not "0%"
         self.assertEqual(app.m5h.title, tracker.FIVE_HOUR_DEFAULT)
         self.assertEqual(app.m7d.title, tracker.WEEKLY_DEFAULT)
-        self.assertEqual(app.mson.title, tracker.SONNET_DEFAULT)
-        self.assertEqual(app.mext.title, tracker.EXTRA_DEFAULT)
+
+    def test_only_two_rings_rendered(self):
+        # _render_dynamic_icon only takes session + weekly (no more inner ring).
+        app = self._make_app()
+        with patch.object(tracker, "_render_dynamic_icon") as render:
+            app._update_display(_make_usage(five_hour_pct=30, seven_day_pct=40))
+        render.assert_called_once_with(30, 40)
 
 
 # ---------------------------------------------------------------------------
-# Tests: App error states
+# Tests: App error states (statusline-only: nostatusline, waiting, error)
 # ---------------------------------------------------------------------------
 class TestAppErrorStates(unittest.TestCase):
     def _make_app(self):
@@ -537,40 +273,6 @@ class TestAppErrorStates(unittest.TestCase):
              patch.object(tracker.App, "_refresh"):
             app = tracker.App()
         return app
-
-    def test_auth_error(self):
-        app = self._make_app()
-        app._apply_usage(None, "auth")
-        self.assertEqual(app.title, "↩ Login")
-        self.assertIn("claude login", app.m5h.title)
-        self.assertEqual(app.m7d.title, tracker.WEEKLY_DEFAULT)
-        self.assertEqual(app.mson.title, tracker.SONNET_DEFAULT)
-        self.assertEqual(app.mext.title, tracker.EXTRA_DEFAULT)
-
-    def test_rate_limit(self):
-        app = self._make_app()
-        app._apply_usage(None, "rate")
-        self.assertEqual(app.title, "⏳")
-        self.assertIn("Rate limited", app.m5h.title)
-        self.assertIn("will retry", app.m5h.title)
-
-    def test_rate_limit_with_retry_after(self):
-        app = self._make_app()
-        app._apply_usage({"retry_after": 120}, "rate")
-        self.assertEqual(app.title, "⏳")
-        self.assertIn("retry in 2m", app.m5h.title)
-
-    def test_rate_limit_with_partial_minute(self):
-        app = self._make_app()
-        app._apply_usage({"retry_after": 61}, "rate")
-        self.assertEqual(app.title, "⏳")
-        self.assertIn("retry in 2m", app.m5h.title)
-
-    def test_plan_error(self):
-        app = self._make_app()
-        app._apply_usage(None, "plan")
-        self.assertEqual(app.title, "⛔")
-        self.assertIn("Pro/Max", app.m5h.title)
 
     def test_generic_error(self):
         app = self._make_app()
@@ -584,35 +286,9 @@ class TestAppErrorStates(unittest.TestCase):
 
     def test_success_calls_update_display(self):
         app = self._make_app()
-        data = _make_api_response(five_hour_pct=77)
+        data = _make_usage(five_hour_pct=77)
         app._apply_usage(data, None)
         self.assertEqual(app.title, "77%")
-
-
-# ---------------------------------------------------------------------------
-# Tests: _fmt_utilization
-# ---------------------------------------------------------------------------
-class TestFmtUtilization(unittest.TestCase):
-    def test_basic_format(self):
-        section = {"utilization": 42, "resets_at": None}
-        text, pct = tracker.App._fmt_utilization("5-hour", section)
-        self.assertEqual(pct, 42)
-        self.assertIn("5-hour: 42%", text)
-        self.assertIn("resets --", text)
-
-    def test_with_reset_time(self):
-        future = (datetime.now(timezone.utc) + timedelta(hours=2)).isoformat()
-        section = {"utilization": 10, "resets_at": future}
-        text, pct = tracker.App._fmt_utilization("Weekly", section)
-        self.assertEqual(pct, 10)
-        self.assertIn("Weekly: 10%", text)
-        self.assertIn("resets", text)
-
-    def test_missing_utilization(self):
-        section = {"resets_at": None}
-        text, pct = tracker.App._fmt_utilization("Sonnet", section)
-        self.assertEqual(pct, 0)
-        self.assertIn("Sonnet: 0%", text)
 
 
 # ---------------------------------------------------------------------------
@@ -684,15 +360,17 @@ class TestMainThreadMarshalling(unittest.TestCase):
 
     def test_fetch_marshals_apply_usage_to_main_thread(self):
         app = self._make_app()
+        # _fetch_and_update dispatches via fetch_usage(); mock at that boundary
+        # so the test stays focused on the marshalling behaviour.
         with patch.object(tracker, "_call_on_main") as marshall, \
-             patch.object(tracker, "get_usage", return_value=({"foo": "bar"}, None)):
+             patch.object(tracker, "fetch_usage", return_value=({"foo": "bar"}, None)):
             app._fetch_and_update()
         marshall.assert_called_once_with(app._apply_usage, {"foo": "bar"}, None)
 
     def test_reset_timer_callback_marshals_refresh(self):
         app = self._make_app()
         future = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
-        data = _make_api_response(five_hour_resets=future)
+        data = _make_usage(five_hour_resets=future)
         with patch("threading.Timer") as MockTimer:
             MockTimer.return_value = MagicMock()
             app._schedule_reset_refresh(data)
@@ -719,16 +397,10 @@ class TestResetRefreshScheduling(unittest.TestCase):
 
     def test_schedules_timer_for_soonest_future_reset(self):
         app = self._make_app()
-        # Build data with three future resets — the 5-hour one is soonest.
         now = datetime.now(timezone.utc)
         five_hour_iso = (now + timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
         weekly_iso    = (now + timedelta(days=2)).isoformat().replace("+00:00", "Z")
-        sonnet_iso    = (now + timedelta(days=3)).isoformat().replace("+00:00", "Z")
-        data = _make_api_response(
-            five_hour_resets=five_hour_iso,
-            seven_day_resets=weekly_iso,
-            sonnet_resets=sonnet_iso,
-        )
+        data = _make_usage(five_hour_resets=five_hour_iso, seven_day_resets=weekly_iso)
         with patch("threading.Timer") as MockTimer:
             mock_timer = MagicMock()
             MockTimer.return_value = mock_timer
@@ -744,18 +416,15 @@ class TestResetRefreshScheduling(unittest.TestCase):
         prev_timer = MagicMock()
         app._reset_timer = prev_timer
         future = (datetime.now(timezone.utc) + timedelta(hours=1)).isoformat().replace("+00:00", "Z")
-        data = _make_api_response(five_hour_resets=future)
+        data = _make_usage(five_hour_resets=future)
         with patch("threading.Timer", return_value=MagicMock()):
             app._schedule_reset_refresh(data)
         prev_timer.cancel.assert_called_once()
 
     def test_ignores_already_passed_resets(self):
         app = self._make_app()
-        # All resets in the past — nothing to schedule.
         past = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat().replace("+00:00", "Z")
-        data = _make_api_response(
-            five_hour_resets=past, seven_day_resets=past, sonnet_resets=past,
-        )
+        data = _make_usage(five_hour_resets=past, seven_day_resets=past)
         with patch("threading.Timer") as MockTimer:
             app._schedule_reset_refresh(data)
             MockTimer.assert_not_called()
@@ -763,11 +432,7 @@ class TestResetRefreshScheduling(unittest.TestCase):
 
     def test_skips_malformed_iso_timestamps(self):
         app = self._make_app()
-        data = _make_api_response(
-            five_hour_resets="not-a-date",
-            seven_day_resets=None,
-            sonnet_resets="",
-        )
+        data = _make_usage(five_hour_resets="not-a-date", seven_day_resets=None)
         with patch("threading.Timer") as MockTimer:
             app._schedule_reset_refresh(data)
             MockTimer.assert_not_called()
@@ -784,15 +449,14 @@ class TestConstants(unittest.TestCase):
     def test_default_strings_consistent(self):
         self.assertIn("5-hour", tracker.FIVE_HOUR_DEFAULT)
         self.assertIn("Weekly", tracker.WEEKLY_DEFAULT)
-        self.assertIn("Sonnet", tracker.SONNET_DEFAULT)
-        self.assertIn("Extra", tracker.EXTRA_DEFAULT)
 
-    def test_cents_per_dollar(self):
-        self.assertEqual(tracker.CENTS_PER_DOLLAR, 100)
+    def test_two_rings_only(self):
+        # Icon geometry = 2 rings (outer 5h, inner weekly).
+        self.assertEqual(len(tracker._RING_RADII), 2)
 
 
 # ---------------------------------------------------------------------------
-# Tests: Edge cases in display with weird API data
+# Tests: Edge cases in display with weird data
 # ---------------------------------------------------------------------------
 class TestEdgeCases(unittest.TestCase):
     def _make_app(self):
@@ -820,65 +484,35 @@ class TestEdgeCases(unittest.TestCase):
         app._update_display(data)
         self.assertEqual(app.title, "0%")
 
-    def test_extra_usage_not_dict(self):
-        app = self._make_app()
-        data = _make_api_response()
-        data["extra_usage"] = "invalid"
-        app._update_display(data)
-        self.assertEqual(app.mext.title, tracker.EXTRA_DEFAULT)
-
-    def test_extra_usage_null(self):
-        app = self._make_app()
-        data = _make_api_response()
-        data["extra_usage"] = None
-        app._update_display(data)
-        self.assertEqual(app.mext.title, tracker.EXTRA_DEFAULT)
-
     def test_zero_percent_all(self):
         app = self._make_app()
-        data = _make_api_response(
-            five_hour_pct=0, seven_day_pct=0, sonnet_pct=0
-        )
+        data = _make_usage(five_hour_pct=0, seven_day_pct=0)
         app._update_display(data)
         self.assertEqual(app.title, "0%")
         self.assertIn("0%", app.m5h.title)
         self.assertIn("0%", app.m7d.title)
-        self.assertIn("0%", app.mson.title)
 
     def test_hundred_percent(self):
         app = self._make_app()
-        data = _make_api_response(five_hour_pct=100)
+        data = _make_usage(five_hour_pct=100)
         app._update_display(data)
         self.assertEqual(app.title, "100%")
 
-
-class TestDetectUserAgent(unittest.TestCase):
-
-    @patch("tracker.subprocess.run")
-    def test_detects_version(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout="2.1.73 (Claude Code)\n")
-        result = tracker._detect_claude_code_ua()
-        self.assertEqual(result, "claude-code/2.1.73")
-
-    @patch("tracker.subprocess.run")
-    def test_fallback_on_failure(self, mock_run):
-        mock_run.side_effect = OSError("not found")
-        result = tracker._detect_claude_code_ua()
-        self.assertEqual(result, tracker._FALLBACK_UA)
-
-    @patch("tracker.subprocess.run")
-    def test_fallback_on_bad_output(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=0, stdout="not-a-version\n")
-        result = tracker._detect_claude_code_ua()
-        self.assertEqual(result, tracker._FALLBACK_UA)
-
-    @patch("tracker.subprocess.run")
-    def test_fallback_on_nonzero_exit(self, mock_run):
-        mock_run.return_value = MagicMock(returncode=1, stdout="")
-        result = tracker._detect_claude_code_ua()
-        self.assertEqual(result, tracker._FALLBACK_UA)
+    def test_over_hundred_clamped_in_title(self):
+        # The feed can go above 100; the title and the icon must be clamped.
+        app = self._make_app()
+        with patch.object(tracker, "_render_dynamic_icon") as render:
+            app._update_display(_make_usage(five_hour_pct=150, seven_day_pct=130))
+        self.assertEqual(app.title, "100%")
+        render.assert_called_once_with(100, 100)
+        # the dropdown menu line must be clamped too (not just the title/icon)
+        self.assertIn("5-hour: 100%", app.m5h.title)
+        self.assertIn("Weekly: 100%", app.m7d.title)
 
 
+# ---------------------------------------------------------------------------
+# Tests: clear stale icon on error
+# ---------------------------------------------------------------------------
 class TestErrorClearsStaleIcon(unittest.TestCase):
     """Bug: after a successful render sets a ring icon, an error state left the
     stale icon visible — misleading in ICON mode (title is empty) and
@@ -891,22 +525,9 @@ class TestErrorClearsStaleIcon(unittest.TestCase):
 
     def _seed_icon(self, app, mode):
         app.display_mode = mode
-        app._update_display(_make_api_response(five_hour_pct=90))
+        app._update_display(_make_usage(five_hour_pct=90))
 
-    def test_auth_error_clears_icon_in_icon_mode(self):
-        app = self._make_app()
-        self._seed_icon(app, tracker.DISPLAY_ICON)
-        self.assertIsNotNone(app.icon)
-        app._apply_usage(None, "auth")
-        self.assertIsNone(app.icon)
-
-    def test_rate_error_clears_icon_in_both_mode(self):
-        app = self._make_app()
-        self._seed_icon(app, tracker.DISPLAY_BOTH)
-        app._apply_usage(None, "rate")
-        self.assertIsNone(app.icon)
-
-    def test_generic_error_clears_icon(self):
+    def test_error_clears_icon_in_both_mode(self):
         app = self._make_app()
         self._seed_icon(app, tracker.DISPLAY_BOTH)
         app._apply_usage(None, "error")
@@ -919,64 +540,9 @@ class TestErrorClearsStaleIcon(unittest.TestCase):
         self.assertIsNone(app.icon)
 
 
-class TestSevenDayOpus(unittest.TestCase):
-    """The real API exposes seven_day_opus (often null). Nothing exercised the
-    Opus menu line, its role in the inner ring (max of sonnet/opus), nor its
-    consideration in reset scheduling."""
-
-    def _make_app(self):
-        with patch.object(tracker.App, "_start_timer"), \
-             patch.object(tracker.App, "_refresh"):
-            return tracker.App()
-
-    def test_opus_present_sets_menu_line(self):
-        app = self._make_app()
-        data = _make_api_response()
-        data["seven_day_opus"] = {"utilization": 63, "resets_at": None}
-        app._update_display(data)
-        self.assertIn("Opus: 63%", app.mopus.title)
-
-    def test_opus_null_falls_back_to_default(self):
-        app = self._make_app()
-        data = _make_api_response()
-        data["seven_day_opus"] = None
-        app._update_display(data)
-        self.assertEqual(app.mopus.title, tracker.OPUS_DEFAULT)
-
-    def test_opus_absent_falls_back_to_default(self):
-        app = self._make_app()
-        data = _make_api_response()
-        data.pop("seven_day_opus", None)
-        app._update_display(data)
-        self.assertEqual(app.mopus.title, tracker.OPUS_DEFAULT)
-
-    def test_opus_drives_inner_ring_when_higher_than_sonnet(self):
-        app = self._make_app()
-        data = _make_api_response(sonnet_pct=10)
-        data["seven_day_opus"] = {"utilization": 80, "resets_at": None}
-        with patch.object(tracker, "_render_dynamic_icon") as render:
-            app._update_display(data)
-        render.assert_called_once()
-        inner_pct = render.call_args[0][2]
-        self.assertEqual(inner_pct, 80)
-
-    def test_opus_resets_at_considered_in_scheduling(self):
-        app = self._make_app()
-        now = datetime.now(timezone.utc)
-        soon = (now + timedelta(minutes=3)).isoformat().replace("+00:00", "Z")
-        far = (now + timedelta(days=2)).isoformat().replace("+00:00", "Z")
-        data = _make_api_response(
-            five_hour_resets=far, seven_day_resets=far, sonnet_resets=far,
-        )
-        data["seven_day_opus"] = {"utilization": 5, "resets_at": soon}
-        with patch("threading.Timer") as MockTimer:
-            MockTimer.return_value = MagicMock()
-            app._schedule_reset_refresh(data)
-            self.assertTrue(MockTimer.called)
-            delay = MockTimer.call_args[0][0]
-            self.assertAlmostEqual(delay, 180 + 5, delta=3)
-
-
+# ---------------------------------------------------------------------------
+# Tests: threshold-crossing notifications
+# ---------------------------------------------------------------------------
 class TestMaybeNotify(unittest.TestCase):
     """Threshold-crossing notifications: fire only on upward crossing, never on
     first observation, never repeatedly at a plateau, never when disabled."""
@@ -1049,6 +615,9 @@ class TestMaybeNotify(unittest.TestCase):
         self.assertEqual(len(calls), 2)
 
 
+# ---------------------------------------------------------------------------
+# Tests: display modes (icon / pct / both)
+# ---------------------------------------------------------------------------
 class TestApplyDisplayModes(unittest.TestCase):
     def _make_app(self):
         with patch.object(tracker.App, "_start_timer"), \
@@ -1096,6 +665,9 @@ class TestApplyDisplayModes(unittest.TestCase):
         self.assertEqual(app._display_items[tracker.DISPLAY_BOTH].state, 0)
 
 
+# ---------------------------------------------------------------------------
+# Tests: corrupted settings
+# ---------------------------------------------------------------------------
 class TestCorruptedSettings(unittest.TestCase):
     def test_invalid_display_mode_falls_back_to_both(self):
         def fake_get(key, default=None):
@@ -1129,9 +701,12 @@ class TestCorruptedSettings(unittest.TestCase):
         save.assert_called_once_with(tracker._KEY_ALERTS, False)
 
 
+# ---------------------------------------------------------------------------
+# Tests: unknown buckets ignored
+# ---------------------------------------------------------------------------
 class TestUnknownBuckets(unittest.TestCase):
-    """Real API returns seven_day_cowork/oauth_apps/omelette + codenames, all
-    null except five_hour/seven_day/seven_day_sonnet. They must be ignored."""
+    """The feed could contain other keys (codenames) — they must be ignored,
+    only five_hour/seven_day count."""
 
     def _make_app(self):
         with patch.object(tracker.App, "_start_timer"), \
@@ -1145,7 +720,6 @@ class TestUnknownBuckets(unittest.TestCase):
             "seven_day_cowork": {"utilization": 99, "resets_at": None},
             "oauth_apps": None,
             "omelette": {"utilization": 88, "resets_at": None},
-            "some_codename_x7": {"utilization": 77, "resets_at": None},
         }
         app._update_display(data)
         self.assertEqual(app.title, "30%")
@@ -1164,6 +738,9 @@ class TestUnknownBuckets(unittest.TestCase):
             MockTimer.assert_not_called()
 
 
+# ---------------------------------------------------------------------------
+# Tests: section present but resets_at null
+# ---------------------------------------------------------------------------
 class TestSectionPresentNullReset(unittest.TestCase):
     """A live section with utilization but resets_at: null must render the pct
     and show 'resets --' without scheduling a reset timer."""
@@ -1178,7 +755,6 @@ class TestSectionPresentNullReset(unittest.TestCase):
         data = {
             "five_hour": {"utilization": 44, "resets_at": None},
             "seven_day": {"utilization": 22, "resets_at": None},
-            "seven_day_sonnet": {"utilization": 11, "resets_at": None},
         }
         app._update_display(data)
         self.assertIn("5-hour: 44%", app.m5h.title)
@@ -1187,12 +763,476 @@ class TestSectionPresentNullReset(unittest.TestCase):
 
     def test_null_reset_schedules_no_timer(self):
         app = self._make_app()
-        data = _make_api_response(
-            five_hour_resets=None, seven_day_resets=None, sonnet_resets=None,
-        )
+        data = _make_usage(five_hour_resets=None, seven_day_resets=None)
         with patch("threading.Timer") as MockTimer:
             app._schedule_reset_refresh(data)
             MockTimer.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Tests: _epoch_to_iso
+# ---------------------------------------------------------------------------
+class TestEpochToIso(unittest.TestCase):
+    def test_valid_epoch_round_trips(self):
+        iso = tracker._epoch_to_iso(1800000000)
+        self.assertIsNotNone(tracker._parse_iso(iso))
+
+    def test_none(self):
+        self.assertIsNone(tracker._epoch_to_iso(None))
+
+    def test_non_numeric(self):
+        self.assertIsNone(tracker._epoch_to_iso("not-a-number"))
+
+    def test_iso_string_passes_through(self):
+        # claude-code#40094: resets_at can already arrive as ISO, not epoch.
+        out = tracker._epoch_to_iso("2026-03-28T15:00:00Z")
+        self.assertIsNotNone(tracker._parse_iso(out))
+
+
+# ---------------------------------------------------------------------------
+# Tests: fetch_usage (pure read of the statusline file)
+# ---------------------------------------------------------------------------
+class TestStatuslineSource(unittest.TestCase):
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        self._file = Path(self._td.name) / "usage.json"
+        self._patcher = patch.object(tracker, "_STATUSLINE_FILE", self._file)
+        self._patcher.start()
+        # Isolate the desktop source: the dev machine may have the real file.
+        self._desktop = Path(self._td.name) / "plan-usage-history.json"
+        self._desktop_patcher = patch.object(
+            tracker, "_DESKTOP_HISTORY_FILE", self._desktop
+        )
+        self._desktop_patcher.start()
+
+    def tearDown(self):
+        self._patcher.stop()
+        self._desktop_patcher.stop()
+        self._td.cleanup()
+
+    def _write(self, payload):
+        self._file.write_text(json.dumps(payload), encoding="utf-8")
+
+    def test_nostatusline_when_file_missing(self):
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(data)
+        self.assertEqual(err, "nostatusline")
+
+    def test_waiting_when_no_windows(self):
+        self._write({"schema": 1, "captured_at": 100, "source": "x"})
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(data)
+        self.assertEqual(err, "waiting")
+
+    def test_error_on_invalid_json(self):
+        self._file.write_text("not json{{{", encoding="utf-8")
+        _, err = tracker.fetch_usage()
+        self.assertEqual(err, "error")
+
+    def test_error_when_payload_not_dict(self):
+        self._file.write_text("[1, 2, 3]", encoding="utf-8")
+        _, err = tracker.fetch_usage()
+        self.assertEqual(err, "error")
+
+    def test_normalizes_both_windows(self):
+        self._write({
+            "schema": 1, "captured_at": 1799999000,
+            "five_hour": {"used_percentage": 23.5, "resets_at": 1800000000},
+            "seven_day": {"used_percentage": 41, "resets_at": 1800500000},
+        })
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(err)
+        self.assertEqual(data["five_hour"]["utilization"], 23.5)
+        self.assertIn("seven_day", data)
+        self.assertEqual(data["_meta"]["captured_at"], 1799999000)
+        self.assertIsNotNone(tracker._parse_iso(data["five_hour"]["resets_at"]))
+
+    def test_partial_only_five_hour(self):
+        self._write({"captured_at": 1, "five_hour": {"used_percentage": 10, "resets_at": 2}})
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(err)
+        self.assertIn("five_hour", data)
+        self.assertNotIn("seven_day", data)
+
+    def test_window_without_percentage_is_waiting(self):
+        self._write({"captured_at": 1, "five_hour": {"resets_at": 2}})
+        _, err = tracker.fetch_usage()
+        self.assertEqual(err, "waiting")
+
+    def test_resets_at_as_iso_string(self):
+        # Contract #40094: if Claude Code passes resets_at as ISO (not epoch),
+        # the countdown must not silently disappear.
+        self._write({
+            "captured_at": 1799999000,
+            "five_hour": {"used_percentage": 12, "resets_at": "2099-01-01T00:00:00Z"},
+        })
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(err)
+        self.assertIsNotNone(tracker._parse_iso(data["five_hour"]["resets_at"]))
+
+
+# ---------------------------------------------------------------------------
+# Tests: desktop app secondary source + merge (ADR 0003)
+# ---------------------------------------------------------------------------
+class TestDesktopSource(TestStatuslineSource):
+    """Reuses TestStatuslineSource's file isolation (the parent tests re-run
+    here on the same patches — benign and intentional redundancy: they must
+    stay green with the desktop source wired but absent)."""
+
+    def _write_desktop(self, payload):
+        self._desktop.write_text(json.dumps(payload), encoding="utf-8")
+
+    def _sample(self, t_ms, fh=None, sd=None):
+        u = {}
+        if fh is not None:
+            u["fh"] = fh
+        if sd is not None:
+            u["sd"] = sd
+        return {"t": t_ms, "org": "org-1", "u": u}
+
+    def test_desktop_only_no_statusline(self):
+        # Zero config: desktop app present, statusline never wired.
+        self._write_desktop({"version": 2, "samples": [self._sample(1800000000000, fh=34, sd=24)]})
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(err)
+        self.assertEqual(data["five_hour"]["utilization"], 34)
+        self.assertEqual(data["seven_day"]["utilization"], 24)
+        self.assertIsNone(data["five_hour"]["resets_at"])
+        self.assertEqual(data["_meta"]["captured_at"], 1800000000.0)
+        self.assertEqual(data["_meta"]["source"], "desktop")
+
+    def test_last_valid_sample_wins_skipping_malformed(self):
+        self._write_desktop({"version": 2, "samples": [
+            self._sample(1000_000, fh=10),
+            self._sample(2000_000, fh=20),
+            {"t": "corrompu", "u": {"fh": 99}},
+            {"pas": "un sample"},
+        ]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 20)
+
+    def test_unknown_version_is_ignored(self):
+        self._write_desktop({"version": 3, "samples": [self._sample(1, fh=50)]})
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(data)
+        self.assertEqual(err, "nostatusline")  # behavior unchanged without desktop
+
+    def test_invalid_desktop_file_is_ignored(self):
+        self._desktop.write_text("pas du json{{{", encoding="utf-8")
+        _, err = tracker.fetch_usage()
+        self.assertEqual(err, "nostatusline")
+
+    def test_samples_not_a_list_is_ignored(self):
+        self._write_desktop({"version": 2, "samples": {"fh": 12}})
+        _, err = tracker.fetch_usage()
+        self.assertEqual(err, "nostatusline")
+
+    def test_merge_fresher_desktop_keeps_future_reset(self):
+        future = "2099-01-01T00:00:00+00:00"
+        self._write({
+            "captured_at": 1000,
+            "five_hour": {"used_percentage": 10, "resets_at": future},
+        })
+        self._write_desktop({"version": 2, "samples": [self._sample(2000_000, fh=42, sd=7)]})
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(err)
+        self.assertEqual(data["five_hour"]["utilization"], 42)
+        self.assertEqual(data["five_hour"]["resets_at"], future)  # statusline reset kept
+        self.assertEqual(data["seven_day"]["utilization"], 7)
+        self.assertEqual(data["_meta"]["source"], "desktop")
+
+    def test_merge_desktop_sampled_after_reset_drops_past_reset(self):
+        # Reset in the past but desktop sample after it → its % does describe
+        # the current window: displayed without a countdown.
+        self._write({
+            "captured_at": 1000,
+            "five_hour": {"used_percentage": 10, "resets_at": 2000},  # epoch 1970 → past
+        })
+        self._write_desktop({"version": 2, "samples": [self._sample(3000_000, fh=42)]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 42)
+        self.assertIsNone(data["five_hour"]["resets_at"])
+
+    def test_merge_desktop_sampled_before_reset_defers_to_statusline(self):
+        # Desktop sample before the reset → its % describes the OLD window:
+        # return the statusline version (which the display marks as
+        # "reset; awaiting") rather than a plausible old %.
+        now = datetime.now(timezone.utc).timestamp()
+        self._write({
+            "captured_at": int(now - 600),
+            "five_hour": {"used_percentage": 80, "resets_at": int(now - 30)},
+        })
+        self._write_desktop({"version": 2,
+                             "samples": [self._sample(int((now - 120) * 1000), fh=80)]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 80)
+        # resets_at (past) kept → _window_row will render the "reset" state
+        self.assertIsNotNone(data["five_hour"]["resets_at"])
+
+    def test_merge_fresher_statusline_wins(self):
+        self._write({
+            "captured_at": 3000,
+            "five_hour": {"used_percentage": 10, "resets_at": None},
+        })
+        self._write_desktop({"version": 2, "samples": [self._sample(2000_000, fh=42)]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 10)
+        self.assertEqual(data["_meta"]["source"], "statusline")
+
+    def test_merge_window_missing_from_desktop_kept_if_statusline_fresh(self):
+        now = datetime.now(timezone.utc).timestamp()
+        self._write({
+            "captured_at": int(now - 300),  # fresh (< _STALE_AFTER_SECS)
+            "seven_day": {"used_percentage": 55, "resets_at": None},
+        })
+        self._write_desktop({"version": 2,
+                             "samples": [self._sample(int((now - 60) * 1000), fh=42)]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 42)
+        self.assertEqual(data["seven_day"]["utilization"], 55)
+
+    def test_merge_window_missing_from_desktop_dropped_if_statusline_stale(self):
+        # A stale statusline window must not show up under the desktop's
+        # perfectly fresh "Updated" line.
+        now = datetime.now(timezone.utc).timestamp()
+        self._write({
+            "captured_at": int(now - 3600),  # stale (> _STALE_AFTER_SECS)
+            "seven_day": {"used_percentage": 55, "resets_at": None},
+        })
+        self._write_desktop({"version": 2,
+                             "samples": [self._sample(int((now - 60) * 1000), fh=42)]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 42)
+        self.assertNotIn("seven_day", data)
+
+    def test_desktop_sample_rejects_json_booleans(self):
+        # bool is a subtype of int: true/false must not pass for numbers
+        # (contract "any anomaly → reject").
+        self.assertIsNone(tracker._desktop_sample_to_data({"t": True, "u": {"fh": 5}}))
+        self.assertIsNone(tracker._desktop_sample_to_data({"t": 1000, "u": {"fh": True}}))
+        partial = tracker._desktop_sample_to_data({"t": 1000, "u": {"fh": True, "sd": 7}})
+        self.assertNotIn("five_hour", partial)
+        self.assertEqual(partial["seven_day"]["utilization"], 7)
+
+    def test_freshness_label_names_desktop_source(self):
+        now = datetime.now(timezone.utc)
+        self.assertIn("Claude app", tracker.App._freshness_label(now.timestamp(), now, "desktop"))
+        self.assertIn("Claude Code", tracker.App._freshness_label(now.timestamp(), now, "statusline"))
+
+
+# ---------------------------------------------------------------------------
+# Tests: statusline display (2 anneaux, freshness, reset-aware)
+# ---------------------------------------------------------------------------
+class TestStatuslineDisplay(unittest.TestCase):
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def _data(self, five=30, week=40, captured_at=None, five_reset=None):
+        now = datetime.now(timezone.utc)
+        future = (now + timedelta(hours=2)).isoformat()
+        if captured_at is None:
+            captured_at = now.timestamp()
+        return {
+            "five_hour": {"utilization": five, "resets_at": five_reset or future},
+            "seven_day": {"utilization": week, "resets_at": future},
+            "_meta": {"captured_at": captured_at},
+        }
+
+    def test_two_rings_passed_to_icon(self):
+        app = self._make_app()
+        with patch.object(tracker, "_render_dynamic_icon") as render:
+            app._update_display(self._data(five=30, week=40))
+        # 2 arguments only (no more inner ring).
+        self.assertEqual(render.call_args[0], (30, 40))
+
+    def test_title_and_row_show_five_hour(self):
+        app = self._make_app()
+        app._update_display(self._data(five=30))
+        self.assertEqual(app.title, "30%")
+        self.assertIn("5-hour: 30%", app.m5h.title)
+
+    def test_freshness_label_when_fresh(self):
+        app = self._make_app()
+        app._update_display(self._data())
+        self.assertIn("via Claude Code", app.mupd.title)
+
+    def test_title_weekly_off_by_default(self):
+        app = self._make_app()
+        app._update_display(self._data(five=43, week=25))
+        self.assertNotIn("/", app.title)
+
+    def test_title_weekly_appends_weekly_pct(self):
+        app = self._make_app()
+        app.title_weekly = True
+        app._update_display(self._data(five=43, week=25))
+        self.assertIn("43% / 25%", app.title)
+
+    def test_title_weekly_dash_when_window_absent(self):
+        app = self._make_app()
+        app.title_weekly = True
+        data = self._data(five=43)
+        del data["seven_day"]
+        app._update_display(data)
+        self.assertIn("43% / —", app.title)
+
+    def test_stale_when_capture_is_old(self):
+        app = self._make_app()
+        old = (datetime.now(timezone.utc) - timedelta(hours=1)).timestamp()
+        app._update_display(self._data(captured_at=old))
+        self.assertIn("stale", app.mupd.title)
+
+    def test_window_reset_since_capture_blanks_pct_and_ring(self):
+        app = self._make_app()
+        past = (datetime.now(timezone.utc) - timedelta(minutes=5)).isoformat()
+        with patch.object(tracker, "_render_dynamic_icon") as render:
+            app._update_display(self._data(five=90, five_reset=past))
+        self.assertEqual(app.title, "—")
+        self.assertIn("reset", app.m5h.title)
+        self.assertIsNone(render.call_args[0][0])
+
+
+# ---------------------------------------------------------------------------
+# Tests: statusline error states in _apply_usage
+# ---------------------------------------------------------------------------
+class TestStatuslineErrorStates(unittest.TestCase):
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def test_nostatusline_state_guides_step_by_step(self):
+        app = self._make_app()
+        app._apply_usage(None, "nostatusline")
+        self.assertEqual(app.title, "⚙")
+        # Onboarding: zero-config path (desktop app) first, statusline second.
+        self.assertIn("desktop app", app.m5h.title)
+        self.assertIn("install-statusline.sh", app.m7d.title)
+        self.assertIn("Claude Code", app.mupd.title)
+
+    def test_waiting_state(self):
+        app = self._make_app()
+        app._apply_usage(None, "waiting")
+        self.assertEqual(app.title, "…")
+        self.assertIn("Waiting", app.m5h.title)
+
+    def test_nostatusline_clears_stale_icon(self):
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_ICON
+        app._update_display(_make_usage(five_hour_pct=70))
+        app._apply_usage(None, "nostatusline")
+        self.assertIsNone(app.icon)
+
+
+# ---------------------------------------------------------------------------
+# Tests: the statusline capture script (subprocess, isolated HOME)
+# ---------------------------------------------------------------------------
+class TestStatuslineScript(unittest.TestCase):
+    """End-to-end: run statusline/tokease-statusline.py with mock stdin and a
+    throwaway HOME, then assert what it wrote to ~/.tokease/usage.json."""
+
+    SCRIPT = Path(__file__).resolve().parent.parent / "statusline" / "tokease-statusline.py"
+
+    def _run(self, stdin_text):
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        env = {**os.environ, "HOME": td.name, "TOKEASE_STATUSLINE_QUIET": "1"}
+        proc = subprocess.run(
+            [sys.executable, str(self.SCRIPT)],
+            input=stdin_text, capture_output=True, text=True, env=env, timeout=10,
+        )
+        out_file = Path(td.name) / ".tokease" / "usage.json"
+        payload = json.loads(out_file.read_text(encoding="utf-8")) if out_file.exists() else None
+        return proc, out_file, payload
+
+    def test_captures_rate_limits(self):
+        stdin = json.dumps({"rate_limits": {
+            "five_hour": {"used_percentage": 23.5, "resets_at": 1800000000},
+            "seven_day": {"used_percentage": 41, "resets_at": 1800500000},
+        }})
+        proc, _, payload = self._run(stdin)
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(payload["five_hour"]["used_percentage"], 23.5)
+        self.assertEqual(payload["seven_day"]["used_percentage"], 41)
+        self.assertEqual(payload["source"], "claude-code-statusline")
+        self.assertIn("captured_at", payload)
+
+    def test_no_rate_limits_writes_windowless_file(self):
+        proc, _, payload = self._run(json.dumps({"model": {"id": "x"}}))
+        self.assertEqual(proc.returncode, 0)
+        self.assertNotIn("five_hour", payload)
+        self.assertIn("captured_at", payload)
+
+    def test_invalid_json_does_not_write_file(self):
+        proc, out_file, _ = self._run("not json {{{")
+        self.assertEqual(proc.returncode, 0)  # must never crash the statusline
+        self.assertFalse(out_file.exists())
+
+    def test_partial_window_only(self):
+        stdin = json.dumps({"rate_limits": {"five_hour": {"used_percentage": 10, "resets_at": 1}}})
+        _, _, payload = self._run(stdin)
+        self.assertIn("five_hour", payload)
+        self.assertNotIn("seven_day", payload)
+
+    def test_empty_stdin_is_safe(self):
+        proc, _, payload = self._run("")
+        self.assertEqual(proc.returncode, 0)
+        self.assertNotIn("five_hour", payload)
+        self.assertIn("captured_at", payload)
+
+    def test_garbage_stdin_preserves_existing_good_file(self):
+        # Core guarantee: a corrupted tick must NOT overwrite a good usage.json.
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        good = Path(td.name) / ".tokease" / "usage.json"
+        good.parent.mkdir(parents=True)
+        good.write_text('{"five_hour": {"used_percentage": 42}}', encoding="utf-8")
+        env = {**os.environ, "HOME": td.name, "TOKEASE_STATUSLINE_QUIET": "1"}
+        proc = subprocess.run(
+            [sys.executable, str(self.SCRIPT)], input="not json {{{",
+            capture_output=True, text=True, env=env, timeout=10,
+        )
+        self.assertEqual(proc.returncode, 0)
+        self.assertEqual(json.loads(good.read_text())["five_hour"]["used_percentage"], 42)
+
+
+# ---------------------------------------------------------------------------
+# Tests: real icon rendering (Pillow) — otherwise this prod code never runs
+# ---------------------------------------------------------------------------
+@unittest.skipUnless(tracker._PILLOW_AVAILABLE, "Pillow required")
+class TestRenderIcon(unittest.TestCase):
+    def test_renders_real_png_at_final_size(self):
+        p = tracker._render_dynamic_icon(50, 30)
+        self.assertIsNotNone(p)
+        self.assertTrue(Path(p).exists())
+        with tracker.Image.open(p) as im:
+            size = im.size
+        self.assertEqual(size, (tracker._ICON_SIZE_FINAL, tracker._ICON_SIZE_FINAL))
+
+    def test_renders_with_none_pcts(self):
+        # absent/reset window (pct None) → BOTH tracks stay visible (empty rings)
+        p = tracker._render_dynamic_icon(None, None)
+        self.assertTrue(Path(p).exists())
+        center = tracker._ICON_SIZE_FINAL // 2
+        with tracker.Image.open(p) as im:
+            for radius in tracker._RING_RADII:
+                alpha = im.getpixel((center, center - radius))[3]
+                self.assertGreater(alpha, 0, f"missing track at radius {radius}")
+
+    def test_renders_clamps_over_100(self):
+        p = tracker._render_dynamic_icon(150, 999)
+        self.assertTrue(Path(p).exists())
+
+
+# ---------------------------------------------------------------------------
+# Tests: freshness label with a malformed captured_at
+# ---------------------------------------------------------------------------
+class TestFreshnessLabel(unittest.TestCase):
+    def test_malformed_captured_at_returns_default(self):
+        now = datetime.now(timezone.utc)
+        self.assertEqual(tracker.App._freshness_label("garbage", now), tracker.UPDATED_DEFAULT)
+        self.assertEqual(tracker.App._freshness_label(None, now), tracker.UPDATED_DEFAULT)
 
 
 if __name__ == "__main__":

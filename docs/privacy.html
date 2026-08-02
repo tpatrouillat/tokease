@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Privacy — Tokease</title>
+    <meta name="description" content="Tokease is local-only and collects nothing. Exactly what it reads, never does, and stores. No token, no Keychain, no network, no telemetry.">
+    <meta name="theme-color" content="#09090b">
+    <meta name="robots" content="index, follow">
+    <meta name="author" content="Thibault Patrouillat">
+    <link rel="canonical" href="https://tpatrouillat.github.io/tokease/privacy.html">
+    <meta property="og:type" content="article">
+    <meta property="og:title" content="Privacy — Tokease">
+    <meta property="og:description" content="Tokease is local-only and collects nothing. Exactly what it reads, never does, and stores. No token, no Keychain, no network, no telemetry.">
+    <meta property="og:image" content="https://tpatrouillat.github.io/tokease/og-image.png">
+    <meta property="og:image:alt" content="Tokease: two concentric Activity rings alongside the product name">
+    <meta property="og:url" content="https://tpatrouillat.github.io/tokease/privacy.html">
+    <meta property="og:site_name" content="Tokease">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Privacy — Tokease">
+    <meta name="twitter:description" content="Tokease is local-only and collects nothing. No token, no Keychain, no network, no telemetry.">
+    <meta name="twitter:image" content="https://tpatrouillat.github.io/tokease/og-image.png">
+    <meta name="twitter:image:alt" content="Tokease: two concentric Activity rings alongside the product name">
+    <link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="favicon-16.png">
+    <style>
+        :root {
+            --purple: #a855f7;
+            --cyan: #22d3ee;
+            --bg: #09090b;
+            --surface: #141418;
+            --surface-2: #1c1c22;
+            --border: #27272a;
+            --text: #fafafa;
+            --text-dim: #a1a1aa;
+            --text-muted: #8b8b94;
+            --green: #22c55e;
+            --radius: 16px;
+            --max-w: 760px;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            line-height: 1.7;
+            -webkit-font-smoothing: antialiased;
+        }
+        .wrap { max-width: var(--max-w); margin: 0 auto; padding: 3.5rem 1.5rem 5rem; }
+        a { color: var(--purple); text-decoration: none; }
+        a:hover { text-decoration: underline; }
+        .back { display: inline-block; margin-bottom: 2.5rem; color: var(--text-dim); font-size: 0.9rem; }
+        h1 { font-size: 2rem; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+        .lede { color: var(--text-dim); font-size: 1.05rem; margin-bottom: 2.5rem; }
+        h2 { font-size: 1.15rem; margin: 2.25rem 0 0.75rem; letter-spacing: -0.01em; }
+        p { color: var(--text-dim); margin-bottom: 0.9rem; }
+        ul { list-style: none; margin-bottom: 0.9rem; }
+        li { color: var(--text-dim); position: relative; padding-left: 1.4rem; margin-bottom: 0.55rem; }
+        li::before { content: ""; position: absolute; left: 0; top: 0.7em; width: 6px; height: 6px; border-radius: 50%; background: var(--purple); }
+        li.no::before { background: var(--text-muted); }
+        code {
+            font-family: 'SF Mono', 'Fira Code', ui-monospace, monospace;
+            background: var(--surface-2);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 0.12em 0.4em;
+            font-size: 0.85em;
+            color: var(--text);
+        }
+        strong { color: var(--text); font-weight: 600; }
+        .badge {
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.25);
+            color: var(--green); border-radius: 999px; padding: 0.35rem 0.85rem;
+            font-size: 0.8rem; font-weight: 600; margin-bottom: 2.5rem;
+        }
+        .updated { margin-top: 3rem; padding-top: 1.5rem; border-top: 1px solid var(--border); color: var(--text-muted); font-size: 0.85rem; }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <a class="back" href="./">&larr; Back to Tokease</a>
+        <h1>Privacy</h1>
+        <p class="lede">Tokease is local-only and collects nothing. Here is exactly what it does and doesn't touch.</p>
+        <div class="badge">No token · No Keychain · No network · No telemetry</div>
+
+        <h2>What it reads</h2>
+        <ul>
+            <li><code>~/.tokease/usage.json</code> &mdash; the <code>rate_limits</code> windows (<code>five_hour</code>, <code>seven_day</code>: used percentage + reset time) that the Tokease statusline capture script writes from the data <strong>Claude Code hands to its statusline</strong>.</li>
+            <li><code>~/Library/Application Support/Claude/plan-usage-history.json</code> &mdash; the quota samples the <strong>official Claude desktop app</strong> writes locally for its own use (read-only; Tokease never writes to or modifies anything under the Claude app's folder).</li>
+        </ul>
+
+        <h2>What it never does</h2>
+        <ul>
+            <li class="no"><strong>Never reads your OAuth token</strong> and <strong>never opens the macOS Keychain.</strong></li>
+            <li class="no"><strong>Never calls any Anthropic endpoint</strong> (or any other server). Tokease itself makes no network requests. It only reads local files. The only exception is the Support menu, which opens GitHub in your browser when <em>you</em> click it.</li>
+            <li class="no"><strong>No telemetry, no analytics, no account, no tracking.</strong> Nothing leaves your machine.</li>
+            <li class="no">Stores no credentials or secrets on disk.</li>
+        </ul>
+
+        <h2>What it stores</h2>
+        <ul>
+            <li>App preferences (display mode, weekly percentage toggle, refresh interval, alert toggle) in the standard macOS <code>NSUserDefaults</code> for the app.</li>
+            <li>The captured usage windows in <code>~/.tokease/usage.json</code>, the rendered menu-bar icon in <code>~/.tokease/tokease-icon.png</code>, and a best-effort error log in <code>~/.tokease/statusline.err</code>.</li>
+            <li>If you enable auto-start: a LaunchAgent at <code>~/Library/LaunchAgents/com.tpatrouillat.tokease.plist</code>.</li>
+            <li>If you wire the optional statusline: a <code>statusLine</code> block in <code>~/.claude/settings.json</code>, with a timestamped backup (<code>settings.json.bak.*</code>) of your previous file made before any change.</li>
+        </ul>
+
+        <h2>Removing everything</h2>
+        <p>Run <code>uninstall.sh</code>: it deletes <code>~/.tokease/</code>, the LaunchAgent, and the Tokease <code>statusLine</code> block (with a backup). Homebrew users: run it first (<code>bash "$(brew --prefix)/opt/tokease/libexec/uninstall.sh"</code>), then <code>brew uninstall tokease</code>. <code>brew uninstall</code> alone removes the app but leaves <code>~/.tokease/</code> and the statusline wiring in place. UI preferences stay in macOS user defaults, and the <code>settings.json.bak.*</code> backups are deliberately kept as a safety net, see <a href="https://github.com/tpatrouillat/tokease/blob/main/PRIVACY.md" rel="noopener">PRIVACY.md</a> for the exact cleanup commands.</p>
+
+        <p>You don't have to take our word for it: Tokease is a short, MIT-licensed Python file: <a href="https://github.com/tpatrouillat/tokease/blob/main/tracker.py" rel="noopener">read <code>tracker.py</code> on GitHub</a> and verify it yourself.</p>
+
+        <p>Back to <a href="index.html">Tokease, the Claude usage limit tracker for the Mac menu bar</a>.</p>
+
+        <p class="updated">Not affiliated with Anthropic. &middot; Last updated 2026-07-06 &middot; <a href="terms.html">Terms of Use</a></p>
+    </div>
+</body>
+</html>
