@@ -419,7 +419,14 @@ def _merge_usage(statusline, desktop):
     sl_at = _captured_at(statusline)
     desk_at = _captured_at(desktop)
     if desk_at <= sl_at:
-        return statusline
+        # The statusline is fresher — but a capture legitimately carries no
+        # window at all (Claude Code renders the statusline before it has any
+        # rate_limits to hand over). An empty fresher capture must not discard
+        # a usable desktop reading: fall back to it, with its own timestamp so
+        # the "Updated" line stays honest.
+        if any(statusline.get(key) for key in ("five_hour", "seven_day")):
+            return statusline
+        return desktop
     now = datetime.now(timezone.utc)
     sl_fresh = (now.timestamp() - sl_at) <= _STALE_AFTER_SECS
     merged = {"_meta": desktop["_meta"]}
