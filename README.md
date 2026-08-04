@@ -12,6 +12,13 @@
 
 ![Tokease menu bar dropdown showing the Claude 5-hour and weekly limits with reset times](docs/screenshot.png)
 
+```bash
+brew install tpatrouillat/tap/tokease
+brew services start tokease      # starts it now, and at every login
+```
+
+Requires macOS 12 Monterey or later and a Claude Pro or Max plan. Zero config if the Claude desktop app is running. [Other install paths below.](#install-from-source)
+
 ## Why Tokease
 
 Tokease reads only two local files that official Claude apps already write on your Mac: the quota history of the Claude desktop app, and the `rate_limits` data Claude Code publishes to its statusline. No OAuth token read from the Keychain, no hidden API call, no User-Agent spoofing. Other trackers read your subscription token from the Keychain. Tokease never touches it.
@@ -96,6 +103,17 @@ If the Claude desktop app is running, you are done. Optionally wire up the statu
   brew services stop tokease && brew uninstall tokease
   ```
   `brew uninstall` alone removes the app but leaves `~/.tokease/` and any statusline wiring in place.
+
+## If the rings stop moving after a Claude update
+
+The Claude desktop app's quota file is internal and undocumented, so a Claude update can change its format without notice. Tokease detects that and falls back to the statusline feed rather than showing a wrong number, but if neither source refreshes, the rings freeze at their last reading (always flagged stale). Two commands tell you which source broke:
+
+```bash
+ls -la ~/Library/Application\ Support/Claude/plan-usage-history.json   # desktop source present?
+cat ~/.tokease/statusline.err                                          # capture script errors
+```
+
+Please [open an issue](https://github.com/tpatrouillat/tokease/issues/new/choose) with what you find. There is no telemetry, so a report is the only way this gets noticed.
 
 ## I don't see the icon
 
