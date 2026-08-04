@@ -72,14 +72,12 @@ echo "$BANNER"
 echo ""
 read -r -p "Start the tracker automatically at login? (y/n): " auto_start || auto_start="n"
 
-if [[ "$auto_start" =~ ^[Yy]$ ]]; then
-    # The paths get interpolated into XML below: & and < would corrupt the plist.
-    if [[ "$SCRIPT_DIR" == *"&"* || "$SCRIPT_DIR" == *"<"* ]]; then
-        echo "The install path contains '&' or '<', which breaks the LaunchAgent plist." >&2
-        echo "Skipping auto-start setup. Move the folder to a simpler path and re-run," >&2
-        echo "or start Tokease manually (command shown below)." >&2
-        auto_start="n"
-    fi
+# The paths get interpolated into XML below: & and < would corrupt the plist.
+if [[ "$auto_start" =~ ^[Yy]$ && ( "$SCRIPT_DIR" == *"&"* || "$SCRIPT_DIR" == *"<"* ) ]]; then
+    echo "The install path contains '&' or '<', which breaks the LaunchAgent plist." >&2
+    echo "Skipping auto-start setup. Move the folder to a simpler path and re-run," >&2
+    echo "or start Tokease manually (command shown below)." >&2
+    auto_start="n"
 fi
 
 if [[ "$auto_start" =~ ^[Yy]$ ]]; then

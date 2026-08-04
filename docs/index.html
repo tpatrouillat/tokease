@@ -697,8 +697,8 @@
         }
         .copy-btn:hover { background: var(--border); color: var(--text); }
         .copy-btn.copied {
-            background: rgba(34,197,94,0.2);
-            color: #86efac;
+            background: #14331f;
+            color: #a7f3d0;
             border-color: rgba(34,197,94,0.4);
         }
         .install-meta { margin-top: 0.85rem; text-align: left; font-size: 0.8rem; color: var(--text-muted); }
@@ -1134,8 +1134,8 @@
 
     /* --- Count-up numbers --------------------------------------------- */
     function countUp(el) {
-        var to = parseInt(el.getAttribute('data-to'), 10) || 0;
-        var suffix = el.getAttribute('data-suffix') || '';
+        var to = Number.parseInt(el.dataset.to, 10) || 0;
+        var suffix = el.dataset.suffix || '';
         if (reduce || to === 0) { el.textContent = to + suffix; return; }
         var start = performance.now(), dur = 1100;
         function frame(now) {
@@ -1150,7 +1150,7 @@
     /* --- Reveal + stagger + triggered count-ups ----------------------- */
     function revealAll() {
         document.querySelectorAll('.reveal, .stagger').forEach(function (el) { el.classList.add('is-visible'); });
-        document.querySelectorAll('.countup').forEach(function (el) { el.textContent = el.getAttribute('data-to') + (el.getAttribute('data-suffix') || ''); });
+        document.querySelectorAll('.countup').forEach(function (el) { el.textContent = el.dataset.to + (el.dataset.suffix || ''); });
     }
     if (reduce || !('IntersectionObserver' in window)) {
         revealAll();
