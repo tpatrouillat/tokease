@@ -567,11 +567,13 @@ class App(rumps.App):
         display_menu.add(self.m_weekly)
         self._update_display_menu()
 
-        # Notification toggle
-        self.m_alerts = rumps.MenuItem(
-            f"Alert at {NOTIFY_THRESHOLDS[0]}% / {NOTIFY_THRESHOLDS[1]}%",
-            callback=self._toggle_alerts,
-        )
+        # Notification toggle. macOS only delivers notifications for a signed
+        # bundle, so from brew/source the banner never appears — say so in the
+        # label rather than offering a switch that silently does nothing.
+        alerts_label = f"Alert at {NOTIFY_THRESHOLDS[0]}% / {NOTIFY_THRESHOLDS[1]}%"
+        if not self._app_path:
+            alerts_label += " (.app build only)"
+        self.m_alerts = rumps.MenuItem(alerts_label, callback=self._toggle_alerts)
         self.m_alerts.state = 1 if self.alerts_enabled else 0
 
         # Refresh interval (radio submenu)

@@ -45,7 +45,7 @@
         "softwareVersion": "1.0.0",
         "softwareRequirements": "macOS, Claude Pro or Max subscription",
         "screenshot": "https://tpatrouillat.github.io/tokease/screenshot.png",
-        "featureList": "5-hour and weekly usage rings, reset countdowns, alerts at 80% and 95%, launch at login, no token read, 100% local",
+        "featureList": "5-hour and weekly usage rings, reset countdowns, stale-data flagging, display modes, no token read, 100% local",
         "downloadUrl": "https://github.com/tpatrouillat/tokease",
         "url": "https://tpatrouillat.github.io/tokease/",
         "description": "A lightweight macOS menu bar app with a 2-ring Activity Display that shows your Claude 5-hour and weekly limits, read from files official Claude apps publish locally. No token read, no hidden API call.",
@@ -88,7 +88,7 @@
             {
                 "@type": "Question",
                 "name": "Claude Code already shows my usage in /usage and the statusline. Why an app?",
-                "acceptedAnswer": { "@type": "Answer", "text": "Same numbers, different surface. /usage and the statusline show your limits while you're looking at the terminal, which is when you least need the reminder. Tokease shows them in the menu bar while you're in your editor or a browser, sends an optional notification when you cross 80% and 95%, and keeps the last known value (flagged stale) in between." }
+                "acceptedAnswer": { "@type": "Answer", "text": "Same numbers, different surface. /usage and the statusline show your limits while you're looking at the terminal, which is when you least need the reminder. Tokease shows them in the menu bar while you're in your editor or a browser, and keeps the last known value (flagged stale) in between." }
             },
             {
                 "@type": "Question",
@@ -874,7 +874,7 @@
     <div class="section-header reveal">
         <div class="section-label">See it in action</div>
         <h2 class="section-title">Your remaining 5-hour and weekly limits, one glance away</h2>
-        <p class="section-sub">Two rings fill as you spend your 5-hour and weekly windows, and a notification (on by default, toggleable) alerts you at 80% and again at 95%. In short, a lightweight Claude rate limit monitor for your Mac: you see the wall coming before you hit it.</p>
+        <p class="section-sub">Two rings fill as you spend your 5-hour and weekly windows, right next to the clock. In short, a lightweight Claude rate limit monitor for your Mac: you see the wall coming before you hit it.</p>
     </div>
     <div class="reveal">
         <figure class="showcase-frame" id="showcaseFrame">
@@ -908,7 +908,7 @@
         <div class="step">
             <div class="step-num" aria-hidden="true">3</div>
             <h3>Read the rings</h3>
-            <p>Your two rings light up in the menu bar, 5-hour and weekly, with an optional notification at 80% and 95%. Bonus for CLI users: wire the included statusline script into Claude Code to add reset countdowns.</p>
+            <p>Your two rings light up in the menu bar, 5-hour and weekly, refreshed while the Claude desktop app runs. Bonus for CLI users: wire the included statusline script into Claude Code to add reset countdowns.</p>
         </div>
     </div>
 </section>
@@ -1002,7 +1002,7 @@
         </details>
         <details class="faq">
             <summary>Claude Code already shows my usage in /usage and the statusline. Why an app?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body">Same numbers, different surface. <code>/usage</code> and the statusline show your limits while you're looking at the terminal, which is when you least need the reminder. Tokease shows them in the menu bar while you're in your editor or a browser, sends an optional notification when you cross 80% and 95%, and keeps the last known value (flagged stale) in between.</div>
+            <div class="faq-body">Same numbers, different surface. <code>/usage</code> and the statusline show your limits while you're looking at the terminal, which is when you least need the reminder. Tokease shows them in the menu bar while you're in your editor or a browser, and keeps the last known value (flagged stale) in between.</div>
         </details>
         <details class="faq">
             <summary>How is this different from the other menu bar trackers?<span class="faq-plus" aria-hidden="true"></span></summary>
