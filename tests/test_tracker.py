@@ -901,6 +901,24 @@ class TestDesktopSource(TestStatuslineSource):
         self.assertEqual(data["_meta"]["captured_at"], 1800000000.0)
         self.assertEqual(data["_meta"]["source"], "desktop")
 
+    def test_fresh_windowless_statusline_does_not_discard_desktop(self):
+        # Claude Code renders the statusline before it has rate_limits (session
+        # start). That capture is the freshest file on disk but carries no
+        # window: it must not hide a usable desktop reading, or a dual-source
+        # user sees "waiting" every time they open a session.
+        now = datetime.now(timezone.utc).timestamp()
+        self._write({"schema": 1, "captured_at": now, "source": "claude-code-statusline"})
+        self._write_desktop({"version": 2, "samples": [
+            self._sample(int((now - 120) * 1000), fh=55, sd=20),
+        ]})
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(err)
+        self.assertEqual(data["five_hour"]["utilization"], 55)
+        self.assertEqual(data["seven_day"]["utilization"], 20)
+        # And the timestamp shown is the desktop's own, not the empty capture's:
+        # an older reading is never displayed under a fresher "Updated" line.
+        self.assertAlmostEqual(data["_meta"]["captured_at"], now - 120, delta=1)
+
     def test_last_valid_sample_wins_skipping_malformed(self):
         self._write_desktop({"version": 2, "samples": [
             self._sample(1000_000, fh=10),
