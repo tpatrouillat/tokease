@@ -23,7 +23,7 @@ echo "Tokease — uninstall"
 echo
 
 # 1. LaunchAgent + running process
-if [ -f "$LAUNCH_AGENT_PLIST" ]; then
+if [[ -f "$LAUNCH_AGENT_PLIST" ]]; then
   launchctl unload "$LAUNCH_AGENT_PLIST" 2>/dev/null || true
   rm -f "$LAUNCH_AGENT_PLIST"
   echo "✓ LaunchAgent removed"
@@ -35,7 +35,7 @@ SELF_DIR_RE=$(printf '%s' "$SELF_DIR/tracker.py" | sed 's/[.[\$()*+?{|^]/\\&/g')
 pkill -f "$SELF_DIR_RE" 2>/dev/null || true
 
 # 2. statusLine block in settings.json — only if it is ours
-if [ -f "$SETTINGS" ] && grep -q "$STATUSLINE_MARK" "$SETTINGS" 2>/dev/null; then
+if [[ -f "$SETTINGS" ]] && grep -q "$STATUSLINE_MARK" "$SETTINGS" 2>/dev/null; then
   if command -v jq >/dev/null 2>&1; then
     backup="$SETTINGS.bak.$(date +%Y%m%d-%H%M%S)"
     cp "$SETTINGS" "$backup"
@@ -50,13 +50,13 @@ if [ -f "$SETTINGS" ] && grep -q "$STATUSLINE_MARK" "$SETTINGS" 2>/dev/null; the
   else
     echo "! 'jq' not found — remove the \"statusLine\" block by hand in $SETTINGS"
   fi
-elif [ -f "$SETTINGS" ]; then
+elif [[ -f "$SETTINGS" ]]; then
   echo "note: if you pasted the Tokease snippet into YOUR own statusline script,"
   echo "      remove it there (settings.json does not point directly at Tokease)."
 fi
 
 # 3. Captured data
-if [ -d "$TOKEASE_DIR" ]; then
+if [[ -d "$TOKEASE_DIR" ]]; then
   rm -rf "$TOKEASE_DIR"
   echo "✓ $TOKEASE_DIR deleted"
 fi

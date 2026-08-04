@@ -11,7 +11,7 @@ DEST="$DEST_DIR/tokease-statusline.py"
 SETTINGS="$HOME/.claude/settings.json"
 COMMAND="python3 ~/.tokease/tokease-statusline.py"
 
-if [ ! -f "$SRC" ]; then
+if [[ ! -f "$SRC" ]]; then
   echo "error: $SRC not found" >&2
   exit 1
 fi
@@ -54,7 +54,7 @@ EOF
 write_with_jq() {
   local existing
   existing="$(jq -r '.statusLine.command // empty' "$SETTINGS" 2>/dev/null || true)"
-  if [ -n "$existing" ]; then
+  if [[ -n "$existing" ]]; then
     echo "A statusLine.command already exists in $SETTINGS — not overwriting."
     print_manual_snippet
     return 0
@@ -76,7 +76,6 @@ write_with_jq() {
 
 # settings.json missing: create it with a minimal valid JSON.
 create_settings() {
-  local backup=""
   mkdir -p "$(dirname "$SETTINGS")"
   if command -v jq >/dev/null 2>&1; then
     printf '{}' | jq --arg cmd "$COMMAND" \
@@ -101,7 +100,7 @@ echo
 
 case "$reply" in
   [Yy]*)
-    if [ ! -f "$SETTINGS" ]; then
+    if [[ ! -f "$SETTINGS" ]]; then
       create_settings
     elif command -v jq >/dev/null 2>&1; then
       write_with_jq
