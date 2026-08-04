@@ -1162,11 +1162,37 @@ class TestStatuslineScript(unittest.TestCase):
         self.assertEqual(payload["source"], "claude-code-statusline")
         self.assertIn("captured_at", payload)
 
-    def test_no_rate_limits_writes_windowless_file(self):
+    def test_no_rate_limits_writes_windowless_file_when_none_existed(self):
+        # First capture of a session: nothing to preserve, so a windowless
+        # file is written (the app then shows "waiting", which is accurate).
         proc, _, payload = self._run(json.dumps({"model": {"id": "x"}}))
         self.assertEqual(proc.returncode, 0)
         self.assertNotIn("five_hour", payload)
         self.assertIn("captured_at", payload)
+
+    def test_no_rate_limits_preserves_previously_captured_windows(self):
+        # Claude Code renders the statusline before it has rate_limits (session
+        # start, /clear, resume). That must NOT wipe good windows: the app would
+        # drop to "Waiting" mid-session for CLI-only users.
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        good = Path(td.name) / ".tokease" / "usage.json"
+        good.parent.mkdir(parents=True)
+        good.write_text(json.dumps({
+            "schema": 1, "captured_at": 1800000000,
+            "five_hour": {"used_percentage": 42, "resets_at": 1800001000},
+            "seven_day": {"used_percentage": 8, "resets_at": 1800500000},
+        }), encoding="utf-8")
+        env = {**os.environ, "HOME": td.name, "TOKEASE_STATUSLINE_QUIET": "1"}
+        proc = subprocess.run(
+            [sys.executable, str(self.SCRIPT)], input=json.dumps({"model": {"id": "x"}}),
+            capture_output=True, text=True, env=env, timeout=10,
+        )
+        self.assertEqual(proc.returncode, 0)
+        kept = json.loads(good.read_text(encoding="utf-8"))
+        self.assertEqual(kept["five_hour"]["used_percentage"], 42)
+        self.assertEqual(kept["seven_day"]["used_percentage"], 8)
+        self.assertEqual(kept["captured_at"], 1800000000)  # untouched, so staleness stays honest
 
     def test_invalid_json_does_not_write_file(self):
         proc, out_file, _ = self._run("not json {{{")

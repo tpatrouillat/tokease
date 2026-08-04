@@ -69,6 +69,22 @@ def _extract_window(rate_limits, key):
     return out
 
 
+def _has_window(payload):
+    """True when the payload carries at least one usable usage window."""
+    return isinstance(payload, dict) and any(
+        payload.get(key) for key in ("five_hour", "seven_day")
+    )
+
+
+def _read_current():
+    """Current usage.json, or {} when absent/unreadable. Never raises."""
+    try:
+        with open(_OUT, encoding="utf-8") as fh:
+            return json.load(fh)
+    except (OSError, ValueError):
+        return {}
+
+
 def _atomic_write(payload):
     """Write JSON atomically (temp in same dir + os.replace) so the reader
     never sees a partially-written file. Cleans up the temp file on failure
@@ -118,10 +134,15 @@ def main():
             if win is not None:
                 payload[key] = win
 
-    try:
-        _atomic_write(payload)
-    except OSError as exc:
-        _log_error(f"write failed: {exc!r}")
+    # Claude Code renders the statusline before it has any rate_limits to hand
+    # over (session start, /clear, resume). Writing then would replace good
+    # windows with an empty capture and the app would fall back to "Waiting".
+    # Keep the previous reading instead — the app already flags it as stale.
+    if _has_window(payload) or not _has_window(_read_current()):
+        try:
+            _atomic_write(payload)
+        except OSError as exc:
+            _log_error(f"write failed: {exc!r}")
 
     # Minimal statusline output (suppressed when used as a snippet, or via env).
     if os.environ.get("TOKEASE_STATUSLINE_QUIET"):
