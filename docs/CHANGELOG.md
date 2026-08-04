@@ -1,5 +1,31 @@
 # Changelog
 
+## v1.0.2 — Launch-day polish
+
+### Fixed
+
+- `install.sh` no longer starts two copies: the LaunchAgent already launches Tokease on load, so the "Start the tracker now?" prompt is only offered when auto-start was declined. Two running copies meant two identical menu bar icons, and the second survived Quit.
+- Removed the "Sponsor / Donate" menu item: GitHub Sponsors isn't set up, so it opened a redirect to a bare profile.
+- The Support submenu now shows the version, so a bug report can state which build it is.
+
+### Docs
+
+- `CONTRIBUTING.md` and the PR template no longer ask for `ruff format .`, which would have reformatted the whole codebase on a contributor's first PR. Lint stays `ruff check`.
+- Version is consistent across the app bundle, the landing page and the tag.
+
+## v1.0.1 — Reliable statusline capture
+
+### Fixed
+
+- The statusline capture no longer wipes good readings. Claude Code renders the statusline before it has any `rate_limits` to hand over (session start, `/clear`, resume); the script wrote anyway, replacing captured windows with an empty payload, and the app dropped to "Waiting" mid-session. It now keeps the previous reading and lets the app flag it stale on its own schedule. Mainly affected CLI-only users, who don't have the Claude desktop app as a backstop.
+- Threshold notifications at 80% / 95% are no longer promised where they can't fire: macOS only delivers notifications for a signed `.app` bundle, so they never appear on a Homebrew or source install. Docs, landing page and the Settings label say so now. The feature stays in the code for the signed `.app` build.
+
+### Docs
+
+- ROADMAP no longer contradicts itself on the zero-network rule and on signed `.app` builds.
+- The landing page no longer names other trackers: the argument stands at category level.
+- `brew services start tokease` added to every install path — without it the app installs and nothing appears.
+
 ## v1.0.0 — Token-free: two local read-only sources
 
 ### Breaking

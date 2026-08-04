@@ -173,10 +173,13 @@ _STALE_AFTER_SECS = 15 * 60
 # rings. Menu bar font renders one space at ~4 px; two = comfortable gap.
 _TITLE_SPACER = "  "
 
-# External links (Support submenu). Change DONATE_URL to BMC/Ko-fi/PayPal etc.
-# if GitHub Sponsors isn't your preferred platform.
+# External link (Support submenu). No donation link: GitHub Sponsors isn't
+# set up, and a menu item that 302s to a bare profile is a broken promise.
 STAR_URL = "https://github.com/tpatrouillat/tokease"
-DONATE_URL = "https://github.com/sponsors/tpatrouillat"
+
+# Shown in the Support submenu so a bug report can state which build it is.
+# Keep in sync with setup.py and the git tag.
+__version__ = "1.0.2"
 
 # Login-item registration uses the .app's CFBundleDisplayName — must match
 # Info.plist exactly or `delete login item` won't find it.
@@ -601,8 +604,8 @@ class App(rumps.App):
 
         # --- Support submenu --------------------------------------------
         support_menu = rumps.MenuItem("Support")
+        support_menu.add(rumps.MenuItem(f"Tokease {__version__}"))  # no callback: label only
         support_menu.add(rumps.MenuItem("Star on GitHub", callback=self._open_star))
-        support_menu.add(rumps.MenuItem("Sponsor / Donate", callback=self._open_donate))
 
         self.menu = [
             self.m5h, self.m7d, None,
@@ -665,9 +668,6 @@ class App(rumps.App):
 
     def _open_star(self, _):
         webbrowser.open(STAR_URL)
-
-    def _open_donate(self, _):
-        webbrowser.open(DONATE_URL)
 
     def _maybe_notify(self, pct):
         """Fire a notification when pct crosses a threshold upward."""

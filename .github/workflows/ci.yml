@@ -27,8 +27,6 @@ jobs:
       # Pinned: an unpinned ruff broke the CI when 0.16 landed with new default rules
       - run: 'pip install --only-binary=:all: "ruff==0.15.22"'
       - run: ruff check .
-      # Uncomment this gate AFTER running `ruff format .` once
-      # - run: ruff format --check .
 
   test:
     name: Test (py ${{ matrix.python-version }})
