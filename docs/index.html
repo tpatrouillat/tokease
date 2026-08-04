@@ -92,8 +92,8 @@
             },
             {
                 "@type": "Question",
-                "name": "How is this different from CodexBar or ClaudeBar?",
-                "acceptedAnswer": { "@type": "Answer", "text": "CodexBar and ClaudeBar read your Claude credentials from the macOS Keychain to query usage. Tokease deliberately doesn't touch your Keychain or your token. It only reads what official Claude apps already publish locally. If never handing your credentials to a third-party tool matters to you, that's the difference." }
+                "name": "How is this different from the other menu bar trackers?",
+                "acceptedAnswer": { "@type": "Answer", "text": "Most of them read your Claude credentials from the macOS Keychain and query Anthropic's API on your behalf. That works, and some do it carefully. Tokease takes the other route: it never touches your Keychain or your token at all, and only reads what official Claude apps already publish locally. If never handing your credentials to a third-party tool matters to you, that's the difference." }
             },
             {
                 "@type": "Question",
@@ -862,9 +862,9 @@
 <!-- Stats banner -->
 <div class="stats-band">
     <div class="stats-inner stagger" id="statsBand">
-        <div><div class="stat-num"><span class="countup" data-to="2">0</span></div><div class="stat-label">limits at a glance</div></div>
+        <div><div class="stat-num"><span class="countup" data-to="2">2</span></div><div class="stat-label">limits at a glance</div></div>
         <div><div class="stat-num"><span class="countup" data-to="0">0</span></div><div class="stat-label">tokens read</div></div>
-        <div><div class="stat-num"><span class="countup" data-to="100" data-suffix="%">0%</span></div><div class="stat-label">local, on your Mac</div></div>
+        <div><div class="stat-num"><span class="countup" data-to="100" data-suffix="%">100%</span></div><div class="stat-label">local, on your Mac</div></div>
         <div><div class="stat-num">$<span class="countup" data-to="0">0</span></div><div class="stat-label">price, forever</div></div>
     </div>
 </div>
@@ -927,14 +927,14 @@
         <div>
             <h3>Token-free by construction, not by promise.</h3>
             <p>Tokease reads two local files, both written by official Claude apps for their own use: the quota history the Claude desktop app refreshes while it runs, and the <strong style="color:var(--text)">documented <code>rate_limits</code> fields</strong> Claude Code 2.1.x and later hand to their statusline script. It reads exactly those, and nothing else. It <strong style="color:var(--text)">never reads your OAuth token</strong>, never opens your Keychain, and <strong style="color:var(--text)">never calls any Anthropic endpoint</strong>.</p>
-            <p>No server, no analytics, no telemetry, no phone-home. There is no token to misuse and nothing that leaves your Mac. The whole thing is a short, MIT-licensed Python file: <a href="https://github.com/tpatrouillat/tokease/blob/main/tracker.py" rel="noopener">read <code>tracker.py</code> on GitHub</a> and verify it yourself.</p>
+            <p>No server, no analytics, no telemetry, no phone-home. There is no token to misuse and nothing that leaves your Mac. The whole app is one MIT-licensed Python file of about 850 lines: <a href="https://github.com/tpatrouillat/tokease/blob/main/tracker.py" rel="noopener">read <code>tracker.py</code> on GitHub</a> and verify it yourself.</p>
         </div>
     </div>
     <div class="trust-grid stagger" id="trustGrid">
         <div class="trust-item">
             <div class="trust-item-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M12.75 8.25V6a3.75 3.75 0 10-7.5 0v2.25M4.5 8.25h9a1.5 1.5 0 011.5 1.5v5.25a1.5 1.5 0 01-1.5 1.5h-9a1.5 1.5 0 01-1.5-1.5V9.75a1.5 1.5 0 011.5-1.5z" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
             <h4>No token, no Keychain</h4>
-            <p>Tokease never reads your OAuth token. CodexBar and ClaudeBar read the Keychain. Tokease doesn't.</p>
+            <p>Tokease never reads your OAuth token and never opens the Keychain. There is no credential for it to misuse.</p>
         </div>
         <div class="trust-item">
             <div class="trust-item-icon" aria-hidden="true"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 1.5L2.25 5.25v4.5c0 3.94 2.88 7.62 6.75 8.25 3.87-.63 6.75-4.31 6.75-8.25v-4.5L9 1.5z" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg></div>
@@ -1005,8 +1005,8 @@
             <div class="faq-body">Same numbers, different surface. <code>/usage</code> and the statusline show your limits while you're looking at the terminal, which is when you least need the reminder. Tokease shows them in the menu bar while you're in your editor or a browser, sends an optional notification when you cross 80% and 95%, and keeps the last known value (flagged stale) in between.</div>
         </details>
         <details class="faq">
-            <summary>How is this different from CodexBar or ClaudeBar?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body">CodexBar and ClaudeBar read your Claude credentials from the macOS Keychain to query usage. Tokease deliberately doesn't touch your Keychain or your token. It only reads what official Claude apps already publish locally. If never handing your credentials to a third-party tool matters to you, that's the difference.</div>
+            <summary>How is this different from the other menu bar trackers?<span class="faq-plus" aria-hidden="true"></span></summary>
+            <div class="faq-body">Most of them read your Claude credentials from the macOS Keychain and query Anthropic's API on your behalf. That works, and some do it carefully. Tokease takes the other route: it never touches your Keychain or your token at all, and only reads what official Claude apps already publish locally. If never handing your credentials to a third-party tool matters to you, that's the difference.</div>
         </details>
         <details class="faq">
             <summary>How is this different from ccusage?<span class="faq-plus" aria-hidden="true"></span></summary>
@@ -1049,10 +1049,11 @@
             <div class="install-box">
                 <div class="install-lines">
                     <div><span class="prompt">$ </span><span class="cmd">brew install</span> <span class="arg">tpatrouillat/tap/tokease</span></div>
+                    <div><span class="prompt">$ </span><span class="cmd">brew services start</span> <span class="arg">tokease</span></div>
                 </div>
-                <button class="copy-btn" id="copyBtnBrew" type="button" aria-label="Copy the Homebrew install command to clipboard">Copy</button>
+                <button class="copy-btn" id="copyBtnBrew" type="button" aria-label="Copy the Homebrew install commands to clipboard">Copy</button>
             </div>
-            <div class="install-meta">Zero config if the Claude desktop app is running. Optional: wire the statusline capture script for reset countdowns, see the <a href="https://github.com/tpatrouillat/tokease/blob/main/statusline/README.md" rel="noopener">setup guide</a>.</div>
+            <div class="install-meta">The second line starts it and brings it back at every login. Zero config if the Claude desktop app is running. Optional: wire the statusline capture script for reset countdowns, see the <a href="https://github.com/tpatrouillat/tokease/blob/main/statusline/README.md" rel="noopener">setup guide</a>.</div>
         </div>
         <div class="install-card">
             <h3>Build from source</h3>
@@ -1136,7 +1137,10 @@
     function countUp(el) {
         var to = Number.parseInt(el.dataset.to, 10) || 0;
         var suffix = el.dataset.suffix || '';
+        // Final values live in the HTML so no-JS readers and crawlers see the
+        // real numbers; the animation rewinds to 0 only once it can run.
         if (reduce || to === 0) { el.textContent = to + suffix; return; }
+        el.textContent = '0' + suffix;
         var start = performance.now(), dur = 1100;
         function frame(now) {
             var t = Math.min((now - start) / dur, 1);
@@ -1230,7 +1234,7 @@
             });
         });
     }
-    wireCopy('copyBtnBrew', 'brew install tpatrouillat/tap/tokease');
+    wireCopy('copyBtnBrew', 'brew install tpatrouillat/tap/tokease && brew services start tokease');
     wireCopy('copyBtnSrc', 'git clone https://github.com/tpatrouillat/tokease.git && cd tokease && bash install.sh');
 })();
 </script>
