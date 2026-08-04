@@ -24,8 +24,8 @@ OPTIONS = {
         "CFBundleName": APP_NAME,
         "CFBundleDisplayName": APP_NAME,
         "CFBundleIdentifier": "com.tpatrouillat.tokease",
-        "CFBundleVersion": "1.0.0",
-        "CFBundleShortVersionString": "1.0.0",
+        "CFBundleVersion": "1.0.2",
+        "CFBundleShortVersionString": "1.0.2",
         "LSUIElement": True,  # Menu bar app — no Dock icon
         "NSHumanReadableCopyright": "MIT License — Thibault Patrouillat",
     },

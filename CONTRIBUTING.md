@@ -17,7 +17,6 @@ pip install ruff pytest        # dev tools
 ## Before opening a PR
 
 - **Lint:** `ruff check .` (must pass — includes basic security rules).
-- **Format:** `ruff format .`
 - **Tests:** `python -m pytest -q` (must stay green; add tests for new behavior).
 - Keep `tracker.py` readable and dependency-light (currently `rumps` + `Pillow`).
   New runtime dependencies need a strong justification.

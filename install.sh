@@ -117,7 +117,10 @@ if [[ "$auto_start" =~ ^[Yy]$ ]]; then
 </plist>
 EOF
     launchctl load "$LAUNCH_AGENT_PLIST"
-    echo "LaunchAgent installed and loaded — it will also start at every login."
+    # RunAtLoad is true, so launchctl load already started it. Asking again
+    # below would put a second Tokease in the menu bar.
+    echo "LaunchAgent installed and loaded — Tokease is running now, and will"
+    echo "start again at every login."
 fi
 
 # --- Done -------------------------------------------------------------------
@@ -130,10 +133,15 @@ echo "To start manually:"
 echo "  \"$VENV_DIR/bin/python\" \"$SCRIPT_DIR/tracker.py\""
 echo ""
 
-read -r -p "Start the tracker now? (y/n): " start_now || start_now="n"
-if [[ "$start_now" =~ ^[Yy]$ ]]; then
-    echo "Starting Tokease..."
-    nohup "$VENV_DIR/bin/python" "$SCRIPT_DIR/tracker.py" >/dev/null 2>&1 &
+# Only offer to start it when the LaunchAgent didn't already do it — two
+# running copies means two identical icons in the menu bar, and the second
+# one survives Quit.
+if [[ ! "$auto_start" =~ ^[Yy]$ ]]; then
+    read -r -p "Start the tracker now? (y/n): " start_now || start_now="n"
+    if [[ "$start_now" =~ ^[Yy]$ ]]; then
+        echo "Starting Tokease..."
+        nohup "$VENV_DIR/bin/python" "$SCRIPT_DIR/tracker.py" >/dev/null 2>&1 &
+    fi
 fi
 
 echo ""
