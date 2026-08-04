@@ -93,7 +93,7 @@
             {
                 "@type": "Question",
                 "name": "How is this different from the other menu bar trackers?",
-                "acceptedAnswer": { "@type": "Answer", "text": "Most of them read your Claude credentials from the macOS Keychain and query Anthropic's API on your behalf. That works, and some do it carefully. Tokease takes the other route: it never touches your Keychain or your token at all, and only reads what official Claude apps already publish locally. If never handing your credentials to a third-party tool matters to you, that's the difference." }
+                "acceptedAnswer": { "@type": "Answer", "text": "They make different trade-offs, and several are excellent. The one that shaped Tokease is size: the app is a single 865-line Python file, plus a 158-line script if you want reset countdowns. No HTTP client is imported anywhere in it, so there is no update check, no telemetry, no crash reporter. In a large codebase \"it does not phone home\" is a promise you accept. Here it is something you can verify yourself in about ten minutes." }
             },
             {
                 "@type": "Question",
@@ -916,9 +916,9 @@
 <!-- Privacy / Trust -->
 <section id="privacy">
     <div class="section-header reveal">
-        <div class="section-label">Token-free by construction</div>
-        <h2 class="section-title">No token read. No hidden API call.</h2>
-        <p class="section-sub">Other trackers read your Claude credentials from the Keychain. Tokease doesn't touch them. It only reads what official Claude apps already publish on your own Mac.</p>
+        <div class="section-label">Small enough to check</div>
+        <h2 class="section-title">Read it before you run it.</h2>
+        <p class="section-sub">The app is one 865-line Python file, plus a 158-line script if you want reset countdowns. No HTTP client is imported anywhere in it, so there is no update check, no telemetry, no crash reporter. That is not a promise, it is something you can verify in about ten minutes.</p>
     </div>
     <div class="trust-card reveal">
         <div class="trust-icon" aria-hidden="true">
@@ -1006,7 +1006,7 @@
         </details>
         <details class="faq">
             <summary>How is this different from the other menu bar trackers?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body">Most of them read your Claude credentials from the macOS Keychain and query Anthropic's API on your behalf. That works, and some do it carefully. Tokease takes the other route: it never touches your Keychain or your token at all, and only reads what official Claude apps already publish locally. If never handing your credentials to a third-party tool matters to you, that's the difference.</div>
+            <div class="faq-body">They make different trade-offs, and several are excellent. The one that shaped Tokease is size: the app is a single 865-line Python file, plus a 158-line script if you want reset countdowns. No HTTP client is imported anywhere in it, so there is no update check, no telemetry, no crash reporter. In a large codebase "it does not phone home" is a promise you accept. Here it is something you can verify yourself in about ten minutes.</div>
         </details>
         <details class="faq">
             <summary>How is this different from ccusage?<span class="faq-plus" aria-hidden="true"></span></summary>

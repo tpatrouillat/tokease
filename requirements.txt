@@ -1,2 +1,2 @@
 rumps==0.4.0
-Pillow>=10.0.0
+Pillow==12.3.0
