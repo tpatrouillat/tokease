@@ -1202,6 +1202,46 @@ class TestStatuslineScript(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Tests: statusline line rendering (pure helper, no subprocess)
+# ---------------------------------------------------------------------------
+class TestStatuslineRenderLine(unittest.TestCase):
+    """_render_line formats the captured windows; it must never raise, whatever
+    the payload holds — it runs inside Claude Code's statusline."""
+
+    @staticmethod
+    def _render(payload):
+        import importlib.util
+        path = Path(__file__).resolve().parent.parent / "statusline" / "tokease-statusline.py"
+        spec = importlib.util.spec_from_file_location("tokease_statusline", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod._render_line(payload)
+
+    def test_both_windows(self):
+        line = self._render({
+            "five_hour": {"used_percentage": 42.7},
+            "seven_day": {"used_percentage": 7},
+        })
+        self.assertEqual(line, "⛁ 5h 42% · 7d 7%")
+
+    def test_single_window(self):
+        self.assertEqual(self._render({"five_hour": {"used_percentage": 10}}), "⛁ 5h 10%")
+
+    def test_no_window_renders_nothing(self):
+        self.assertEqual(self._render({"captured_at": 1}), "")
+
+    def test_non_numeric_percentage_is_skipped_not_fatal(self):
+        line = self._render({
+            "five_hour": {"used_percentage": "boom"},
+            "seven_day": {"used_percentage": 5},
+        })
+        self.assertEqual(line, "⛁ 7d 5%")
+
+    def test_missing_percentage_key_is_skipped(self):
+        self.assertEqual(self._render({"five_hour": {"resets_at": 1}}), "")
+
+
+# ---------------------------------------------------------------------------
 # Tests: real icon rendering (Pillow) — otherwise this prod code never runs
 # ---------------------------------------------------------------------------
 @unittest.skipUnless(tracker._PILLOW_AVAILABLE, "Pillow required")
