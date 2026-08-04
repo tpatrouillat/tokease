@@ -84,6 +84,20 @@ def _atomic_write(payload):
         raise
 
 
+def _render_line(payload):
+    """Minimal statusline text for the captured windows ("" when none is usable)."""
+    bits = []
+    for key, lbl in (("five_hour", "5h"), ("seven_day", "7d")):
+        win = payload.get(key)
+        if not win:
+            continue
+        try:  # a non-numeric % must not wipe out the whole output
+            bits.append(f"{lbl} {int(float(win['used_percentage']))}%")
+        except (KeyError, TypeError, ValueError):
+            pass
+    return "⛁ " + " · ".join(bits) if bits else ""
+
+
 def main():
     raw = sys.stdin.read()
     try:
@@ -112,17 +126,7 @@ def main():
     # Minimal statusline output (suppressed when used as a snippet, or via env).
     if os.environ.get("TOKEASE_STATUSLINE_QUIET"):
         return
-    bits = []
-    for key, lbl in (("five_hour", "5h"), ("seven_day", "7d")):
-        win = payload.get(key)
-        if not win:
-            continue
-        try:  # a non-numeric % must not wipe out the whole output
-            bits.append(f"{lbl} {int(float(win['used_percentage']))}%")
-        except (KeyError, TypeError, ValueError):
-            pass
-    if bits:
-        sys.stdout.write("⛁ " + " · ".join(bits))
+    sys.stdout.write(_render_line(payload))
 
 
 if __name__ == "__main__":
