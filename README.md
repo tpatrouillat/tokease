@@ -26,7 +26,7 @@ Tokease reads only two local files that official Claude apps already write on yo
 Three things it does:
 
 1. **Token-free by construction, not by promise.** The only data sources are files official Claude clients write locally for their own use. No token read, no endpoint call.
-2. **Shows the limit you have left, not the history you spent.** Your 5-hour and weekly remaining capacity, with reset countdowns and alerts at 80% and 95% (on by default, toggleable in Settings).
+2. **Shows the limit you have left, not the history you spent.** Your 5-hour and weekly remaining capacity, with reset countdowns. (Threshold notifications at 80% and 95% exist in the code but macOS only delivers them for a signed .app bundle, so they do not fire on Homebrew or source installs — see the roadmap.)
 3. **One file, zero telemetry, zero account.** A small single-file menu bar app, MIT-licensed. It runs entirely on your machine. No telemetry, no account, nothing to sign up for.
 
 ## Features
@@ -35,7 +35,7 @@ Three things it does:
 - **Reset countdowns**: see when each window rolls over
 - **Honest freshness**: shows when a Claude client last refreshed the data (desktop app or Claude Code), and flags it *stale* when none is running
 - **Customizable display**: icon + percentage, icon only, or percentage only, plus an option to show both percentages (`5h / weekly`)
-- **Settings menu**: launch at login, display modes, alert thresholds (notify at 80% / 95%), refresh interval
+- **Settings menu**: display modes, refresh interval, alert thresholds (80% / 95%, signed `.app` build only), launch at login (`.app` build; use `brew services` or the LaunchAgent otherwise)
 - **Lightweight**: pure Python, two small dependencies (`rumps` + `Pillow`)
 - **No telemetry**: no account, no tracking, nothing phones home
 
