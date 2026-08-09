@@ -21,9 +21,9 @@ Requires macOS 12 Monterey or later and a Claude Pro or Max plan. Zero config if
 
 ## Why Tokease
 
-Tokease reads only two local files that official Claude apps already write on your Mac: the quota history of the Claude desktop app, and the `rate_limits` data Claude Code publishes to its statusline. No OAuth token read from the Keychain, no hidden API call, no User-Agent spoofing.
+Tokease reads only two local files: the quota history the Claude desktop app writes on your Mac, and the `rate_limits` data Claude Code hands to its statusline, which the 158-line capture script saves to `~/.tokease`. No OAuth token read from the Keychain, no hidden API call, no User-Agent spoofing.
 
-That is a sentence any tracker can write. What you can actually check is the size. The app is one 865-line Python file, plus a 158-line capture script if you want reset countdowns. The import block at the top of [`tracker.py`](tracker.py) is the whole dependency story, and there is no HTTP client in it, so there is no update check, no telemetry and no crash reporter. Open the file, search for `urllib`, and you have your answer in a minute.
+That is a sentence any tracker can write. What you can actually check is the size. The app is one 865-line Python file, plus a 158-line capture script if you want reset countdowns. The import block at the top of [`tracker.py`](tracker.py) is the whole dependency story, and there is no HTTP client in it, so there is no update check, no telemetry and no crash reporter. The only subprocess it spawns is `osascript`, for launch-at-login. Open the file, search for `urllib`, and you have your answer in a minute.
 
 Three things it does:
 
