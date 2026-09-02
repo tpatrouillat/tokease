@@ -33,7 +33,7 @@ Three things it does:
 
 - **Two usage rings**: 5-hour session (outer) and weekly (inner) gauges, right in the menu bar
 - **Reset countdowns**: see when each window rolls over
-- **Honest freshness**: shows when a Claude client last refreshed the data (desktop app or Claude Code), and flags it *stale* when none is running
+- **Honest freshness**: shows when a Claude client last refreshed the data (desktop app or Claude Code), and marks the number `~42%` in the menu bar once it goes stale
 - **Customizable display**: icon + percentage, icon only, or percentage only, plus an option to show both percentages (`5h / weekly`)
 - **Settings menu**: display modes, refresh interval, alert thresholds (80% / 95%, signed `.app` build only), launch at login (`.app` build; use `brew services` or the LaunchAgent otherwise)
 - **Lightweight**: pure Python, two small dependencies (`rumps` + `Pillow`)
@@ -50,7 +50,7 @@ Three things it does:
 
 Tokease merges two local, read-only sources. Whichever is fresher wins:
 
-1. **Claude Desktop history (zero config).** While the Claude desktop app runs, it samples your account quota every ~5 minutes into a local file (`~/Library/Application Support/Claude/plan-usage-history.json`). Tokease reads it as-is. No setup: if the desktop app is running, the rings stay fresh whatever surface you're using (VS Code extension, claude.ai, Cowork, CLI). See [ADR 0003](docs/adr/0003-source-secondaire-plan-usage-desktop.md).
+1. **Claude Desktop history (zero config).** While the Claude desktop app runs, it samples your account quota every 5 to 15 minutes into a local file (`~/Library/Application Support/Claude/plan-usage-history.json`). Tokease reads it as-is. No setup: if the desktop app is running, the rings stay fresh whatever surface you're using (VS Code extension, claude.ai, Cowork, CLI). See [ADR 0003](docs/adr/0003-source-secondaire-plan-usage-desktop.md).
 2. **Claude Code statusline (adds reset countdowns).** A small capture script ([`statusline/tokease-statusline.py`](statusline/tokease-statusline.py)) runs as your Claude Code statusline command. Claude Code passes it `rate_limits.five_hour` / `.seven_day` on stdin and the script writes them to `~/.tokease/usage.json`. This is the only feed carrying the *reset times* shown next to each ring.
 
 In both cases the data is written locally *by an official Claude client* for its own use. Tokease never reads your token and never calls any endpoint. Statusline setup: [`statusline/README.md`](statusline/README.md).
@@ -123,11 +123,11 @@ Tokease is probably running fine and your menu bar is full. On notched MacBooks,
 
 The percentages are **account-level**: they cover everything on your subscription, from claude.ai chat and Claude Desktop (Cowork included) to the VS Code extension and the CLI. The ring is never wrong about how much quota you've used. The only question is how fresh the last reading is.
 
-- **Claude Desktop running**: readings every ~5 minutes, whatever surface you work in. This is the recommended setup. Just keep the desktop app open (it lives in your menu bar anyway).
+- **Claude Desktop running**: readings every 5 to 15 minutes, whatever surface you work in. Worst case the number in the menu bar is that far behind reality, and longer if the desktop app goes idle. This is the recommended setup. Just keep the desktop app open (it lives in your menu bar anyway).
 - **Only the statusline wired**: readings refresh while an interactive `claude` terminal session is active (the CLI, or the VS Code *integrated terminal*). The VS Code extension panel, Claude Desktop and headless `claude -p` never execute statuslines ([#55643](https://github.com/anthropics/claude-code/issues/55643), closed "not planned"). With the statusline as sole source, the rings go stale between CLI sessions.
 - **Both** (best): desktop history keeps the rings fresh, and statusline captures add the reset countdowns whenever you use the CLI.
 
-Stale data is always visibly flagged, and reset windows that have already rolled over are detected. An old percentage is never shown as if it were fresh.
+Past 20 minutes without a refresh from either source, the menu bar number is prefixed with `~` and the dropdown says how old it is. Reset windows that have already rolled over are detected too. An old percentage is never shown as if it were fresh.
 
 ### Who sees the reset countdowns
 

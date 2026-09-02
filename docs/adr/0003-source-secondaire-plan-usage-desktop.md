@@ -22,7 +22,7 @@ Paths investigated and rejected (2026-07-20, official docs + tests on this machi
 - **Claude Code caches** (`~/.claude.json`, `~/.claude/**`): nothing structural.
 
 **Discovery.** The **Claude desktop app** (`/Applications/Claude.app`) samples
-the plan quota **every 5 minutes** while it runs, and persists it to:
+the plan quota **every 5 to 15 minutes** while it runs, and persists it to:
 
 ```
 ~/Library/Application Support/Claude/plan-usage-history.json
@@ -31,7 +31,11 @@ the plan quota **every 5 minutes** while it runs, and persists it to:
 Observed format (version 2): `{"version": 2, "samples": [{"t": <epoch ms>,
 "org": "<uuid>", "u": {"fh": <% 5h>, "sd": <% 7d>}}, …]}`. Verified live:
 284 samples over ~29 h, median cadence 300 s, values consistent with the
-statusline. The data stays fresh **even when only the VS Code extension is
+statusline. Re-measured on 1086 samples over a month, the cadence is bimodal:
+half the gaps are 5 min, a quarter are 15 min, and the app skips samples while
+idle. A reading can therefore be up to ~20 min old and still be normal
+operation, which is why `_STALE_AFTER_SECS` is 20 min and not 15. The data
+stays fresh **even when only the VS Code extension is
 used** (and even during Claude.ai/Desktop usage, since this is the account's
 quota).
 
@@ -65,6 +69,13 @@ the statusline by freshness:
   statusline as the safety net.
 - **No `resets_at`**: reset times only come from the statusline. They are
   shown only when a recent statusline capture exists.
+- **Lag up to ~20 min**: between two desktop samples the percentage is frozen
+  and can be far behind reality (on 2026-09-01 the menu bar sat at 26 % for
+  30 min while the 5h window went to 100 %). Past the stale threshold the
+  title prefixes the number with `~`, so a frozen reading says so itself.
+- **Mixed merge**: when a partial statusline capture is completed by the
+  desktop feed, the "Updated" line reports the fresher source. The filled
+  window can be up to 20 min older than that line suggests.
 - **Requirement**: the Claude desktop app installed and running (menubar). To
   document in the README as "recommended for freshness", not mandatory.
 - **Multi-org**: the `org` field must be respected if several orgs appear (we

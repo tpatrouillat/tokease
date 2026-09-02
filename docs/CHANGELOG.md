@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+### Fixed
+
+- A stale reading no longer looks live in the menu bar: past the freshness threshold the percentage is prefixed with `~` (`~26%`). Before this, only the dropdown flagged it, and the number is what you actually read.
+- The freshness threshold moves from 15 to 20 minutes. Measured over a month of desktop samples the app's cadence is 5 or 15 minutes, so 15 flagged normal operation as stale about 15 % of the time.
+- A partial statusline capture no longer wipes a window it doesn't carry. A capture with only the weekly window used to blank the 5-hour reading until the next desktop sample. The desktop value now fills the gap, unless it is itself stale.
+
+### Docs
+
+- README and ADR 0003 state the real desktop cadence (5 to 15 minutes, not 5) and the resulting worst-case lag.
+
 ## v1.0.2 — Launch-day polish
 
 ### Fixed
