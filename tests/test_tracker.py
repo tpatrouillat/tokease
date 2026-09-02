@@ -1066,6 +1066,72 @@ class TestDesktopSource(TestStatuslineSource):
         self.assertIn("Claude app", tracker.App._freshness_label(now.timestamp(), now, "desktop"))
         self.assertIn("Claude Code", tracker.App._freshness_label(now.timestamp(), now, "statusline"))
 
+    def test_missing_captured_at_treated_as_maximally_stale(self):
+        # No captured_at at all in the statusline file: _captured_at falls
+        # back to 0.0, so a fresh desktop sample must win the merge outright.
+        now = datetime.now(timezone.utc).timestamp()
+        self._write({"five_hour": {"used_percentage": 10, "resets_at": None}})
+        self._write_desktop({"version": 2,
+                             "samples": [self._sample(int(now * 1000), fh=77, sd=33)]})
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(err)
+        self.assertEqual(data["five_hour"]["utilization"], 77)
+        self.assertEqual(data["_meta"]["source"], "desktop")
+
+    def test_non_numeric_captured_at_treated_as_maximally_stale(self):
+        # A garbled captured_at must not crash the merge — same fallback as
+        # a missing one (float() raises, _captured_at catches it → 0.0).
+        now = datetime.now(timezone.utc).timestamp()
+        self._write({
+            "captured_at": "unknown",
+            "five_hour": {"used_percentage": 10, "resets_at": None},
+        })
+        self._write_desktop({"version": 2,
+                             "samples": [self._sample(int(now * 1000), fh=77, sd=33)]})
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(err)
+        self.assertEqual(data["five_hour"]["utilization"], 77)
+        self.assertEqual(data["_meta"]["source"], "desktop")
+
+    def test_merge_window_desktop_without_resets_at_and_no_statusline_window(self):
+        # Desktop windows never carry resets_at — direct unit check of the
+        # base case _merge_window falls back to when sl_win is absent.
+        now = datetime.now(timezone.utc)
+        desk_win = {"utilization": 55, "resets_at": None}
+        win = tracker._merge_window(None, desk_win, now.timestamp(), False, now)
+        self.assertEqual(win, {"utilization": 55, "resets_at": None})
+
+    def test_merge_desktop_sampled_exactly_at_reset_boundary_defers_to_statusline(self):
+        # Boundary of the desk_at <= reset check: sampled in the very same
+        # instant as the reset must still be treated as "before" it (old
+        # window), not "after" (which would show a bogus fresh %).
+        now = datetime.now(timezone.utc).timestamp()
+        reset_epoch = int(now - 120)
+        self._write({
+            "captured_at": int(now - 600),
+            "five_hour": {"used_percentage": 80, "resets_at": reset_epoch},
+        })
+        self._write_desktop({"version": 2,
+                             "samples": [self._sample(reset_epoch * 1000, fh=80)]})
+        data, _ = tracker.fetch_usage()
+        self.assertIsNotNone(data["five_hour"]["resets_at"])
+
+    def test_merge_fresher_statusline_also_stale_still_wins_over_older_desktop(self):
+        # "Fresher" is relative: a 30-min-old statusline capture is itself
+        # stale (> _STALE_AFTER_SECS) but still beats a 60-min-old desktop
+        # sample, which in turn is too old to backfill the missing window.
+        now = datetime.now(timezone.utc).timestamp()
+        self._write({
+            "captured_at": int(now - 1800),
+            "seven_day": {"used_percentage": 9, "resets_at": None},
+        })
+        self._write_desktop({"version": 2,
+                             "samples": [self._sample(int((now - 3600) * 1000), fh=70, sd=50)]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["seven_day"]["utilization"], 9)
+        self.assertNotIn("five_hour", data)
+        self.assertEqual(data["_meta"]["source"], "statusline")
+
 
 # ---------------------------------------------------------------------------
 # Tests: statusline display (2 anneaux, freshness, reset-aware)
@@ -1395,6 +1461,66 @@ class TestStaleTitleMarker(unittest.TestCase):
         now = datetime.now(timezone.utc)
         label = tracker.App._freshness_label((now.timestamp() - 25 * 60), now, "desktop")
         self.assertIn("stale", label)
+
+    def test_freshness_label_exact_threshold_boundary(self):
+        # age > _STALE_AFTER_SECS is the actual condition: exactly at the
+        # threshold must still read as fresh, one second past must not.
+        now = datetime.now(timezone.utc)
+        at_threshold = tracker.App._freshness_label(
+            now.timestamp() - tracker._STALE_AFTER_SECS, now, "desktop"
+        )
+        self.assertTrue(at_threshold.startswith("Updated"), at_threshold)
+        past_threshold = tracker.App._freshness_label(
+            now.timestamp() - tracker._STALE_AFTER_SECS - 1, now, "desktop"
+        )
+        self.assertIn("stale", past_threshold)
+
+    def test_stale_marker_in_pct_only_mode(self):
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_PCT
+        stale = datetime.now(timezone.utc).timestamp() - 3600
+        app._update_display(_make_usage(five_hour_pct=26, captured_at=stale))
+        self.assertEqual(app.title, "~26%")
+
+    def test_stale_marker_absent_from_icon_only_title(self):
+        # Icon mode blanks the title unconditionally: the tilde is computed
+        # but never rendered there. Real gap (no staleness signal at all in
+        # icon-only mode) — not something this fix claims to close.
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_ICON
+        stale = datetime.now(timezone.utc).timestamp() - 3600
+        app._update_display(_make_usage(five_hour_pct=26, captured_at=stale))
+        self.assertEqual(app.title, "")
+
+    def test_stale_marker_applies_even_when_five_hour_absent(self):
+        app = self._make_app()
+        app.title_weekly = True
+        stale = datetime.now(timezone.utc).timestamp() - 3600
+        data = _make_usage(seven_day_pct=12, captured_at=stale)
+        del data["five_hour"]
+        app._update_display(data)
+        self.assertEqual(app.title, "~— / 12%")
+
+    def test_no_marker_when_no_window_at_all_weekly_variant(self):
+        app = self._make_app()
+        app.title_weekly = True
+        app._update_display({"_meta": {"captured_at": 1}})
+        self.assertEqual(app.title, "— / —")
+
+    def test_notification_fires_even_when_data_is_stale(self):
+        # The staleness marker is purely a display concern: a stale reading
+        # crossing a threshold still fires the alert (open question — see
+        # report — not something the spec asks to change).
+        app = self._make_app()
+        app.alerts_enabled = True
+        app._last_pct = 50
+        stale = datetime.now(timezone.utc).timestamp() - 3600
+        calls = []
+        with patch.object(tracker.rumps, "notification",
+                          side_effect=lambda **k: calls.append(k)):
+            app._update_display(_make_usage(five_hour_pct=85, captured_at=stale))
+        self.assertEqual(len(calls), 1)
+        self.assertEqual(app.title, "~85%")
 
 
 if __name__ == "__main__":
