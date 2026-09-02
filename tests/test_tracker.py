@@ -1032,6 +1032,35 @@ class TestDesktopSource(TestStatuslineSource):
         self.assertNotIn("five_hour", partial)
         self.assertEqual(partial["seven_day"]["utilization"], 7)
 
+    def test_merge_fresher_partial_statusline_keeps_desktop_window(self):
+        # Incident 2026-09-01: a capture carrying only the weekly window wiped
+        # the desktop 5h reading, so the title showed "—" while quota burned.
+        now = datetime.now(timezone.utc).timestamp()
+        self._write({
+            "captured_at": int(now - 60),
+            "seven_day": {"used_percentage": 0, "resets_at": None},
+        })
+        self._write_desktop({"version": 2,
+                             "samples": [self._sample(int((now - 300) * 1000), fh=100, sd=12)]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 100)
+        self.assertEqual(data["seven_day"]["utilization"], 0)
+        self.assertEqual(data["_meta"]["source"], "statusline")
+
+    def test_merge_fresher_partial_statusline_ignores_stale_desktop(self):
+        # Symmetric guard: an old desktop sample must not be shown under a
+        # fresh "Updated" line.
+        now = datetime.now(timezone.utc).timestamp()
+        self._write({
+            "captured_at": int(now - 60),
+            "seven_day": {"used_percentage": 4, "resets_at": None},
+        })
+        self._write_desktop({"version": 2,
+                             "samples": [self._sample(int((now - 7200) * 1000), fh=100)]})
+        data, _ = tracker.fetch_usage()
+        self.assertNotIn("five_hour", data)
+        self.assertEqual(data["seven_day"]["utilization"], 4)
+
     def test_freshness_label_names_desktop_source(self):
         now = datetime.now(timezone.utc)
         self.assertIn("Claude app", tracker.App._freshness_label(now.timestamp(), now, "desktop"))
@@ -1321,6 +1350,51 @@ class TestFreshnessLabel(unittest.TestCase):
         now = datetime.now(timezone.utc)
         self.assertEqual(tracker.App._freshness_label("garbage", now), tracker.UPDATED_DEFAULT)
         self.assertEqual(tracker.App._freshness_label(None, now), tracker.UPDATED_DEFAULT)
+
+
+# ---------------------------------------------------------------------------
+# Tests: staleness surfaced in the menu bar title (spec honest-freshness)
+# ---------------------------------------------------------------------------
+class TestStaleTitleMarker(unittest.TestCase):
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def test_fresh_title_has_no_marker(self):
+        app = self._make_app()
+        app._update_display(_make_usage(five_hour_pct=42))
+        self.assertEqual(app.title, "42%")
+
+    def test_stale_title_is_marked(self):
+        app = self._make_app()
+        stale = datetime.now(timezone.utc).timestamp() - 3600
+        app._update_display(_make_usage(five_hour_pct=26, captured_at=stale))
+        self.assertEqual(app.title, "~26%")
+
+    def test_stale_marker_prefixes_the_weekly_variant_once(self):
+        app = self._make_app()
+        app.title_weekly = True
+        stale = datetime.now(timezone.utc).timestamp() - 3600
+        app._update_display(_make_usage(five_hour_pct=26, seven_day_pct=4, captured_at=stale))
+        self.assertEqual(app.title, "~26% / 4%")
+
+    def test_no_marker_when_no_window_at_all(self):
+        app = self._make_app()
+        app._update_display({"_meta": {"captured_at": 1}})
+        self.assertEqual(app.title, "—")
+
+    def test_threshold_tolerates_the_desktop_15min_cadence(self):
+        # Desktop samples every 5 to 15 min: a 17 min old reading is still
+        # normal operation, not a dead client.
+        now = datetime.now(timezone.utc)
+        label = tracker.App._freshness_label((now.timestamp() - 17 * 60), now, "desktop")
+        self.assertTrue(label.startswith("Updated"), label)
+
+    def test_threshold_still_flags_a_missed_sample(self):
+        now = datetime.now(timezone.utc)
+        label = tracker.App._freshness_label((now.timestamp() - 25 * 60), now, "desktop")
+        self.assertIn("stale", label)
 
 
 if __name__ == "__main__":

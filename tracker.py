@@ -159,15 +159,16 @@ _KEY_TITLE_WEEKLY = "title_weekly"
 # (statusline/tokease-statusline.py). Read on every refresh in statusline mode.
 _STATUSLINE_FILE = _TOKEASE_DIR / "usage.json"
 
-# Quota history sampled (~5 min) by the Claude desktop app. Read-only
+# Quota history sampled (5 to 15 min) by the Claude desktop app. Read-only
 # secondary source, undocumented internal format (see ADR 0003).
 _DESKTOP_HISTORY_FILE = (
     Path.home() / "Library" / "Application Support" / "Claude" / "plan-usage-history.json"
 )
 
-# Captured statusline data older than this (seconds) is shown as stale —
-# the signal that Claude Code isn't running to refresh it.
-_STALE_AFTER_SECS = 15 * 60
+# A reading older than this (seconds) is shown as stale — the signal that no
+# Claude client is refreshing it. 20 min: measured on 1086 desktop samples the
+# cadence is 5 min or 15 min, so 15 would flag normal operation 15 % of the time.
+_STALE_AFTER_SECS = 20 * 60
 
 # Two-space spacer between icon and percentage so the digits don't crowd the
 # rings. Menu bar font renders one space at ~4 px; two = comfortable gap.
@@ -421,16 +422,23 @@ def _merge_usage(statusline, desktop):
     (per-window honesty guards: see _merge_window)."""
     sl_at = _captured_at(statusline)
     desk_at = _captured_at(desktop)
+    now = datetime.now(timezone.utc)
     if desk_at <= sl_at:
         # The statusline is fresher — but a capture legitimately carries no
         # window at all (Claude Code renders the statusline before it has any
         # rate_limits to hand over). An empty fresher capture must not discard
         # a usable desktop reading: fall back to it, with its own timestamp so
         # the "Updated" line stays honest.
-        if any(statusline.get(key) for key in ("five_hour", "seven_day")):
+        if not any(statusline.get(key) for key in ("five_hour", "seven_day")):
+            return desktop
+        # Capture partielle : compléter avec le desktop, s'il n'est pas périmé.
+        if (now.timestamp() - desk_at) > _STALE_AFTER_SECS:
             return statusline
-        return desktop
-    now = datetime.now(timezone.utc)
+        merged = dict(statusline)
+        for key in ("five_hour", "seven_day"):
+            if key not in merged and desktop.get(key):
+                merged[key] = desktop[key]
+        return merged
     sl_fresh = (now.timestamp() - sl_at) <= _STALE_AFTER_SECS
     merged = {"_meta": desktop["_meta"]}
     for key in ("five_hour", "seven_day"):
@@ -856,6 +864,11 @@ class App(rumps.App):
         if self.title_weekly:
             weekly_txt = f"{weekly_pct}%" if weekly_pct is not None else "—"
             title_pct = f"{title_pct} / {weekly_txt}"
+        # Le titre est ce que l'utilisateur lit : un chiffre périmé le dit lui-même.
+        cap_at = _captured_at(data)
+        if cap_at and (now.timestamp() - cap_at) > _STALE_AFTER_SECS \
+                and (session_pct is not None or weekly_pct is not None):
+            title_pct = f"~{title_pct}"
         self._apply_display(title_pct, icon_path)
 
         self._schedule_reset_refresh(data)
