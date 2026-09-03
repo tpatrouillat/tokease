@@ -1046,7 +1046,10 @@ class TestDesktopSource(TestStatuslineSource):
         data, _ = tracker.fetch_usage()
         self.assertEqual(data["five_hour"]["utilization"], 100)
         self.assertEqual(data["seven_day"]["utilization"], 0)
-        self.assertEqual(data["_meta"]["source"], "statusline")
+        # The 5h window came from the desktop and the reading is dated from
+        # that sample, so the freshness line must name the desktop too.
+        self.assertEqual(data["_meta"]["source"], "desktop")
+        self.assertAlmostEqual(data["_meta"]["captured_at"], now - 300, delta=1)
 
     def test_merge_fresher_partial_statusline_ignores_stale_desktop(self):
         # Symmetric guard: an old desktop sample must not be shown under a
@@ -1596,7 +1599,7 @@ class TestStrategyGaps(unittest.TestCase):
         app.display_mode = tracker.DISPLAY_PCT
         old = datetime.now(timezone.utc).timestamp() - 6 * 3600
         app._update_display(_make_usage(five_hour_pct=42, captured_at=old))
-        self.assertEqual(app.title, "~—")
+        self.assertEqual(app.title, "—")
         self.assertIn("older than the window", app.m5h.title)
 
     def test_reading_inside_the_five_hour_window_still_counts(self):
@@ -1654,6 +1657,55 @@ class TestStrategyGaps(unittest.TestCase):
             for pct in (85, 90, 88):
                 app._update_display(_make_usage(five_hour_pct=pct))
         self.assertEqual(len(calls), 1)
+
+    def test_no_second_alert_when_the_new_window_reset_finally_arrives(self):
+        # Desktop readings carry no reset time, so after a reset the app still
+        # names the old window while tracking the new one. It alerts, correctly.
+        # The reset time that arrives later with the next capture must not make
+        # that same window look brand new and raise the alert a second time.
+        app = self._make_app()
+        app.alerts_enabled = True
+        past = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
+        later = (datetime.now(timezone.utc) + timedelta(hours=4)).isoformat()
+        calls = []
+        with patch.object(tracker.rumps, "notification",
+                          side_effect=lambda **k: calls.append(k)):
+            app._maybe_notify(60, past)    # old window, ended but still on file
+            app._maybe_notify(85, None)    # desktop tracks the new one, alert
+            app._maybe_notify(85, later)   # capture brings the new reset time
+        self.assertEqual(len(calls), 1)
+
+    def test_a_jittery_reset_time_does_not_realert(self):
+        # Only a later reset time means a new window. One that moves by a
+        # second is the same window still running.
+        app = self._make_app()
+        app.alerts_enabled = True
+        base = datetime.now(timezone.utc) + timedelta(hours=4)
+        calls = []
+        with patch.object(tracker.rumps, "notification",
+                          side_effect=lambda **k: calls.append(k)):
+            app._maybe_notify(50, base.isoformat())
+            app._maybe_notify(85, base.isoformat())
+            app._maybe_notify(85, (base - timedelta(seconds=1)).isoformat())
+        self.assertEqual(len(calls), 1)
+
+    def test_no_stale_marker_on_a_title_showing_no_number(self):
+        # The 5h window is void by age and the weekly one is not on the title,
+        # so the title is just a dash. Marking a dash as stale says nothing.
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_PCT
+        old = datetime.now(timezone.utc).timestamp() - 6 * 3600
+        app._update_display(_make_usage(captured_at=old))
+        self.assertEqual(app.title, "—")
+
+    def test_a_long_stale_age_reads_in_hours_or_days(self):
+        now = datetime.now(timezone.utc)
+        row = tracker.App._freshness_label((now - timedelta(days=3)).timestamp(),
+                                           now, "desktop")
+        self.assertIn("stale 3d", row)
+        row = tracker.App._freshness_label((now - timedelta(hours=4)).timestamp(),
+                                           now, "desktop")
+        self.assertIn("stale 4h", row)
 
     def test_a_filled_window_dates_the_display_from_the_desktop(self):
         # The capture is fresher but carries only the weekly window. The 5h

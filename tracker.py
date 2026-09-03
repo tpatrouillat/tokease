@@ -447,9 +447,12 @@ def _merge_usage(statusline, desktop):
                 filled = True
         if filled:
             # A filled window is only as fresh as the desktop sample it came
-            # from, so the whole display dates itself from the older of the
-            # two rather than claim the capture's freshness.
-            merged["_meta"] = {**merged.get("_meta", {}), "captured_at": desk_at}
+            # from, so the whole display dates itself from that sample rather
+            # than claim the capture's freshness, and names it as the source
+            # the shown time belongs to.
+            merged["_meta"] = {**merged.get("_meta", {}),
+                               "captured_at": desk_at,
+                               "source": desktop.get("_meta", {}).get("source")}
         return merged
     sl_fresh = (now.timestamp() - sl_at) <= _STALE_AFTER_SECS
     merged = {"_meta": desktop["_meta"]}
@@ -479,6 +482,16 @@ def fetch_usage():
 # ---------------------------------------------------------------------------
 # Time formatting
 # ---------------------------------------------------------------------------
+
+def _humanize_age(seconds):
+    """Short age for the freshness line: 45m, 3h, 2d rather than 4320m."""
+    minutes = int(seconds // 60)
+    if minutes < 60:
+        return f"{minutes}m"
+    if minutes < 24 * 60:
+        return f"{minutes // 60}h"
+    return f"{minutes // (24 * 60)}d"
+
 
 def _parse_iso(iso):
     """Parse an ISO-8601 timestamp (from _epoch_to_iso) into a tz-aware datetime.
@@ -693,19 +706,28 @@ class App(rumps.App):
     def _maybe_notify(self, pct, resets_at=None):
         """Fire a notification when pct crosses a threshold upward.
 
-        A window carries its own reset time, so a reset time we have not seen
-        before means a new window. Its baseline is 0 whatever the old one
+        A window carries its own reset time, so a reset time later than the one
+        on file means a new window. Its baseline is 0 whatever the old one
         reached, otherwise a new window opening under the previous value would
-        never look like a crossing and its alert would be lost.
+        never look like a crossing and its alert would be lost. Only a later
+        time counts: an unchanged or jittery one is the same window running.
         """
+        now = datetime.now(timezone.utc)
         previous = self._last_pct
-        seen_reset = self._last_reset
+        seen = _parse_iso(self._last_reset)
         self._last_pct = pct
         if resets_at is not None:
             self._last_reset = resets_at
+        elif seen is not None and seen <= now:
+            # The desktop feed carries no reset time, so once the window we had
+            # on file has ended we can no longer name the window we are
+            # tracking. Forgetting it stops the next capture from looking like
+            # a brand new window and re-announcing a threshold already passed.
+            self._last_reset = None
         if not self.alerts_enabled or previous is None:
             return
-        if resets_at is not None and seen_reset is not None and resets_at != seen_reset:
+        opened = _parse_iso(resets_at)
+        if opened is not None and seen is not None and opened > seen:
             previous = 0
         crossed = [t for t in NOTIFY_THRESHOLDS if previous < t <= pct]
         if not crossed:
@@ -859,7 +881,7 @@ class App(rumps.App):
         age = (now - cap).total_seconds()
         via = "Claude app" if source == "desktop" else "Claude Code"
         if age > _STALE_AFTER_SECS:
-            return f"⚠ {local} · stale {int(age // 60)}m ({via} idle?)"
+            return f"⚠ {local} · stale {_humanize_age(age)} ({via} idle?)"
         return f"Updated: {local} (via {via})"
 
     def _update_display(self, data):
@@ -902,8 +924,9 @@ class App(rumps.App):
             weekly_txt = f"{weekly_pct}%" if weekly_pct is not None else "—"
             title_pct = f"{title_pct} / {weekly_txt}"
         # The title is what the user actually reads, so a stale number says so.
-        if cap_at and age > _STALE_AFTER_SECS \
-                and (session_pct is not None or weekly_pct is not None):
+        shows_a_number = session_pct is not None or (
+            self.title_weekly and weekly_pct is not None)
+        if cap_at and age > _STALE_AFTER_SECS and shows_a_number:
             title_pct = f"~{title_pct}"
         self._apply_display(title_pct, icon_path)
 
