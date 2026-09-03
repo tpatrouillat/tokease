@@ -1527,6 +1527,24 @@ class TestStaleTitleMarker(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(app.title, "~85%")
 
+    def test_notification_survives_a_window_reset(self):
+        # A reset refresh reports no percentage, so _maybe_notify is skipped
+        # and _last_pct would keep the pre-reset value. The next reading opens
+        # a new cycle, and anything below that stale anchor would not look
+        # like a crossing, silently dropping the new window's alert.
+        app = self._make_app()
+        app.alerts_enabled = True
+        app._last_pct = 98
+        calls = []
+        with patch.object(tracker.rumps, "notification",
+                          side_effect=lambda **k: calls.append(k)):
+            past = (datetime.now(timezone.utc) - timedelta(minutes=1)).strftime(
+                "%Y-%m-%dT%H:%M:%SZ")
+            app._update_display(_make_usage(five_hour_resets=past))
+            self.assertEqual(app._last_pct, 0)
+            app._update_display(_make_usage(five_hour_pct=85))
+        self.assertEqual(len(calls), 1, "new window crossing 80% must still alert")
+
 
 if __name__ == "__main__":
     unittest.main()

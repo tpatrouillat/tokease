@@ -846,6 +846,11 @@ class App(rumps.App):
             self.m5h.title, session_pct = self._window_row("5-hour", h, now)
             if session_pct is not None:
                 self._maybe_notify(session_pct)
+            else:
+                # Window just reset: re-anchor at 0, or a new cycle that opens
+                # above a threshold would not read as a crossing and its alert
+                # would be lost.
+                self._last_pct = 0
         else:
             self.m5h.title = FIVE_HOUR_DEFAULT
 

@@ -75,7 +75,9 @@ the statusline by freshness:
   title prefixes the number with `~`, so a frozen reading says so itself.
   Threshold alerts are deliberately not gated on freshness: they only fire
   when the percentage crosses upward between two refreshes, so a frozen
-  reading never fires one, and a late one is still true.
+  reading never fires one, and a late one is still true. A refresh that lands
+  on a reset reports no percentage at all, so the last seen value is re-anchored
+  at 0 and the new cycle can raise its own alert.
 - **Mixed merge**: when a partial statusline capture is completed by the
   desktop feed, the "Updated" line reports the fresher source. The filled
   window can be up to 20 min older than that line suggests.
