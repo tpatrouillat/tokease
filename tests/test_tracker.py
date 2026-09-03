@@ -923,8 +923,8 @@ class TestDesktopSource(TestStatuslineSource):
         self._write_desktop({"version": 2, "samples": [
             self._sample(1000_000, fh=10),
             self._sample(2000_000, fh=20),
-            {"t": "corrompu", "u": {"fh": 99}},
-            {"pas": "un sample"},
+            {"t": "not-a-number", "u": {"fh": 99}},
+            {"unexpected": "shape"},
         ]})
         data, _ = tracker.fetch_usage()
         self.assertEqual(data["five_hour"]["utilization"], 20)
@@ -936,7 +936,7 @@ class TestDesktopSource(TestStatuslineSource):
         self.assertEqual(err, "nostatusline")  # behavior unchanged without desktop
 
     def test_invalid_desktop_file_is_ignored(self):
-        self._desktop.write_text("pas du json{{{", encoding="utf-8")
+        self._desktop.write_text("not json{{{", encoding="utf-8")
         _, err = tracker.fetch_usage()
         self.assertEqual(err, "nostatusline")
 
