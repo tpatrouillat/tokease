@@ -73,6 +73,9 @@ the statusline by freshness:
   and can be far behind reality (on 2026-09-01 the menu bar sat at 26 % for
   30 min while the 5h window went to 100 %). Past the stale threshold the
   title prefixes the number with `~`, so a frozen reading says so itself.
+  Threshold alerts are deliberately not gated on freshness: they only fire
+  when the percentage crosses upward between two refreshes, so a frozen
+  reading never fires one, and a late one is still true.
 - **Mixed merge**: when a partial statusline capture is completed by the
   desktop feed, the "Updated" line reports the fresher source. The filled
   window can be up to 20 min older than that line suggests.

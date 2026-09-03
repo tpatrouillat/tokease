@@ -1483,9 +1483,12 @@ class TestStaleTitleMarker(unittest.TestCase):
         self.assertEqual(app.title, "~26%")
 
     def test_stale_marker_absent_from_icon_only_title(self):
-        # Icon mode blanks the title unconditionally: the tilde is computed
-        # but never rendered there. Real gap (no staleness signal at all in
-        # icon-only mode) — not something this fix claims to close.
+        # Decided: leave as is. Icon mode blanks the title, so the tilde is
+        # computed but not rendered. The dropdown still carries the stale
+        # line in every display mode, so the signal stays one click away,
+        # like the number the user chose to hide. The icon is a macOS
+        # template image, so it has no tint to spare, and a dimmed ring
+        # reads as lower usage rather than as older data.
         app = self._make_app()
         app.display_mode = tracker.DISPLAY_ICON
         stale = datetime.now(timezone.utc).timestamp() - 3600
@@ -1508,9 +1511,11 @@ class TestStaleTitleMarker(unittest.TestCase):
         self.assertEqual(app.title, "— / —")
 
     def test_notification_fires_even_when_data_is_stale(self):
-        # The staleness marker is purely a display concern: a stale reading
-        # crossing a threshold still fires the alert (open question — see
-        # report — not something the spec asks to change).
+        # Decided: leave as is. _maybe_notify only fires on an upward crossing
+        # between two refreshes, so a frozen reading never notifies at all. A
+        # late reading that does cross is still true, since usage only grows
+        # within a window, and gating it would drop the one alert the user
+        # gets when the desktop feed is the only source (see ADR 0003).
         app = self._make_app()
         app.alerts_enabled = True
         app._last_pct = 50

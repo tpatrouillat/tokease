@@ -431,7 +431,8 @@ def _merge_usage(statusline, desktop):
         # the "Updated" line stays honest.
         if not any(statusline.get(key) for key in ("five_hour", "seven_day")):
             return desktop
-        # Capture partielle : compléter avec le desktop, s'il n'est pas périmé.
+        # Partial capture: fill the missing window from the desktop feed,
+        # unless that feed is itself stale.
         if (now.timestamp() - desk_at) > _STALE_AFTER_SECS:
             return statusline
         merged = dict(statusline)
@@ -864,7 +865,7 @@ class App(rumps.App):
         if self.title_weekly:
             weekly_txt = f"{weekly_pct}%" if weekly_pct is not None else "—"
             title_pct = f"{title_pct} / {weekly_txt}"
-        # Le titre est ce que l'utilisateur lit : un chiffre périmé le dit lui-même.
+        # The title is what the user actually reads, so a stale number says so.
         cap_at = _captured_at(data)
         if cap_at and (now.timestamp() - cap_at) > _STALE_AFTER_SECS \
                 and (session_pct is not None or weekly_pct is not None):
