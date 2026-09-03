@@ -1,0 +1,449 @@
+# Spec: display strategy (what the menu bar shows, and why)
+
+Date: 2026-09-04. Status: proposed. Describes the code on `main` after the
+merge of `fix/honest-freshness`.
+
+Refs: [ADR 0001](../adr/0001-pivot-source-statusline.md) (statusline source),
+[ADR 0003](../adr/0003-source-secondaire-plan-usage-desktop.md) (desktop
+source), [statusline-data-source.md](statusline-data-source.md) (file
+contract), [honest-freshness.md](honest-freshness.md) (the 26 % incident).
+
+## 1. Why this document exists
+
+The display logic has been fixed one incident at a time: a merge bug, a stale
+marker, an alert lost on reset. Each fix is right on its own, but nothing
+states, for a given situation, what the menu bar must show and why. This
+document is that rule set. It lets someone who has not read `tracker.py`
+predict the menu bar in any situation, and decide whether an observed
+behaviour is a bug or the rule at work.
+
+The governing constraint is truth over comfort. Saying "I don't know" is
+better than showing a wrong number with confidence. The founding incident:
+the menu bar showed `26%` with no warning for 30 minutes while the 5-hour
+quota was in fact exhausted.
+
+Section 6 is the scenario matrix. Section 7 separates what the code already
+does right, what is a real gap to fix, and what is an open product choice.
+
+## 2. Vocabulary
+
+- **Window**: one of the two quotas, `five_hour` (5h) and `seven_day`
+  (weekly). Each has a percentage used and, from one source only, a reset
+  time.
+- **Reading**: one window's percentage as captured by one source at one
+  time. A reading describes the window that was active when it was taken,
+  never a later one.
+- **Source**: a local file written by an official Claude client and read as
+  is. Two exist (section 3).
+- **Fresh**: a reading at most 20 minutes old at render time
+  (`_STALE_AFTER_SECS`). **Aged**: older than that.
+- **Rendered**: the moment `_update_display` runs. Everything in this
+  document is evaluated at that moment. Between two renders the menu bar
+  does not change.
+- **Title**: the text next to the icon in the menu bar. **Dropdown**: the
+  three lines `5-hour`, `Weekly`, `Updated` in the menu.
+
+## 3. The sources, as they really behave
+
+### 3.1 Claude desktop app history (secondary in name, primary in practice)
+
+File `plan-usage-history.json` under the desktop app's Application Support
+directory, sampled by the desktop app while it runs. Each sample carries both
+windows, no reset time. Read-only, undocumented format, parsing pinned to
+`version: 2`.
+
+Measured on a month of samples on one machine (807 samples): median gap 5
+min, p75 15 min, p90 45 min, 5 % of gaps above 4 hours (Mac asleep, app
+idle or quit). The app skips samples while idle. Within a single 5-minute
+gap the 5h percentage was seen to jump by 59 points, and by 74 points across
+a 30-minute gap. A fresh reading is therefore not a current one: "fresh" only
+bounds its age, not its distance from reality.
+
+For a user working in the VS Code extension or in Cowork this is the only
+source that ever moves, because those surfaces never run the statusline.
+
+The samples carry an organisation identifier. It is never displayed, never
+written anywhere and must never appear in this repository.
+
+### 3.2 Claude Code statusline capture (the only source with reset times)
+
+`statusline/tokease-statusline.py` receives Claude Code's session JSON on
+stdin and writes `~/.tokease/usage.json` with `captured_at` set to the write
+time. `rate_limits` appears only for Pro and Max, only after the first API
+response of a session, and each window may be absent.
+
+What the official statusline documentation says about when the script runs,
+and what it implies for freshness:
+
+- It runs on session start and resume, on every new assistant message, after
+  `/compact`, when the permission mode changes, when vim mode toggles, when
+  a `refreshInterval` timer elapses, and **when a rate-limit window reaches
+  its `resets_at`**. Claude Code **drops a window once its `resets_at`
+  passes**.
+- Only the "new assistant message" trigger carries new quota values. Every
+  other trigger re-sends the values of the last API response. In an idle
+  terminal session those values can be hours old, and the capture script
+  timestamps them with the current time.
+- The reset trigger produces a capture that lacks the window that just
+  reset. This is the documented origin of the partial capture in the 26 %
+  incident (weekly only, no 5h, in the middle of the night): an idle
+  terminal session whose 5h window reached its reset time.
+
+Consequence: `captured_at` is a write time, not a measurement time. Section
+7.2 (G3) is about that.
+
+### 3.3 What the app does between the sources
+
+`fetch_usage` reads both files on every refresh (default every 5 min, user
+choice from 1 min to 1 hour, plus a one-shot refresh 5 s after the soonest
+known reset). If only one source parses, it is used alone. If both parse,
+`_merge_usage` combines them per window (rules in section 4).
+
+## 4. The rules
+
+R1. **Age is declared, always.** A percentage rendered without a marker was
+captured at most 20 minutes before the render. Past that it carries the `~`
+prefix in the title and the dropdown says how old it is. There is no
+exception for any source or display mode (icon mode is the accepted blind
+spot, see C5).
+
+R2. **The fresher measurement wins, per window.** When both sources carry a
+window, the one measured later is shown. The other source may still
+contribute what it alone knows (the reset time, R4). Nothing is averaged or
+reconciled.
+
+R3. **A reading belongs to its window.** If the app knows that a window reset
+after a reading was taken, that reading is void and the window shows the
+dash placeholder (`—`) in the title, the empty ring in the icon, and
+`reset; awaiting Claude Code` in the dropdown. A pre-reset percentage must
+never be shown as the new window's value.
+
+R4. **Reset times come from the statusline only, and only while ahead.** A
+countdown that has passed is never shown, and a next reset is never
+extrapolated (README, "A note on freshness").
+
+R5. **Unknown beats a guess.** A window without a usable reading shows the
+dash placeholder, not `0%`. A source that fails to parse is ignored, never
+displayed as an error, unless nothing else is left.
+
+R6. **Errors are explained in every display mode.** `⚙` (no source at all,
+with the setup guide in the dropdown), `…` (statusline file present but no
+window yet), `?` (unreadable data). The ring icon is cleared so it cannot
+contradict the glyph.
+
+R7. **Alerts fire on upward crossings only.** 80 % and 95 % on the 5h window,
+compared between two consecutive renders, never on the first render after
+launch, never twice at a plateau. Freshness does not gate them (a frozen
+reading cannot cross anything, a late crossing is still true). When the app
+detects a 5h reset the baseline is re-anchored at 0 so the new window can
+raise its own alert. Delivery itself needs a signed `.app` bundle.
+
+R8. **One "Updated" line per render, from the fresher source.** A window
+filled in from the other source can be up to 20 minutes older than that line
+says (accepted in ADR 0003, bounded by R1's guard on the fill).
+
+R9. **Everything shown comes from a local file written by an official Claude
+client, read as is.** No Keychain, no network, writes confined to
+`~/.tokease`, and the capture script never raises. Any rule that would need
+more than that is out of bounds, and section 7 says so where it applies.
+
+Two rules that follow from R1 and R3 but are not in the code yet are
+proposed in section 7.2 (G1, G3).
+
+## 5. What the title claims (confidence ladder)
+
+| Title | Claim | What it does not claim |
+|---|---|---|
+| `42%` | Captured at most 20 min before the last render. Usage only grows inside a window, so the real figure is at least this unless the window reset since. | That it is current. 20 minutes of heavy use can move it by tens of points. |
+| `~42%` | A reading exists but is older than 20 min. | Anything about now. |
+| `—` | No usable reading for the 5h window, or the window is known to have reset. | Nothing. This is the honest "I don't know". |
+| `42% / 12%` | Same, with the weekly window appended (setting "Add weekly %"). One `~` in front covers both. | |
+| `⚙` `…` `?` | No data, with the reason in the dropdown. | |
+| icon only | Rings drawn from the same values. No age marker. | Freshness (C5). |
+
+The "Updated" line adds the clock time of the capture and which client wrote
+it (`via Claude app` or `via Claude Code`), or `⚠ hh:mm · stale Nm`.
+
+## 6. Scenario matrix
+
+Columns: source retained, what the menu bar shows in the "icon + percentage"
+and "percentage only" modes (icon mode shows the rings only), dropdown, and
+whether an alert can fire at that render. Verdict: **OK** (code matches the
+rules), **GAP-n** (section 7.2), **CHOICE-n** (section 7.3).
+
+Notation: `5h` and `7d` are the readings, `t` is their age at render.
+
+### 6.1 Desktop app only (statusline never wired, or its file missing)
+
+This is the everyday case for a VS Code extension or Cowork user.
+
+| # | Situation | Retained | Title | Dropdown | Alert | Verdict |
+|---|---|---|---|---|---|---|
+| A1 | Sample `t` ≤ 20 min | desktop | `42%` | `5-hour: 42% (resets --)`, `Updated hh:mm (via Claude app)` | on crossing | OK |
+| A2 | Sample 20 min < `t` (app idle, Mac asleep, app quit) | desktop | `~42%` | `⚠ hh:mm · stale Nm (Claude app idle?)` | no (value frozen) | OK |
+| A3 | Sample older than the window itself (5h reading > 5 h old, weekly > 7 d old), e.g. app quit for days | desktop | `~42%` | stale, in minutes (`stale 4320m`) | no | GAP-1, GAP-5 |
+| A4 | Burst between two samples: 26 % at `t0`, exhausted at `t0+10`, next sample at `t0+30` (the incident) | desktop | `26%` until `t0+20`, then `~26%` until `t0+30`, then `100%` | as A1 then A2 | at `t0+30` (95 % crossed) | OK per R1, CHOICE-1 |
+| A5 | 5h window resets between two samples: 100 % then 12 % | desktop | `12%` | `resets --` | baseline follows the drop | OK |
+| A6 | Weekly reset moved earlier by the server, seen as a drop between two samples | desktop | `12%`, weekly `2%` | `resets --` | none (weekly has no alert) | OK |
+| A7 | Desktop file changes format (`version` ≠ 2), or unreadable | none | `⚙` | guide says "open the Claude desktop app" although it is running | no | OK per R5/R6, wording noted in 7.4 |
+| A8 | Several organisations in the history | desktop, last sample whatever its org | as A1 | | | CHOICE-6 (ADR 0003) |
+| A9 | First render after launch, already at 97 % | desktop | `97%` | | none (no baseline) | OK per R7 |
+
+### 6.2 Statusline only (desktop app not running)
+
+The CLI user's case.
+
+| # | Situation | Retained | Title | Dropdown | Alert | Verdict |
+|---|---|---|---|---|---|---|
+| B1 | Active terminal session, capture ≤ 20 min | statusline | `42%` | `5-hour: 42% (resets 2h 10m)`, `via Claude Code` | on crossing | OK |
+| B2 | Session closed, capture aged, resets still ahead | statusline | `~42%` | stale + countdowns | no | OK |
+| B3 | Capture present, 5h `resets_at` has passed, no newer capture | statusline | `—` (5h row void), weekly still shown | `5-hour: — (reset; awaiting Claude Code)` | baseline re-anchored at 0 | OK. If the weekly reading is aged and the weekly option is off the title reads `~—`: GAP-5 |
+| B4 | The 5h window reaches `resets_at` while a terminal session is idle: Claude Code drops the window and re-runs the script, which writes a weekly-only capture with a fresh timestamp | statusline | `—`, weekly shown as fresh | `5-hour: --`, `Updated` now | baseline **not** re-anchored (window absent, not "reset") | GAP-2 for the alert, GAP-3 for the weekly timestamp |
+| B5 | Session start, resume or `/clear`: Claude Code renders before it has `rate_limits` | previous capture kept by the script | unchanged | unchanged | | OK (v1.0.1) |
+| B6 | Idle session re-rendered for a non-quota reason (permission mode, vim toggle, `/compact`, a user-set `refreshInterval`): same values, new `captured_at` | statusline | `42%` with no `~`, although the values may be hours old | `Updated` now | none (no change) | GAP-3 |
+| B7 | No `rate_limits` ever (Free, Team, Enterprise, or before the first response) and no earlier file | none | `…` | `Waiting for Claude Code activity…`, "Pro or Max" | no | OK |
+| B8 | File corrupt | none | `?` | | no | OK |
+| B9 | `resets_at` as an ISO string, or malformed | statusline | `42%` | `resets 2h 10m` or `resets ?` | | OK |
+| B10 | 5h window reset detected by the one-shot timer (5 s after `resets_at`) without any new capture | statusline | `—` | reset row | re-anchored | OK |
+
+### 6.3 Both sources present
+
+| # | Situation | Retained | Title | Dropdown | Alert | Verdict |
+|---|---|---|---|---|---|---|
+| C1 | Both fresh, statusline newer, both windows | statusline wholesale | `42%` | countdowns, `via Claude Code` | on crossing | OK |
+| C2 | Both fresh, desktop newer, statusline resets still ahead | desktop % + statusline countdown | `42%` | `resets 2h 10m`, `via Claude app` | on crossing | OK |
+| C3 | Desktop newer, statusline 5h `resets_at` passed, desktop sampled **after** the reset | desktop % without countdown | `12%` | `resets --` | baseline follows | OK |
+| C4 | Desktop newer, statusline 5h `resets_at` passed, desktop sampled **before** the reset | statusline window (void) | `—` | `reset; awaiting Claude Code` (the next desktop sample will resolve it, not Claude Code) | re-anchored | OK, wording in 7.4 |
+| C5 | Statusline newer but windowless (session start) | desktop wholesale, desktop timestamp | `42%` | `via Claude app` | | OK (PR #15 then #16 fix) |
+| C6 | Statusline newer and partial (weekly only, the reset-drop capture of B4), desktop ≤ 20 min and sampled **after** the reset | statusline weekly + desktop 5h | `12%` | `resets --`, `via Claude Code` | | OK |
+| C7 | Same as C6 but the desktop sample **predates** the reset that caused the drop | statusline weekly + desktop 5h (old window) | `100%` shown as fresh for up to one desktop cadence | `Updated` now | none | GAP-4 |
+| C8 | Statusline newer and partial, desktop aged | statusline only | `—` for the missing window | | | OK |
+| C9 | Desktop newer, a window missing from the desktop sample (not observed in a month of data) | desktop + statusline window if statusline ≤ 20 min | | | | OK |
+| C10 | Idle session re-rendered (B6) while the desktop has a fresher true value: capture wins on write time with hours-old values | statusline | display goes **backwards** with no `~`, e.g. `81%` then `60%`, then forward again on the next real response | `Updated` now | 80 % can fire **twice** | GAP-3 |
+| C11 | Both aged, statusline newer | statusline | `~42%` | stale | no | OK |
+| C12 | Both aged, desktop newer | desktop, statusline-only windows dropped | `~42%` | stale | no | OK |
+| C13 | Same instant, different values (rounding, or the CLI's last response older than the desktop sample) | fresher by write time | | | | OK per R2, and CHOICE-2 on tie-breaking |
+| C14 | Weekly reset moved earlier by the server: desktop newer shows the drop, statusline countdown still points to the old date | desktop % + stale countdown | weekly `2%`, `resets 5d` (wrong date) | | | CHOICE-3 |
+| C15 | Usage burns in Cowork while a terminal session sits idle: the CLI feed does not move | desktop, being fresher | `42%` | `via Claude app` | on crossing | OK by design (ADR 0003) |
+
+### 6.4 Time and machine events
+
+| # | Situation | Retained | Title | Dropdown | Alert | Verdict |
+|---|---|---|---|---|---|---|
+| D1 | Mac wakes after hours. The pre-sleep title stands until the next render (immediate if the timer was due during sleep, else up to one interval) | last render | pre-sleep value, no `~`, until re-rendered | | | OK per section 2, CHOICE-4 |
+| D2 | Refresh interval set to "Every hour" | | a title without `~` can be up to 20 min + 60 min old | | | CHOICE-4 |
+| D3 | Clock moved backwards, `captured_at` in the future | | treated as fresh | | | OK (no rule needed) |
+| D4 | `captured_at` missing or garbled in the statusline file | treated as maximally old in the merge, but rendered with no `~` when alone | `42%` | `Updated: --` | | GAP-5 |
+
+### 6.5 Display modes and options
+
+| # | Situation | Title | Icon | Verdict |
+|---|---|---|---|---|
+| E1 | Icon + percentage (default) | two-space spacer + text, with `~` when aged | rings, empty ring for a void or absent window | OK |
+| E2 | Percentage only | text, with `~` | none | OK |
+| E3 | Icon only | empty, `~` never visible | rings, no freshness signal | decided, CHOICE-5 |
+| E4 | "Add weekly %" on, in modes E1 or E2 | `42% / 12%`, `42% / —`, `~42% / 12%`, `~— / 12%` | | OK |
+| E5 | "Add weekly %" on, icon mode | no effect (the inner ring already is the weekly) | | OK |
+| E6 | Error states in any mode | glyph shown, text in dropdown | cleared | OK |
+| E7 | Pillow absent (source install) | text as usual | static icon kept | OK |
+
+### 6.6 Alerts
+
+| # | Situation | Alert | Verdict |
+|---|---|---|---|
+| F1 | 5h goes 78 → 83 between two renders | one alert, 80 % | OK |
+| F2 | 5h goes 78 → 97 in one step | one alert, 95 % | OK |
+| F3 | Sits at 85 % across renders | none | OK |
+| F4 | Drops below 80 % then crosses again in the same window (only possible through C10) | second alert | symptom of GAP-3 |
+| F5 | Crossing seen on an aged reading | fires | OK (decided, R7) |
+| F6 | First render after launch at 97 % | none | OK (R7) |
+| F7 | 5h reset seen as a present window with a past `resets_at` (B3, C4), then 85 % in the new window | fires | OK (fix/honest-freshness) |
+| F8 | 5h reset seen as the window vanishing from the capture (B4), then 85 % | lost | GAP-2 |
+| F9 | 5h reset seen as a drop in the desktop feed (A5) | baseline follows the drop, next crossing fires | OK |
+| F10 | Weekly crosses 80 % | none, by design | CHOICE-7 |
+| F11 | Homebrew or source install | never delivered by macOS | documented |
+
+## 7. Verdicts
+
+### 7.1 Already correct
+
+The core of the strategy is in place and matches R1 to R9:
+
+- Fresher-wins per window, with the pre-reset guard on the desktop side
+  (`_merge_window`) and the symmetric fill of a partial capture guarded by
+  the 20-minute threshold (`_merge_usage`).
+- A windowless capture never hides a usable desktop reading, and a partial
+  one never wipes the other window.
+- A window whose reset time has passed is void, not shown as a stale number
+  (`_window_row`), and the one-shot timer re-renders right after the reset.
+- Age is visible in the title (`~`) in both text modes, once, including the
+  weekly variant, and in the dropdown in every mode.
+- Error states are explained and clear the icon.
+- Alerts fire on upward crossings only, are not gated on freshness, and the
+  baseline is re-anchored at a detected reset.
+- Every source is parsed defensively and read-only. The capture script
+  cannot raise and never overwrites good windows with an empty render.
+
+Tests cover each of these (153 green on `main`).
+
+### 7.2 Real gaps to fix
+
+Each one is a case where the menu bar can show a number with more
+confidence than the rules allow, or drop an alert the rules promise. Fix
+design is left to the implementer, but the location and the constraint are
+given. All fit inside R9.
+
+**GAP-1. No age ceiling on a reading (rule R3 not applied to time).**
+A 5h reading older than 5 hours describes a window that has certainly ended,
+and a weekly reading older than 7 days likewise. Today it is shown as
+`~42%` for days (A3). The dash placeholder is the honest display, with the
+dropdown saying why. Location: `_update_display` computes the age for the
+`~` marker only. `_window_row` voids a window on `resets_at` but has no
+notion of age. The 20-minute threshold stays, this is a second, longer bound
+per window.
+
+**GAP-2. A reset that removes the window loses the next alert.**
+Claude Code drops a window from `rate_limits` once its `resets_at` passes
+and re-runs the script at that moment, so the documented shape of a 5h
+reset in the statusline feed is a capture without `five_hour`, not a capture
+with a past `resets_at`. The re-anchor in `_update_display` runs only in the
+second shape (window present, `_window_row` returns `None`). In the first
+shape the `else` branch sets the row text and leaves `_last_pct` at the
+pre-reset value, so a new window opening at 85 % raises nothing (B4, F8).
+Constraint: an absent window is not always a reset (session start, Free
+plan), so the re-anchor must not turn every absence into a reset. The
+previous capture's `resets_at`, which the script currently discards on the
+reset-triggered write, is the evidence that distinguishes the two.
+
+**GAP-3. `captured_at` is a write time and the merge treats it as a
+measurement time.**
+Every statusline re-run that is not a new assistant message re-emits the
+last response's values with a new timestamp (B6, C10). Effects, in order of
+harm: the display can go backwards and show hours-old values as fresh with
+no `~` while the desktop has a truer reading, the 80 % alert can fire twice
+in one window (F4), and with a user-set `refreshInterval` in Claude Code the
+statusline permanently beats the desktop source and never goes stale.
+Location: `statusline/tokease-statusline.py` stamps `time.time()`
+unconditionally, and `_merge_usage` ranks sources by that stamp. The
+information needed is local: a capture whose windows (percentages and reset
+times) equal the previous file's is not a new measurement. Whether to keep
+the earlier timestamp in the script, or to prefer the higher reading when
+two readings describe the same window (usage only grows inside one), is the
+implementer's call, with the caveat in CHOICE-2. This is the "monotonic
+guard" item from the launch backlog, now with its cause identified.
+
+**GAP-4. The partial-capture fill has no pre-reset guard.**
+The fill added by `fix/honest-freshness` copies the desktop window whenever
+the desktop sample is fresh, but the capture it completes is, in the
+documented case, the one Claude Code emits when the 5h window resets. If
+the desktop sample predates that reset, the fill shows the old window's
+percentage (often 100 %) as fresh with no countdown, for up to one desktop
+cadence (C7). It is the mirror image of the incident (over- instead of
+under-estimating), less harmful, still false with confidence. Location:
+`_merge_usage`, statusline-fresher branch. The guard exists in the other
+direction (`_merge_window`, `desk_at <= reset`) but needs the reset time
+that the reset-triggered capture no longer carries, so the fix shares its
+root with GAP-2.
+
+**GAP-5. Small display inconsistencies (cosmetic, same rule set).**
+- `~—` as a whole title when the 5h window is void or absent, the weekly
+  reading is aged and the weekly option is off (B3, C8). A marker on a
+  placeholder says nothing. Location: the `~` condition in
+  `_update_display` checks that some window has a value but not that the
+  title shows one.
+- The stale label counts in minutes without bound (`stale 4320m`, A3).
+  Location: `_freshness_label`.
+- A statusline file with no or garbled `captured_at` is ranked as maximally
+  old in `_merge_usage` but rendered with no `~` and `Updated: --` when it is
+  the only source (D4). R1 says an unknown age is not a fresh one.
+
+### 7.3 Choices that belong to the product owner
+
+**CHOICE-1. What "fresh" promises for the desktop source.** R1 bounds age
+at 20 minutes for both sources. The measured desktop cadence makes that the
+right threshold for "the client is still alive", but the incident shows 20
+minutes is enough for the 5h window to go from a quarter to exhausted, and
+the data shows a 59-point jump inside 5 minutes. Options: keep the single
+threshold and document the claim as in section 5 (current), or add a softer
+intermediate marker for desktop-sourced readings past their median cadence,
+or show the age in the title itself. All stay within R9.
+
+**CHOICE-2. Tie-breaking when two readings describe the same window.**
+Usage only grows inside a window, which argues for "highest reading wins"
+among readings known to belong to the same window. The exception is a
+server-side limit change (a promotional increase lowers the percentage with
+no reset). Deciding whether that exception is worth protecting shapes the
+GAP-3 fix.
+
+**CHOICE-3. Countdown after a server-side reset shift.** When the weekly
+percentage drops while the statusline's reset time is still ahead (C14), the
+percentage is right and the countdown is wrong until the next terminal
+message. A drop is strong but not certain evidence of a rollover (same
+exception as CHOICE-2). Options: keep the countdown (current), or blank it on
+a drop and let the next capture restore it. R4 and R5 lean toward blanking.
+
+**CHOICE-4. Render cadence versus the freshness claim.** Age is evaluated at
+render time only, so a title without `~` can be older than 20 minutes by up
+to the refresh interval (D1, D2), and after a wake the pre-sleep title can
+stand for a while. Options: re-evaluate the marker on a fixed short cadence
+without re-reading the files, re-render on wake, or cap the interval
+options. All are local, none touches R9.
+
+**CHOICE-5. Icon-only mode hides age.** Decided on `fix/honest-freshness`:
+leave as is, the ring is a template image with no tint to spare and the
+dropdown carries the signal. Recorded here because the founding incident is
+precisely a bar that looked confident, and in icon mode a frozen ring looks
+confident forever. Worth revisiting once GAP-1 lands (a void window at
+least empties the ring after 5 hours).
+
+**CHOICE-6. Several organisations in the desktop history.** The last sample
+is taken whatever its organisation (ADR 0003, "not handled in v1").
+
+**CHOICE-7. Weekly alerts.** Only the 5h window notifies. The weekly window
+is the one that locks a user out for days.
+
+### 7.4 Wording only
+
+- The `reset; awaiting Claude Code` row is shown to desktop-only users too
+  (C4), where the next desktop sample resolves it.
+- The `⚙` guide tells a user whose desktop file changed format to open the
+  desktop app they already run (A7). The README already points to the two
+  diagnostic commands.
+
+## 8. Existing decisions this document keeps or asks to revise
+
+Kept: ADR 0001 (statusline is the authorised feed and the only one with reset
+times), ADR 0003 (desktop history as read-only secondary source, fresher wins,
+alerts not gated on freshness, mixed "Updated" line accepted), the 20-minute
+threshold and the `~` marker from `honest-freshness.md`, the icon-mode
+decision (CHOICE-5, recorded as open for later).
+
+To revise:
+
+- `statusline-data-source.md` still states the 15-minute threshold and
+  describes the statusline as the only source. Both predate ADR 0003 and the
+  freshness fix.
+- `honest-freshness.md` lists the origin of the 02:40 capture as unknown.
+  Section 3.2 explains it (window dropped at `resets_at`, script re-run).
+  Its "out of scope" monotonic guard is GAP-3 here.
+- ADR 0003 states the desktop cadence as 5 to 15 minutes. The month of data
+  behind this document shows the tail matters more than the mode: p90 is 45
+  minutes. A sentence on the tail would make the "lag up to ~20 min" line
+  honest.
+- The tracker's module docstring still says the desktop refreshes "~5 min".
+
+## 9. Invariant check
+
+Every rule above is satisfied by reading two local files and writing inside
+`~/.tokease`. No rule here asks for the Keychain, the network, a Claude Code
+hook payload, or any change to the capture script's never-raise contract.
+Fixing GAP-2, GAP-3 and GAP-4 may change what the capture script writes
+(keeping a timestamp, keeping a reset time), which stays inside the same
+file and the same directory. A rule that would need the measurement time
+from Claude Code itself is not available on the documented surface and is
+not proposed.
+
+One item outside this document but adjacent to it, from the launch backlog:
+`_render_dynamic_icon` writes a PNG on every render from the main thread and
+an `OSError` there is not caught by `_apply_usage`. It concerns the app's
+own robustness, not the truth of the display.

@@ -7,6 +7,10 @@
 - A stale reading no longer looks live in the menu bar: past the freshness threshold the percentage is prefixed with `~` (`~26%`). Before this, only the dropdown flagged it, and the number is what you actually read.
 - The freshness threshold moves from 15 to 20 minutes. Measured over a month of desktop samples the app's cadence is 5 or 15 minutes, so 15 flagged normal operation as stale about 15 % of the time.
 - A partial statusline capture no longer wipes a window it doesn't carry. A capture with only the weekly window used to blank the 5-hour reading until the next desktop sample. The desktop value now fills the gap, unless it is itself stale.
+- A reading is now void once it outlives the window it describes. A 5-hour percentage older than 5 hours, or a weekly one older than 7 days, describes a window that has certainly ended, so the app shows `—` instead of a number nothing supports. This is what an app left running over a weekend used to get wrong.
+- A new window raises its own alert again. A window carries its own reset time, so a reset time never seen before starts the alert baseline back at 0. Before this, a window opening below the previous window's peak never looked like a threshold crossing and its alert was lost.
+- A merged reading dates itself from its oldest part. When a partial capture is completed from the desktop feed, the freshness line and the `~` marker now describe the filled window rather than the capture that triggered the merge.
+- The capture script no longer re-dates an unchanged reading. Claude Code re-runs the statusline on events that carry no new measurement, and each re-run used to look like a fresh one, which let old values outrank a truer desktop sample and could fire the same threshold alert twice.
 
 ### Docs
 

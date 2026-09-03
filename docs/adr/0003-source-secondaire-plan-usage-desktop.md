@@ -69,6 +69,9 @@ the statusline by freshness:
   statusline as the safety net.
 - **No `resets_at`**: reset times only come from the statusline. They are
   shown only when a recent statusline capture exists.
+- **Age ceiling**: a reading cannot outlive the window it describes, so a 5h
+  reading over 5 h old and a weekly reading over 7 d old are shown as `—`
+  rather than as a number nothing supports.
 - **Lag up to ~20 min**: between two desktop samples the percentage is frozen
   and can be far behind reality (on 2026-09-01 the menu bar sat at 26 % for
   30 min while the 5h window went to 100 %). Past the stale threshold the
@@ -77,10 +80,14 @@ the statusline by freshness:
   when the percentage crosses upward between two refreshes, so a frozen
   reading never fires one, and a late one is still true. A refresh that lands
   on a reset reports no percentage at all, so the last seen value is re-anchored
-  at 0 and the new cycle can raise its own alert.
+  at 0 and the new cycle can raise its own alert. A window also carries its own
+  reset time, so a reset time never seen before marks a new window and its
+  baseline goes back to 0, which covers the reset shapes where the window
+  simply disappears from the feed.
 - **Mixed merge**: when a partial statusline capture is completed by the
-  desktop feed, the "Updated" line reports the fresher source. The filled
-  window can be up to 20 min older than that line suggests.
+  desktop feed, the whole reading dates itself from the older of the two
+  sources, so the "Updated" line and the `~` marker describe the filled window
+  rather than the capture that triggered the merge.
 - **Requirement**: the Claude desktop app installed and running (menubar). To
   document in the README as "recommended for freshness", not mandatory.
 - **Multi-org**: the `org` field must be respected if several orgs appear (we

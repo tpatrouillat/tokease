@@ -14,6 +14,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -1275,6 +1276,43 @@ class TestStatuslineScript(unittest.TestCase):
         self.assertEqual(payload["source"], "claude-code-statusline")
         self.assertIn("captured_at", payload)
 
+    def _run_in(self, home, stdin_text):
+        """Same as _run but against a HOME that persists across calls."""
+        env = {**os.environ, "HOME": home, "TOKEASE_STATUSLINE_QUIET": "1"}
+        proc = subprocess.run(
+            [sys.executable, str(self.SCRIPT)],
+            input=stdin_text, capture_output=True, text=True, env=env, timeout=10,
+        )
+        out_file = Path(home) / ".tokease" / "usage.json"
+        payload = json.loads(out_file.read_text(encoding="utf-8")) if out_file.exists() else None
+        return proc, payload
+
+    def test_identical_windows_keep_the_first_timestamp(self):
+        # A re-run with no new measurement must not make an old reading look
+        # current: it would outrank a truer desktop sample and could fire one
+        # threshold alert twice.
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        stdin = json.dumps({"rate_limits": {
+            "five_hour": {"used_percentage": 42, "resets_at": 1800000000},
+        }})
+        _, first = self._run_in(td.name, stdin)
+        time.sleep(1.1)
+        _, second = self._run_in(td.name, stdin)
+        self.assertEqual(second["captured_at"], first["captured_at"])
+
+    def test_a_changed_percentage_restamps_the_capture(self):
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        def payload(pct):
+            return json.dumps({"rate_limits": {
+                "five_hour": {"used_percentage": pct, "resets_at": 1800000000},
+            }})
+        _, first = self._run_in(td.name, payload(42))
+        time.sleep(1.1)
+        _, second = self._run_in(td.name, payload(43))
+        self.assertGreater(second["captured_at"], first["captured_at"])
+
     def test_no_rate_limits_writes_windowless_file_when_none_existed(self):
         # First capture of a session: nothing to preserve, so a windowless
         # file is written (the app then shows "waiting", which is accurate).
@@ -1544,6 +1582,101 @@ class TestStaleTitleMarker(unittest.TestCase):
             self.assertEqual(app._last_pct, 0)
             app._update_display(_make_usage(five_hour_pct=85))
         self.assertEqual(len(calls), 1, "new window crossing 80% must still alert")
+
+
+class TestStrategyGaps(unittest.TestCase):
+    """Scenarios from docs/specs/display-strategy.md."""
+
+    def _make_app(self):
+        return TestStaleTitleMarker._make_app(self)
+
+    def test_reading_older_than_the_five_hour_window_is_void(self):
+        # A 5h window cannot still hold a reading taken six hours ago.
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_PCT
+        old = datetime.now(timezone.utc).timestamp() - 6 * 3600
+        app._update_display(_make_usage(five_hour_pct=42, captured_at=old))
+        self.assertEqual(app.title, "~—")
+        self.assertIn("older than the window", app.m5h.title)
+
+    def test_reading_inside_the_five_hour_window_still_counts(self):
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_PCT
+        recent = datetime.now(timezone.utc).timestamp() - 3 * 3600
+        app._update_display(_make_usage(five_hour_pct=42, captured_at=recent))
+        self.assertEqual(app.title, "~42%")
+
+    def test_weekly_survives_an_age_that_voids_the_five_hour(self):
+        # The two windows have their own spans, so one voids well before the
+        # other on the very same reading.
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_PCT
+        app.title_weekly = True
+        old = datetime.now(timezone.utc).timestamp() - 6 * 3600
+        app._update_display(_make_usage(five_hour_pct=42, seven_day_pct=18,
+                                        captured_at=old))
+        self.assertEqual(app.title, "~— / 18%")
+
+    def test_reading_older_than_the_weekly_window_is_void(self):
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_PCT
+        app.title_weekly = True
+        old = datetime.now(timezone.utc).timestamp() - 8 * 24 * 3600
+        app._update_display(_make_usage(captured_at=old))
+        # Nothing numeric is left on screen, so there is nothing to mark stale.
+        self.assertEqual(app.title, "— / —")
+
+    def test_a_new_window_alerts_even_below_the_previous_peak(self):
+        # The old window ended at 98 %. The new one opens at 85 %, under that
+        # peak, and must still raise its own 80 % alert.
+        app = self._make_app()
+        app.alerts_enabled = True
+        app._last_pct = 50  # a first observation never alerts, by design
+        calls = []
+        with patch.object(tracker.rumps, "notification",
+                          side_effect=lambda **k: calls.append(k)):
+            app._update_display(_make_usage(
+                five_hour_pct=98, five_hour_resets="2099-03-06T18:00:00Z"))
+            app._update_display(_make_usage(
+                five_hour_pct=85, five_hour_resets="2099-03-06T23:00:00Z"))
+        self.assertEqual(len(calls), 2)
+        self.assertIn("85%", calls[1]["subtitle"])
+
+    def test_same_window_does_not_realert_on_a_dip(self):
+        # Guard against the naive "any drop is a new window" rule: source
+        # noise inside one window must stay silent.
+        app = self._make_app()
+        app.alerts_enabled = True
+        app._last_pct = 50
+        calls = []
+        with patch.object(tracker.rumps, "notification",
+                          side_effect=lambda **k: calls.append(k)):
+            for pct in (85, 90, 88):
+                app._update_display(_make_usage(five_hour_pct=pct))
+        self.assertEqual(len(calls), 1)
+
+    def test_a_filled_window_dates_the_display_from_the_desktop(self):
+        # The capture is fresher but carries only the weekly window. The 5h
+        # window comes from an older desktop sample, so the whole display must
+        # date itself from that sample rather than from the capture.
+        now = datetime.now(timezone.utc).timestamp()
+        statusline = {"seven_day": {"utilization": 18},
+                      "_meta": {"captured_at": now - 10}}
+        desktop = {"five_hour": {"utilization": 42},
+                   "_meta": {"captured_at": now - 600}}
+        merged = tracker._merge_usage(statusline, desktop)
+        self.assertEqual(merged["five_hour"]["utilization"], 42)
+        self.assertAlmostEqual(merged["_meta"]["captured_at"], now - 600, delta=1)
+
+    def test_an_unfilled_capture_keeps_its_own_timestamp(self):
+        now = datetime.now(timezone.utc).timestamp()
+        statusline = {"five_hour": {"utilization": 42},
+                      "seven_day": {"utilization": 18},
+                      "_meta": {"captured_at": now - 10}}
+        desktop = {"five_hour": {"utilization": 99},
+                   "_meta": {"captured_at": now - 600}}
+        merged = tracker._merge_usage(statusline, desktop)
+        self.assertAlmostEqual(merged["_meta"]["captured_at"], now - 10, delta=1)
 
 
 if __name__ == "__main__":

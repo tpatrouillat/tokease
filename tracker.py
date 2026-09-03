@@ -169,6 +169,10 @@ _DESKTOP_HISTORY_FILE = (
 # Claude client is refreshing it. 20 min: measured on 1086 desktop samples the
 # cadence is 5 min or 15 min, so 15 would flag normal operation 15 % of the time.
 _STALE_AFTER_SECS = 20 * 60
+# A reading cannot outlive the window it describes: past these, whatever the
+# feeds say, the window has certainly ended and its percentage is void.
+_FIVE_HOUR_SECS = 5 * 3600
+_SEVEN_DAY_SECS = 7 * 24 * 3600
 
 # Two-space spacer between icon and percentage so the digits don't crowd the
 # rings. Menu bar font renders one space at ~4 px; two = comfortable gap.
@@ -436,9 +440,16 @@ def _merge_usage(statusline, desktop):
         if (now.timestamp() - desk_at) > _STALE_AFTER_SECS:
             return statusline
         merged = dict(statusline)
+        filled = False
         for key in ("five_hour", "seven_day"):
             if key not in merged and desktop.get(key):
                 merged[key] = desktop[key]
+                filled = True
+        if filled:
+            # A filled window is only as fresh as the desktop sample it came
+            # from, so the whole display dates itself from the older of the
+            # two rather than claim the capture's freshness.
+            merged["_meta"] = {**merged.get("_meta", {}), "captured_at": desk_at}
         return merged
     sl_fresh = (now.timestamp() - sl_at) <= _STALE_AFTER_SECS
     merged = {"_meta": desktop["_meta"]}
@@ -548,6 +559,7 @@ class App(rumps.App):
         # Notification state: None = no baseline yet (first observation).
         # Tracked in-memory only; resets on restart.
         self._last_pct = None
+        self._last_reset = None  # reset time of the window _last_pct belongs to
 
         # Usage display items
         self.m5h   = rumps.MenuItem("5-hour: ...")
@@ -678,12 +690,23 @@ class App(rumps.App):
     def _open_star(self, _):
         webbrowser.open(STAR_URL)
 
-    def _maybe_notify(self, pct):
-        """Fire a notification when pct crosses a threshold upward."""
+    def _maybe_notify(self, pct, resets_at=None):
+        """Fire a notification when pct crosses a threshold upward.
+
+        A window carries its own reset time, so a reset time we have not seen
+        before means a new window. Its baseline is 0 whatever the old one
+        reached, otherwise a new window opening under the previous value would
+        never look like a crossing and its alert would be lost.
+        """
         previous = self._last_pct
+        seen_reset = self._last_reset
         self._last_pct = pct
+        if resets_at is not None:
+            self._last_reset = resets_at
         if not self.alerts_enabled or previous is None:
             return
+        if resets_at is not None and seen_reset is not None and resets_at != seen_reset:
+            previous = 0
         crossed = [t for t in NOTIFY_THRESHOLDS if previous < t <= pct]
         if not crossed:
             return
@@ -804,12 +827,13 @@ class App(rumps.App):
                 self.icon = str(icon_path)
 
     @staticmethod
-    def _window_row(label, section, now):
+    def _window_row(label, section, now, age=None, span=None):
         """Format one usage-window line → (text, pct_for_ring).
 
-        pct_for_ring is None when the window already reset since the capture:
-        the stored % is no longer valid, so the caller skips that ring and
-        shows '—' rather than a stale number.
+        pct_for_ring is None when the stored % cannot still be true: either
+        the window reset since the capture, or the reading has outlived the
+        window it describes. The caller then skips that ring and shows '—'
+        rather than a number nothing supports.
         """
         # Clamp 0..100 at the source: the feed can return an aberrant % at
         # startup (Claude Code bug #52326) — otherwise it leaks into the
@@ -818,6 +842,8 @@ class App(rumps.App):
         dt = _parse_iso(section.get("resets_at"))
         if dt is not None and dt <= now:
             return f"{label}: — (reset; awaiting Claude Code)", None
+        if age is not None and span is not None and age > span:
+            return f"{label}: — (reading older than the window)", None
         return f"{label}: {pct}% (resets {fmt_reset(section.get('resets_at'))})", pct
 
     @staticmethod
@@ -841,11 +867,15 @@ class App(rumps.App):
         meta = data.get("_meta", {})
         session_pct = weekly_pct = None  # None = window absent → "—" badge/ring, not "0%"
 
+        cap_at = _captured_at(data)
+        age = (now.timestamp() - cap_at) if cap_at else None
+
         # 5h session (also drives the menu bar title and the threshold alerts)
         if h := data.get("five_hour"):
-            self.m5h.title, session_pct = self._window_row("5-hour", h, now)
+            self.m5h.title, session_pct = self._window_row(
+                "5-hour", h, now, age, _FIVE_HOUR_SECS)
             if session_pct is not None:
-                self._maybe_notify(session_pct)
+                self._maybe_notify(session_pct, h.get("resets_at"))
             else:
                 # Window just reset: re-anchor at 0, or a new cycle that opens
                 # above a threshold would not read as a crossing and its alert
@@ -856,7 +886,8 @@ class App(rumps.App):
 
         # 7-day weekly window
         if d := data.get("seven_day"):
-            self.m7d.title, weekly_pct = self._window_row("Weekly", d, now)
+            self.m7d.title, weekly_pct = self._window_row(
+                "Weekly", d, now, age, _SEVEN_DAY_SECS)
         else:
             self.m7d.title = WEEKLY_DEFAULT
 
@@ -871,8 +902,7 @@ class App(rumps.App):
             weekly_txt = f"{weekly_pct}%" if weekly_pct is not None else "—"
             title_pct = f"{title_pct} / {weekly_txt}"
         # The title is what the user actually reads, so a stale number says so.
-        cap_at = _captured_at(data)
-        if cap_at and (now.timestamp() - cap_at) > _STALE_AFTER_SECS \
+        if cap_at and age > _STALE_AFTER_SECS \
                 and (session_pct is not None or weekly_pct is not None):
             title_pct = f"~{title_pct}"
         self._apply_display(title_pct, icon_path)
