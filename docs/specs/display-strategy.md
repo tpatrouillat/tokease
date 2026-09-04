@@ -1,7 +1,7 @@
 # Spec: display strategy (what the menu bar shows, and why)
 
 Date: 2026-09-04. Status: proposed. Describes the code on
-`fix/display-strategy-gaps` (173 tests green).
+`fix/display-strategy-gaps` (176 tests green).
 
 Revision note. The first version of this document was written against
 `main` after `fix/honest-freshness` and listed five gaps, GAP-1 to GAP-5.
@@ -119,7 +119,10 @@ R1. **Age is declared, always.** A percentage rendered without a marker was
 captured at most 20 minutes before the render. Past that it carries the `~`
 prefix in the title and the dropdown says how old it is. There is no
 exception for any source or display mode (icon mode is the accepted blind
-spot, see C5).
+spot, see C5). An unknown age is not a fresh one: a reading whose capture
+time is missing or unreadable carries the marker and the dropdown says the
+time is unknown. The age ceiling of R3 does not apply to it, since nothing
+says the window ended (FIXED-9).
 
 R2. **The fresher measurement wins, per window.** When both sources carry a
 window, the one measured later is shown. The other source may still
@@ -188,7 +191,7 @@ A window that appears, or changes, is a new measurement and is stamped anew.
 | Title | Claim | What it does not claim |
 |---|---|---|
 | `42%` | Captured at most 20 min before the last render. Usage only grows inside a window, so the real figure is at least this unless the window reset since. | That it is current. 20 minutes of heavy use can move it by tens of points. |
-| `~42%` | A reading exists but is older than 20 min. | Anything about now. |
+| `~42%` | A reading exists but is older than 20 min, or its capture time is unknown. | Anything about now. |
 | `—` | No usable reading for the 5h window, the window is known to have reset, or the reading is older than the window itself. | Nothing. This is the honest "I don't know". |
 | `42% / 12%` | Same, with the weekly window appended (setting "Add weekly %"). One `~` in front covers both. | |
 | `⚙` `…` `?` | No data, with the reason in the dropdown. | |
@@ -271,7 +274,7 @@ The CLI user's case.
 | D1 | Mac wakes after hours. The pre-sleep title stands until the next render (immediate if the timer was due during sleep, else up to one interval) | last render | pre-sleep value, no `~`, until re-rendered | | | OK per section 2, CHOICE-4 |
 | D2 | Refresh interval set to "Every hour" | | a title without `~` can be up to 20 min + 60 min old | | | CHOICE-4 |
 | D3 | Clock moved backwards, `captured_at` in the future | | treated as fresh | | | OK (no rule needed) |
-| D4 | `captured_at` missing or garbled in the statusline file | treated as maximally old in the merge, but rendered with no `~` and no age ceiling when alone | `42%` | `Updated: --` | | GAP-5c |
+| D4 | `captured_at` missing or garbled in the statusline file | treated as maximally old in the merge, marked `~` when alone, no age ceiling | `~42%` | `⚠ capture time unknown` | | FIXED-9 |
 
 ### 6.5 Display modes and options
 
@@ -335,7 +338,7 @@ The core of the strategy is in place and matches R1 to R9:
 - Every source is parsed defensively and read-only. The capture script
   cannot raise and never overwrites good windows with an empty render.
 
-Tests cover each of these (173 green on `fix/display-strategy-gaps`).
+Tests cover each of these (176 green on `fix/display-strategy-gaps`).
 
 ### 7.2 Fixed on `fix/display-strategy-gaps`
 
@@ -360,7 +363,7 @@ merge branches date the reading from a source at most 20 minutes old when
 they mix windows, so the ceiling never voids a window that another source
 had fresh. Two side effects followed: the `~—` title after every long sleep
 (GAP-5a, closed as FIXED-6) and a reading with no `captured_at` skipping the
-ceiling (GAP-5c, 7.3).
+ceiling (GAP-5c, closed as FIXED-9).
 
 **FIXED-2 (was GAP-2). A reset that removes the window lost the next alert.**
 Diagnosis: the documented shape of a 5h reset in the statusline feed is a
@@ -495,10 +498,28 @@ JSON that is not an object, which used to raise `AttributeError` on the
 comparison and leave the capture dead for good
 (`test_a_non_dict_usage_file_does_not_block_the_capture`, red before).
 
+**FIXED-9 (was GAP-5c). No or garbled `captured_at` rendered as fresh.**
+Diagnosis: a statusline file with no usable `captured_at` was ranked as
+maximally old in `_merge_usage` but rendered with no `~`, no age ceiling and
+`Updated: --` when it was the only source (D4). Only the capture script
+writes that file and it always stamps an integer, so this needed a hand edit
+or a foreign writer. R1 says an unknown age is not a fresh one.
+Fix: `_update_display` marks the title when the age is unknown, and
+`_freshness_label` says `⚠ capture time unknown` instead of `Updated: --`.
+The age ceiling still needs a known age: a reading of unknown age is shown,
+marked, not voided, since nothing says its window ended.
+Checked: `test_a_reading_with_no_capture_time_is_marked_stale`,
+`test_a_garbled_capture_time_is_marked_stale` (both red before),
+`test_an_unknown_age_does_not_void_the_window`. The merge ranking is
+unchanged (`test_missing_captured_at_treated_as_maximally_stale`). A title
+with no number stays unmarked (FIXED-6). Five older tests built their usage
+dict without any `_meta`, which the new rule reads as an unknown age, and now
+carry a fresh capture time so they keep testing what they were written for.
+
 ### 7.3 Gaps still open
 
-Ordered by impact on the user. Each gives the location and the constraint,
-the design is the implementer's call. All fit inside R9.
+One gap is left. It gives the location and the constraint, the design is
+opened in ADR 0004. It fits inside R9.
 
 **GAP-4 (unchanged). The partial-capture fill has no pre-reset guard.**
 Not touched by the branch. The fill in `_merge_usage` copies the desktop 5h
@@ -522,14 +543,6 @@ is at hand, or the capture script can persist the dropped window's
 `resets_at` so the guard survives an app restart. Both stay inside
 `~/.tokease`. The choice between the two is an architecture decision,
 opened as ADR 0004.
-
-**GAP-5c (cosmetic, unlikely). No or garbled `captured_at`.**
-A statusline file with no usable `captured_at` is ranked as maximally old
-in `_merge_usage` but rendered with no `~`, no age ceiling and
-`Updated: --` when it is the only source (D4). Only the capture script
-writes that file and it always stamps an integer, so this needs a hand edit
-or a foreign writer. R1 says an unknown age is not a fresh one. Location:
-`_update_display`, where `age` is `None` and every age check is skipped.
 
 ### 7.4 Choices that belong to the product owner
 

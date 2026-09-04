@@ -194,6 +194,8 @@ LOGIN_ITEM_NAME = "Tokease"
 FIVE_HOUR_DEFAULT = "5-hour: --"
 WEEKLY_DEFAULT = "Weekly: --"
 UPDATED_DEFAULT = "Updated: --"
+# A reading whose capture time is missing or unreadable: R1 has no exception.
+UPDATED_UNKNOWN = "⚠ capture time unknown"
 
 # ---------------------------------------------------------------------------
 # Settings persistence (NSUserDefaults)
@@ -872,12 +874,12 @@ class App(rumps.App):
     def _freshness_label(captured_at, now, source=None):
         """'Updated' line, flagging stale data (no Claude client refreshing it)."""
         if not captured_at:
-            return UPDATED_DEFAULT
+            return UPDATED_UNKNOWN
         try:
             cap = datetime.fromtimestamp(float(captured_at), timezone.utc)
             local = cap.astimezone().strftime("%H:%M")
         except (TypeError, ValueError, OverflowError, OSError):
-            return UPDATED_DEFAULT
+            return UPDATED_UNKNOWN
         age = (now - cap).total_seconds()
         via = "Claude app" if source == "desktop" else "Claude Code"
         if age > _STALE_AFTER_SECS:
@@ -926,7 +928,9 @@ class App(rumps.App):
         # The title is what the user actually reads, so a stale number says so.
         shows_a_number = session_pct is not None or (
             self.title_weekly and weekly_pct is not None)
-        if cap_at and age > _STALE_AFTER_SECS and shows_a_number:
+        # An unknown age is not a fresh one, but it does not void the window
+        # either: nothing says the window has ended (age stays None above).
+        if shows_a_number and (age is None or age > _STALE_AFTER_SECS):
             title_pct = f"~{title_pct}"
         self._apply_display(title_pct, icon_path)
 

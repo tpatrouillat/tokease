@@ -468,20 +468,23 @@ class TestEdgeCases(unittest.TestCase):
 
     def test_negative_utilization(self):
         app = self._make_app()
-        data = {"five_hour": {"utilization": -50, "resets_at": None}}
+        data = {"five_hour": {"utilization": -50, "resets_at": None},
+                "_meta": {"captured_at": datetime.now(timezone.utc).timestamp()}}
         app._update_display(data)
         self.assertEqual(app.title, "0%")
         self.assertIn("0%", app.m5h.title)
 
     def test_string_utilization(self):
         app = self._make_app()
-        data = {"five_hour": {"utilization": "85", "resets_at": None}}
+        data = {"five_hour": {"utilization": "85", "resets_at": None},
+                "_meta": {"captured_at": datetime.now(timezone.utc).timestamp()}}
         app._update_display(data)
         self.assertEqual(app.title, "85%")
 
     def test_null_utilization(self):
         app = self._make_app()
-        data = {"five_hour": {"utilization": None, "resets_at": None}}
+        data = {"five_hour": {"utilization": None, "resets_at": None},
+                "_meta": {"captured_at": datetime.now(timezone.utc).timestamp()}}
         app._update_display(data)
         self.assertEqual(app.title, "0%")
 
@@ -721,6 +724,7 @@ class TestUnknownBuckets(unittest.TestCase):
             "seven_day_cowork": {"utilization": 99, "resets_at": None},
             "oauth_apps": None,
             "omelette": {"utilization": 88, "resets_at": None},
+            "_meta": {"captured_at": datetime.now(timezone.utc).timestamp()},
         }
         app._update_display(data)
         self.assertEqual(app.title, "30%")
@@ -756,6 +760,7 @@ class TestSectionPresentNullReset(unittest.TestCase):
         data = {
             "five_hour": {"utilization": 44, "resets_at": None},
             "seven_day": {"utilization": 22, "resets_at": None},
+            "_meta": {"captured_at": datetime.now(timezone.utc).timestamp()},
         }
         app._update_display(data)
         self.assertIn("5-hour: 44%", app.m5h.title)
@@ -1551,10 +1556,12 @@ class TestRenderIcon(unittest.TestCase):
 # Tests: freshness label with a malformed captured_at
 # ---------------------------------------------------------------------------
 class TestFreshnessLabel(unittest.TestCase):
-    def test_malformed_captured_at_returns_default(self):
+    def test_malformed_captured_at_says_unknown(self):
+        # There is a reading on screen, so "Updated: --" claimed there was
+        # nothing to say about its age. The line now says the time is unknown.
         now = datetime.now(timezone.utc)
-        self.assertEqual(tracker.App._freshness_label("garbage", now), tracker.UPDATED_DEFAULT)
-        self.assertEqual(tracker.App._freshness_label(None, now), tracker.UPDATED_DEFAULT)
+        self.assertEqual(tracker.App._freshness_label("garbage", now), tracker.UPDATED_UNKNOWN)
+        self.assertEqual(tracker.App._freshness_label(None, now), tracker.UPDATED_UNKNOWN)
 
 
 # ---------------------------------------------------------------------------
@@ -1827,6 +1834,35 @@ class TestStrategyGaps(unittest.TestCase):
                    "_meta": {"captured_at": now - 600}}
         merged = tracker._merge_usage(statusline, desktop)
         self.assertAlmostEqual(merged["_meta"]["captured_at"], now - 10, delta=1)
+
+    def test_a_reading_with_no_capture_time_is_marked_stale(self):
+        # R1 has no exception: an age nobody can compute is not a fresh one.
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_PCT
+        data = _make_usage(five_hour_pct=42)
+        data["_meta"] = {}
+        app._update_display(data)
+        self.assertEqual(app.title, "~42%")
+        self.assertIn("unknown", app.mupd.title)
+
+    def test_a_garbled_capture_time_is_marked_stale(self):
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_PCT
+        app._update_display(_make_usage(five_hour_pct=42, captured_at="unknown"))
+        self.assertEqual(app.title, "~42%")
+        self.assertIn("unknown", app.mupd.title)
+
+    def test_an_unknown_age_does_not_void_the_window(self):
+        # Guard: the age ceiling states that a window has ended. An unknown
+        # age states nothing, so the reading is marked, not voided.
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_PCT
+        data = _make_usage(five_hour_pct=42)
+        data["_meta"] = {}
+        with patch.object(tracker, "_render_dynamic_icon") as render:
+            app._update_display(data)
+        self.assertIn("5-hour: 42%", app.m5h.title)
+        self.assertEqual(render.call_args[0][0], 42)
 
 
 if __name__ == "__main__":
