@@ -28,7 +28,7 @@ That is a sentence any tracker can write. What you can actually check is the siz
 Three things it does:
 
 1. **Small enough to read before you run it.** One 967-line file plus a 178-line optional capture script. No HTTP client imported, so no update check, no telemetry, no crash reporter.
-2. **Shows the limit you have left, not the history you spent.** Your 5-hour and weekly remaining capacity, with reset countdowns. (Threshold notifications at 80% and 95% exist in the code but macOS only delivers them for a signed .app bundle, so they do not fire on Homebrew or source installs — see the roadmap.)
+2. **Shows the limit you have left, not the history you spent.** Your 5-hour and weekly remaining capacity, with reset countdowns. (Threshold notifications at 80% and 95% only appear when Tokease runs as the `.app` bundle, which has its own bundle identifier. Homebrew and source installs run under the Python interpreter's identity, and macOS shows nothing. Verified on macOS 26: the call raises no error either way, so there is nothing in the log to tell you — see the roadmap.)
 3. **Token-free by construction.** The only data sources are files official Claude clients write locally for their own use. No token read, no endpoint call, nothing to sign up for. MIT.
 
 ## Features
@@ -37,7 +37,7 @@ Three things it does:
 - **Reset countdowns**: see when each window rolls over
 - **Honest freshness**: shows when a Claude client last refreshed the data (desktop app or Claude Code), and marks the number `~42%` in the menu bar once it goes stale
 - **Customizable display**: icon + percentage, icon only, or percentage only, plus an option to show both percentages (`5h / weekly`)
-- **Settings menu**: display modes, refresh interval, alert thresholds (80% / 95%, signed `.app` build only), launch at login (`.app` build; use `brew services` or the LaunchAgent otherwise)
+- **Settings menu**: display modes, refresh interval, alert thresholds (80% / 95%, `.app` build only), launch at login (`.app` build; use `brew services` or the LaunchAgent otherwise)
 - **Lightweight**: pure Python, two small dependencies (`rumps` + `Pillow`)
 - **No telemetry**: no account, no tracking, nothing phones home
 
