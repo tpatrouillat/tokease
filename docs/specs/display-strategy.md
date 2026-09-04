@@ -1,7 +1,7 @@
 # Spec: display strategy (what the menu bar shows, and why)
 
 Date: 2026-09-04. Status: proposed. Describes the code on
-`fix/display-strategy-gaps` (163 tests green).
+`fix/display-strategy-gaps` (167 tests green).
 
 Revision note. The first version of this document was written against
 `main` after `fix/honest-freshness` and listed five gaps, GAP-1 to GAP-5.
@@ -10,8 +10,9 @@ commit. This revision re-checks every scenario against that code. A row
 marked **FIXED-n** was a gap in the first version and is closed now, and
 section 7.2 keeps the original diagnosis next to the fix so the history
 stays readable. Two things the first version's numbering hides: GAP-4 is not
-among the four fixed behaviours and stays open, and the fix for GAP-2 opens
-a new gap, GAP-6.
+among the four fixed behaviours and stays open, and the fix for GAP-2 opened
+a new gap, GAP-6, closed since as FIXED-5. The cosmetic gaps GAP-5a and
+GAP-5b are closed as FIXED-6 and FIXED-7.
 
 Refs: [ADR 0001](../adr/0001-pivot-source-statusline.md) (statusline source),
 [ADR 0003](../adr/0003-source-secondaire-plan-usage-desktop.md) (desktop
@@ -152,19 +153,22 @@ launch, never twice at a plateau. Freshness does not gate them (a frozen
 reading cannot cross anything, a late crossing is still true). When the app
 detects a 5h reset the baseline is re-anchored at 0 so the new window can
 raise its own alert. A reset is detected in two shapes: a window present
-with a past `resets_at`, or a reading whose `resets_at` differs from the
-last one seen, since a window carries its own reset time (FIXED-2). The
-desktop feed has no reset time, so there a new window is only visible as a
-drop and the baseline follows the drop. Delivery itself needs a signed
-`.app` bundle.
+with a past `resets_at`, or a reading whose `resets_at` is later than the
+last one seen, since a window carries its own reset time (FIXED-2,
+FIXED-5). A reading with no reset time that arrives once the last seen
+reset has passed forgets that reset, so the reset time arriving later with
+the next capture does not re-anchor a window the desktop feed already
+tracked (FIXED-5). The desktop feed has no reset time, so there a new
+window is only visible as a drop and the baseline follows the drop.
+Delivery itself needs a signed `.app` bundle.
 
 R8. **One "Updated" line per render, dated from the oldest part shown.**
 When a partial capture is completed from the desktop feed, the merged
 reading takes the desktop sample's time, so the line and the `~` marker
 describe the filled window rather than the capture that triggered the merge
 (FIXED-3, which revises the "up to 20 minutes older" caveat the first
-version and ADR 0003 accepted). The `via` label still names the source of
-the capture, not of the fill (section 7.5).
+version and ADR 0003 accepted). The `via` label names the desktop too,
+since it is the desktop's time that is shown (FIXED-7).
 
 R9. **Everything shown comes from a local file written by an official Claude
 client, read as is.** No Keychain, no network, writes confined to
@@ -189,7 +193,8 @@ counts as changed and is stamped anew (GAP-3 residual, section 7.3).
 | icon only | Rings drawn from the same values. No age marker. | Freshness (C5). |
 
 The "Updated" line adds the clock time of the capture and which client wrote
-it (`via Claude app` or `via Claude Code`), or `⚠ hh:mm · stale Nm`.
+it (`via Claude app` or `via Claude Code`), or `⚠ hh:mm · stale 45m`,
+`stale 3h`, `stale 2d`.
 
 ## 6. Scenario matrix
 
@@ -210,7 +215,7 @@ This is the everyday case for a VS Code extension or Cowork user.
 |---|---|---|---|---|---|---|
 | A1 | Sample `t` ≤ 20 min | desktop | `42%` | `5-hour: 42% (resets --)`, `Updated hh:mm (via Claude app)` | on crossing | OK |
 | A2 | Sample 20 min < `t` (app idle, Mac asleep, app quit) | desktop | `~42%` | `⚠ hh:mm · stale Nm (Claude app idle?)` | no (value frozen) | OK |
-| A3 | Sample older than the window itself (5h reading > 5 h old, weekly > 7 d old): Mac asleep overnight with the app idle, or app quit for days | desktop | `~—` while the weekly is inside its 7 days and the weekly option is off, `~— / 18%` with it on, `— / —` past 7 days | `5-hour: — (reading older than the window)`, `⚠ hh:mm · stale 4320m` | no, baseline set to 0 | FIXED-1 for the number. The `~—` title and the minute count are GAP-5a and GAP-5b, now met after every long sleep |
+| A3 | Sample older than the window itself (5h reading > 5 h old, weekly > 7 d old): Mac asleep overnight with the app idle, or app quit for days | desktop | `—` while the weekly is inside its 7 days and the weekly option is off, `~— / 18%` with it on, `— / —` past 7 days | `5-hour: — (reading older than the window)`, `⚠ hh:mm · stale 3d` | no, baseline set to 0 | FIXED-1 for the number, FIXED-6 for the title, FIXED-7 for the age |
 | A4 | Burst between two samples: 26 % at `t0`, exhausted at `t0+10`, next sample at `t0+30` (the incident) | desktop | `26%` until `t0+20`, then `~26%` until `t0+30`, then `100%` | as A1 then A2 | at `t0+30` (95 % crossed) | OK per R1, CHOICE-1 |
 | A5 | 5h window resets between two samples: 100 % then 12 % | desktop | `12%` | `resets --` | baseline follows the drop | OK |
 | A6 | Weekly reset moved earlier by the server, seen as a drop between two samples | desktop | `12%`, weekly `2%` | `resets --` | none (weekly has no alert) | OK |
@@ -227,7 +232,7 @@ The CLI user's case.
 |---|---|---|---|---|---|---|
 | B1 | Active terminal session, capture ≤ 20 min | statusline | `42%` | `5-hour: 42% (resets 2h 10m)`, `via Claude Code` | on crossing | OK |
 | B2 | Session closed, capture aged, resets still ahead | statusline | `~42%` | stale + countdowns | no | OK |
-| B3 | Capture present, 5h `resets_at` has passed, no newer capture | statusline | `—` (5h row void), weekly still shown | `5-hour: — (reset; awaiting Claude Code)` | baseline re-anchored at 0 | OK. If the weekly reading is aged and the weekly option is off the title reads `~—`: GAP-5a |
+| B3 | Capture present, 5h `resets_at` has passed, no newer capture | statusline | `—` (5h row void), weekly still shown | `5-hour: — (reset; awaiting Claude Code)` | baseline re-anchored at 0 | OK. The title reads `—`, never `~—`, whatever the weekly's age (FIXED-6) |
 | B4 | The 5h window reaches `resets_at` while a terminal session is idle: Claude Code drops the window and re-runs the script, which writes a weekly-only capture with a fresh timestamp | statusline | `—`, weekly shown as fresh | `5-hour: --`, `Updated` now | not at this render (window absent, `_last_pct` and `_last_reset` untouched), but the next capture carries a reset time never seen and anchors the baseline at 0 (F8) | FIXED-2 for the alert. The weekly is re-stamped because the capture differs from the file by the missing window: GAP-3 residual |
 | B5 | Session start, resume or `/clear`: Claude Code renders before it has `rate_limits` | previous capture kept by the script | unchanged | unchanged | | OK (v1.0.1) |
 | B6 | Idle session re-rendered for a non-quota reason (permission mode, vim toggle, `/compact`, a user-set `refreshInterval`): same values | statusline | `42%`, then `~42%` once the measurement is 20 min old | `Updated` at the measurement time | none (no change) | FIXED-4: the script keeps the previous `captured_at` when both windows are identical |
@@ -245,7 +250,7 @@ The CLI user's case.
 | C3 | Desktop newer, statusline 5h `resets_at` passed, desktop sampled **after** the reset | desktop % without countdown | `12%` | `resets --` | baseline follows | OK |
 | C4 | Desktop newer, statusline 5h `resets_at` passed, desktop sampled **before** the reset | statusline window (void) | `—` | `reset; awaiting Claude Code` (the next desktop sample will resolve it, not Claude Code) | re-anchored | OK, wording in 7.4 |
 | C5 | Statusline newer but windowless (session start) | desktop wholesale, desktop timestamp | `42%` | `via Claude app` | | OK (PR #15 then #16 fix) |
-| C6 | Statusline newer and partial (weekly only, the reset-drop capture of B4), desktop ≤ 20 min and sampled **after** the reset | statusline weekly + desktop 5h, dated from the desktop sample | `12%` | `resets --`, `Updated` at the desktop sample time, labelled `via Claude Code` | baseline follows (no reset time on the filled window) | OK, label wording in 7.5 |
+| C6 | Statusline newer and partial (weekly only, the reset-drop capture of B4), desktop ≤ 20 min and sampled **after** the reset | statusline weekly + desktop 5h, dated from the desktop sample | `12%` | `resets --`, `Updated` at the desktop sample time, `via Claude app` | baseline follows (no reset time on the filled window) | OK |
 | C7 | Same as C6 but the desktop sample **predates** the reset that caused the drop | statusline weekly + desktop 5h (old window) | `100%` shown as fresh for up to one desktop cadence | `Updated` at the desktop sample time (FIXED-3 changes the date, not the number) | none | GAP-4, still open |
 | C8 | Statusline newer and partial, desktop aged | statusline only | `—` for the missing window | | | OK |
 | C9 | Desktop newer, a window missing from the desktop sample (not observed in a month of data) | desktop + statusline window if statusline ≤ 20 min | | | | OK |
@@ -255,7 +260,7 @@ The CLI user's case.
 | C13 | Same instant, different values (rounding, or the CLI's last response older than the desktop sample) | fresher by write time | | | | OK per R2, and CHOICE-2 on tie-breaking |
 | C14 | Weekly reset moved earlier by the server: desktop newer shows the drop, statusline countdown still points to the old date | desktop % + stale countdown | weekly `2%`, `resets 5d` (wrong date) | | | CHOICE-3 |
 | C15 | Usage burns in Cowork while a terminal session sits idle: the CLI feed does not move | desktop, being fresher | `42%` | `via Claude app` | on crossing | OK by design (ADR 0003) |
-| C16 | Both sources. The 5h window resets while the user works outside the terminal, the desktop feed crosses 80 % in the new window (alert fires, baseline follows), then the first Claude Code message of that window captures 87 % with a reset time never seen | statusline | `87%` | countdown, `via Claude Code` | fires **again** for 80 %: the unseen reset time anchors the baseline at 0 although the desktop feed already tracked this window | GAP-6 |
+| C16 | Both sources. The 5h window resets while the user works outside the terminal, the desktop feed crosses 80 % in the new window (alert fires, baseline follows), then the first Claude Code message of that window captures 87 % with a reset time never seen | statusline | `87%` | countdown, `via Claude Code` | none for 80 %: the desktop reading that followed the reset forgot the ended window, so the reset time arriving with the capture has nothing to be later than and the baseline stays at 85 | FIXED-5 |
 
 ### 6.4 Time and machine events
 
@@ -293,8 +298,8 @@ The CLI user's case.
 | F9 | 5h reset seen as a drop in the desktop feed (A5) | baseline follows the drop, next crossing fires | OK |
 | F10 | Weekly crosses 80 % | none, by design | CHOICE-7 |
 | F11 | Homebrew or source install | never delivered by macOS | documented |
-| F12 | Desktop feed already alerted in the new window, then the statusline sees the new reset time (C16) | second alert for the same threshold | GAP-6 |
-| F13 | The 5h `resets_at` value drifts by a second inside one window (not observed, the documented shape is one fixed time per window) | one alert per render above 80 % | hardening noted under GAP-6 |
+| F12 | Desktop feed already alerted in the new window, then the statusline sees the new reset time (C16) | none | FIXED-5 |
+| F13 | The 5h `resets_at` value drifts by a second inside one window (not observed, the documented shape is one fixed time per window) | none, only a later reset time marks a new window | FIXED-5 (`test_a_jittery_reset_time_does_not_realert`) |
 
 ## 7. Verdicts
 
@@ -315,6 +320,12 @@ The core of the strategy is in place and matches R1 to R9:
 - Alerts fire on upward crossings only, are not gated on freshness, and the
   baseline is re-anchored at a detected reset, in both shapes a reset takes
   in the statusline feed.
+- A reset time is compared as a time, and only a later one marks a new
+  window. A reading without a reset time forgets a reset that has passed, so
+  a window is never anchored at 0 twice.
+- The `~` marker only qualifies a number the title actually shows.
+- The freshness line reads in minutes, hours or days, and names the source
+  whose time it shows.
 - A reading that has outlived its window is void, per window, whatever the
   source.
 - A merged reading dates itself from its oldest part, and a capture that
@@ -322,7 +333,7 @@ The core of the strategy is in place and matches R1 to R9:
 - Every source is parsed defensively and read-only. The capture script
   cannot raise and never overwrites good windows with an empty render.
 
-Tests cover each of these (163 green on `fix/display-strategy-gaps`).
+Tests cover each of these (167 green on `fix/display-strategy-gaps`).
 
 ### 7.2 Fixed on `fix/display-strategy-gaps`
 
@@ -345,9 +356,9 @@ later than its span after the measurement, so the ceiling matters for the
 desktop feed and for a capture whose `resets_at` is unreadable (B9). Both
 merge branches date the reading from a source at most 20 minutes old when
 they mix windows, so the ceiling never voids a window that another source
-had fresh. Two side effects are in 7.3: the `~—` title (GAP-5a) is now what
-a desktop user sees after every sleep longer than 5 hours, and a reading
-with no `captured_at` skips the ceiling (GAP-5c).
+had fresh. Two side effects followed: the `~—` title after every long sleep
+(GAP-5a, closed as FIXED-6) and a reading with no `captured_at` skipping the
+ceiling (GAP-5c, 7.3).
 
 **FIXED-2 (was GAP-2). A reset that removes the window lost the next alert.**
 Diagnosis: the documented shape of a 5h reset in the statusline feed is a
@@ -367,8 +378,8 @@ version holds: an absent window is not treated as a reset, only a new reset
 time is, so session start and Free plans are unaffected. In the mixed
 merge, a desktop reading carries the statusline's reset time while it is
 ahead, so the new-window detection also works for desktop readings as long
-as the statusline saw the window. The fix has one wrong case, GAP-6 in 7.3,
-where the same new window is anchored at 0 twice.
+as the statusline saw the window. The fix had one wrong case, GAP-6, where
+the same new window was anchored at 0 twice, closed as FIXED-5.
 
 **FIXED-3 (was the R8 caveat, not a numbered gap). A merged reading claimed
 the capture's freshness.**
@@ -384,7 +395,7 @@ minutes old, so the merged age never reaches the `~` threshold or the age
 ceiling through this path, and the desktop-newer branch already dated the
 merge from the desktop sample. R8 is rewritten above. This is not a fix for
 C7: the filled window can still describe the old window (GAP-4). The `via`
-label keeps saying `Claude Code` next to a desktop time (7.5).
+label now names the desktop next to the desktop's time (FIXED-7).
 
 **FIXED-4 (was GAP-3, for the identical-capture case). `captured_at` was
 re-stamped on every statusline run.**
@@ -403,35 +414,59 @@ file, still never raises. Not closed: a re-run in which a window vanished
 differs from the current file and is stamped anew, which is the B4 weekly
 timestamp (GAP-3 residual in 7.3). CHOICE-2 was not needed for this fix.
 
+**FIXED-5 (was GAP-6, opened by FIXED-2). The same new window could be
+anchored at 0 twice, which repeated an alert.**
+Diagnosis: `_last_reset` was only updated by a reading carrying a
+`resets_at`. Desktop readings carry none once the statusline's reset has
+passed, so after a 5h reset seen from the desktop side `_last_reset` still
+named the ended window while the desktop feed tracked the new one and fired
+its 80 % alert. The first Claude Code message of that window brought a reset
+time never seen, the baseline was taken as 0 again, and the same 80 % fired a
+second time (C16, F12). The comparison was also between two ISO strings, so a
+reset time moving by a second would have anchored at 0 on every render (F13).
+Fix: `_maybe_notify` in `tracker.py`. A reading with no reset time that
+arrives once the reset on file has passed clears `_last_reset`, since the
+window being tracked can no longer be named. Reset times are compared as
+parsed datetimes, and only a later one marks a new window.
+Checked: C16 no longer re-alerts
+(`test_no_second_alert_when_the_new_window_reset_finally_arrives`), a reset
+time moving back by one second stays silent
+(`test_a_jittery_reset_time_does_not_realert`), and F8 still fires
+(`test_a_new_window_alerts_even_below_the_previous_peak`, the new reset time
+is later). B4 is unaffected: the window is absent there, `_maybe_notify` is
+not called, `_last_reset` keeps naming the ended window until the new one
+appears with a later time. In-memory state only, nothing written.
+
+**FIXED-6 (was GAP-5a). `~—` as a whole title.**
+Diagnosis: when the 5h window was void or absent, the weekly reading aged and
+the weekly option off, the title was `~—`. A marker on a placeholder says
+nothing, and since FIXED-1 this was the title after every sleep longer than 5
+hours for a desktop user (A3).
+Fix: `_update_display` marks the title only when it shows a number
+(`shows_a_number`: a 5h value, or a weekly value with the weekly option on).
+Checked: `test_no_stale_marker_on_a_title_showing_no_number` and
+`test_reading_older_than_the_five_hour_window_is_void` assert `—`.
+`~— / 18%` stays when the weekly option is on and the weekly is aged
+(`test_weekly_survives_an_age_that_voids_the_five_hour`), since a number is
+shown. The dropdown keeps the stale line in every case.
+
+**FIXED-7 (was GAP-5b, plus the `via` wording of 7.5). The stale label
+counted in minutes without bound, and a filled merge named the wrong
+source.**
+Diagnosis: `stale 4320m` in `_freshness_label` (A3). And a merge that took
+the desktop sample's time (FIXED-3) still said `via Claude Code`, so the line
+named one source and dated from the other (C6).
+Fix: `_humanize_age` in `tracker.py` (minutes under an hour, hours under a
+day, days past that). `_merge_usage` copies the desktop's `source` along with
+its `captured_at` when a window was filled.
+Checked: `test_a_long_stale_age_reads_in_hours_or_days` (3 d and 4 h).
+`test_merge_fresher_partial_statusline_keeps_desktop_window` now asserts
+`source == "desktop"` and the desktop time. R8 rewritten above.
+
 ### 7.3 Gaps still open
 
 Ordered by impact on the user. Each gives the location and the constraint,
 the design is the implementer's call. All fit inside R9.
-
-**GAP-6 (new, from FIXED-2). The same new window can be anchored at 0
-twice, which repeats an alert.**
-`_last_reset` is only updated by a reading that carries a `resets_at`.
-Desktop readings carry none once the statusline's reset has passed
-(`_merge_window` drops a past reset), so after a 5h reset seen from the
-desktop side `_last_reset` still names the ended window. The desktop feed
-then tracks the new window and fires its 80 % alert normally, with the
-baseline following. The first Claude Code message of that window brings a
-reset time never seen, the baseline is taken as 0 again, and the same 80 %
-fires a second time (C16, F12). The path is a user who works outside the
-terminal after a reset, crosses 80 %, then comes back to the terminal. The
-same happens after a window voided by `_window_row` (B3, or the age
-ceiling) followed by desktop readings. Location: `_maybe_notify` in
-`tracker.py`. `_last_reset` should only name the window `_last_pct` belongs
-to. When a reading with no reset time arrives after `_last_reset` has
-passed, that window is over and `_last_reset` should be cleared, so the
-next reset time seen is not taken as new. The B4 path is unaffected by such
-a change: the window is absent there, `_maybe_notify` is not called, and
-`_last_reset` keeps naming the ended window until the new one appears.
-While there: the comparison is between two ISO strings, so a reset time
-that moved by one second inside a window would anchor at 0 on every render
-and repeat the alert each time (F13). The documented shape is one fixed
-time per window, but comparing parsed times and treating only a later one
-as a new window costs one line and removes the risk.
 
 **GAP-4 (unchanged). The partial-capture fill has no pre-reset guard.**
 Not touched by the branch. The fill in `_merge_usage` copies the desktop 5h
@@ -444,14 +479,16 @@ and the age ceiling does not help since the sample is minutes old. It is
 the mirror image of the incident (over- instead of under-estimating), less
 harmful, still false with confidence. The evidence the guard needs is the
 reset time that the reset-triggered capture no longer carries, and the
-branch now keeps it in memory: `_last_reset` holds the last 5h reset time
-seen. A window with no reset time whose capture time is before
+branch keeps it in memory: `_last_reset` holds the last 5h reset time seen,
+until a reading with no reset time arrives after it has passed (FIXED-5
+clears it then). A window with no reset time whose capture time is before
 `_last_reset`, itself in the past, describes the ended window and should be
 void, the same way `_merge_window` voids a desktop sample that predates a
 known reset. That check can live in `_update_display`, where `_last_reset`
 is at hand, or the capture script can persist the dropped window's
 `resets_at` so the guard survives an app restart. Both stay inside
-`~/.tokease`.
+`~/.tokease`. The choice between the two is an architecture decision,
+opened as ADR 0004.
 
 **GAP-3 residual. A capture that lost a window is stamped as new.**
 The script keeps `captured_at` only when both windows are equal. The
@@ -464,21 +501,6 @@ Keeping the timestamp when every window present in the payload equals the
 current file's, with at least one present, covers it. Low impact on its
 own, the weekly moves slowly, and it does not close GAP-4 (the desktop
 sample would then win the merge and still carry the old window).
-
-**GAP-5a (cosmetic, now frequent). `~—` as a whole title.**
-When the 5h window is void or absent, the weekly reading is aged and the
-weekly option is off, the title is `~—`. A marker on a placeholder says
-nothing. Before FIXED-1 this needed a reset seen on an aged capture (B3,
-C8). Now it is the title after any sleep or idle period longer than 5 hours
-for a desktop user (A3), until the next sample. Location: the `~` condition
-in `_update_display` tests that some window has a value, not that the title
-shows one. `test_reading_older_than_the_five_hour_window_is_void` asserts
-`~—` and would change with the fix.
-
-**GAP-5b (cosmetic). The stale label counts in minutes without bound.**
-`stale 4320m` in `_freshness_label`. With FIXED-1 the row next to it
-already explains the void, so this is readability only. Hours past 60
-minutes, days past 24 hours.
 
 **GAP-5c (cosmetic, unlikely). No or garbled `captured_at`.**
 A statusline file with no usable `captured_at` is ranked as maximally old
@@ -552,10 +574,6 @@ weekly window is the one that locks a user out for days.
 - The `⚙` guide tells a user whose desktop file changed format to open the
   desktop app they already run (A7). The README already points to the two
   diagnostic commands.
-- The `Updated` line of a filled merge shows the desktop sample's time
-  labelled `via Claude Code` (C6, FIXED-3): the time is the desktop's, the
-  label is the capture's. Location: `_merge_usage` keeps `source` from the
-  statusline when it replaces `captured_at`.
 
 ## 8. Existing decisions this document keeps or asks to revise
 
@@ -567,7 +585,7 @@ settled in 7.4).
 
 Updated on `fix/display-strategy-gaps`: ADR 0003 now states the age ceiling,
 the new-window re-anchor on a reset time never seen, and the mixed merge
-dated from the older source. `docs/CHANGELOG.md` lists the four behaviours.
+dated from the older source. `docs/CHANGELOG.md` lists each behaviour.
 
 To revise:
 
@@ -593,7 +611,8 @@ FIXED-4 already changed what the capture script writes (it keeps a
 timestamp) and added one read of its own file, still without raising. The
 GAP-3 residual and one of the two options for GAP-4 would change it again
 (keeping a timestamp, keeping a reset time), which stays inside the same
-file and the same directory. GAP-6 is in-memory state only. A rule that would need the measurement time
+file and the same directory. FIXED-5 is in-memory state only. A rule that
+would need the measurement time
 from Claude Code itself is not available on the documented surface and is
 not proposed.
 
