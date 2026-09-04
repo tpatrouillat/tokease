@@ -166,7 +166,10 @@ reset has passed forgets that reset, so the reset time arriving later with
 the next capture does not re-anchor a window the desktop feed already
 tracked (FIXED-5). The desktop feed has no reset time, so there a new
 window is only visible as a drop and the baseline follows the drop.
-Delivery itself needs a signed `.app` bundle.
+Delivery itself needs the `.app` bundle. Measured on macOS 26, the banner is
+keyed on the bundle identifier, not on a Developer ID signature: an ad-hoc
+signature is enough, and from brew or source nothing is shown while
+`rumps.notification` still returns cleanly.
 
 R8. **One "Updated" line per render, dated from the oldest part shown.**
 When a partial capture is completed from the desktop feed, the merged
