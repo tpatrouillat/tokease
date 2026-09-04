@@ -1,8 +1,8 @@
 # Tokease — guidance projet
 
 > **Ce repo porte le *comment*.** Le *pourquoi* — cadrage produit, décisions, état du lancement — vit dans Brain :
-> [`../../brain/projects/Tokease/`](../../brain/projects/Tokease/) · règles du workspace [`../../brain/AGENTS.md`](../../brain/AGENTS.md) · conventions [Python](../../brain/knowledge/tooling/conventions/python.md).
-> Le contexte machine (arborescence, MCP, routage des sorties) est chargé automatiquement depuis `~/.claude/CLAUDE.md`, qui importe [`../../brain/context/cartographie.md`](../../brain/context/cartographie.md). Les autres liens ci-dessus ne se chargent pas tout seuls : les ouvrir en début de session.
+> `../../brain/projects/Tokease/` · règles du workspace `../../brain/AGENTS.md` · conventions Python (`../../brain/knowledge/tooling/conventions/python.md`).
+> Le contexte machine (arborescence, MCP, routage des sorties) est chargé automatiquement depuis `~/.claude/CLAUDE.md`, qui importe `../../brain/context/cartographie.md`. Les autres chemins ci-dessus ne se chargent pas tout seuls : les ouvrir en début de session. Chemins locaux à la machine de dev.
 
 App **menu bar macOS** qui suit l'usage et le quota Claude Code. Python 3.14 · rumps · Pillow · py2app. Pas de web, pas de Supabase.
 
