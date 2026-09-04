@@ -655,6 +655,7 @@ from Claude Code itself is not available on the documented surface and is
 not proposed.
 
 One item outside this document but adjacent to it, from the launch backlog:
-`_render_dynamic_icon` writes a PNG on every render from the main thread and
-an `OSError` there is not caught by `_apply_usage`. It concerns the app's
-own robustness, not the truth of the display.
+`_render_dynamic_icon` writes a PNG on every render from the main thread. An
+`OSError` there now returns `None` and the previous icon is kept, so the title
+is still applied. It concerns the app's own robustness, not the truth of the
+display.

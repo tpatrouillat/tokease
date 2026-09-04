@@ -16,6 +16,7 @@
 - The capture script no longer re-dates an unchanged reading. Claude Code re-runs the statusline on events that carry no new measurement, and each re-run used to look like a fresh one, which let old values outrank a truer desktop sample and could fire the same threshold alert twice.
 - The capture script keeps the measurement's timestamp when a window vanished at its reset. Claude Code drops a window once its reset time passes and re-runs the statusline with the other window unchanged. That capture used to be dated anew, so a weekly value hours old looked fresh and outranked a truer desktop sample.
 - A reading whose capture time is missing or unreadable is marked stale rather than shown as live. The dropdown says the time is unknown. Only a hand-edited file could produce this, and an unknown age is not a fresh one.
+- A failure to write the ring icon (full disk, read-only or deleted `~/.tokease`) no longer leaves the menu bar stuck on "...". The percentage is still shown and the previous icon is kept.
 
 ### Docs
 

@@ -102,7 +102,7 @@ def _render_dynamic_icon(session_pct, weekly_pct):
     a visible outline.
 
     Returns the path of the freshly written PNG, or None when Pillow is absent
-    (the caller then keeps the existing static icon).
+    or the PNG cannot be written (the caller then keeps the existing icon).
     """
     if not _PILLOW_AVAILABLE:
         return None
@@ -125,8 +125,12 @@ def _render_dynamic_icon(session_pct, weekly_pct):
                      fill=(0, 0, 0, 255), width=stroke)
 
     img = img.resize((_ICON_SIZE_FINAL, _ICON_SIZE_FINAL), Image.LANCZOS)
-    _TOKEASE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
-    img.save(_DYNAMIC_ICON_PATH)
+    try:
+        _TOKEASE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        img.save(_DYNAMIC_ICON_PATH)
+    except OSError as exc:  # full disk, read-only or deleted ~/.tokease: keep the last icon
+        print(f"tokease: cannot write icon: {exc!r}", file=sys.stderr)
+        return None
     return _DYNAMIC_ICON_PATH
 
 # ---------------------------------------------------------------------------

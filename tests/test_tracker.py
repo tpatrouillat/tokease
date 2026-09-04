@@ -670,6 +670,29 @@ class TestApplyDisplayModes(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Tests: icon write failure must not break the title
+# ---------------------------------------------------------------------------
+@unittest.skipUnless(tracker._PILLOW_AVAILABLE, "Pillow absent: no PNG is written")
+class TestIconWriteFailure(unittest.TestCase):
+    """A full disk or a read-only ~/.tokease used to raise out of
+    _update_display before _apply_display ran, leaving the title on '...'."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def test_oserror_on_save_keeps_title_and_previous_icon(self):
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_BOTH
+        app.icon = "stub-previous.png"
+        with patch.object(tracker.Image.Image, "save", side_effect=OSError("disk full")):
+            app._update_display(_make_usage(five_hour_pct=42))
+        self.assertEqual(app.title, "42%")
+        self.assertEqual(app.icon, "stub-previous.png")
+
+
+# ---------------------------------------------------------------------------
 # Tests: corrupted settings
 # ---------------------------------------------------------------------------
 class TestCorruptedSettings(unittest.TestCase):
