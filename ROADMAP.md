@@ -4,7 +4,7 @@ Where this project is, and where it might go.
 
 ## v1.0 — what ships now
 
-A single-file macOS menu bar app that shows your 5-hour / weekly remaining capacity as two rings, read from two local files official Claude apps already write: the Claude desktop app's quota history (zero config, refreshed about every 5 minutes) and the `rate_limits` data Claude Code publishes to its statusline (optional, adds reset countdowns). That's it. No token read, no endpoint call. A small single-file Python app, MIT, two small dependencies (`rumps` for the menu bar, `Pillow` for the dynamic icon).
+A single-file macOS menu bar app that shows your 5-hour / weekly remaining capacity as two rings, read from two local files official Claude apps already write: the Claude desktop app's quota history (zero config, refreshed every 5 to 15 minutes) and the `rate_limits` data Claude Code publishes to its statusline (optional, adds reset countdowns). That's it. No token read, no endpoint call. A small single-file Python app, MIT, two small dependencies (`rumps` for the menu bar, `Pillow` for the dynamic icon).
 
 > The legacy endpoint mode (which read the OAuth token from the Keychain and called an undocumented endpoint) is removed from v1.0 and frozen at the git tag `v0.9.0-endpoint`.
 
