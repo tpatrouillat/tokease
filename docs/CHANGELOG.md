@@ -1,5 +1,20 @@
 # Changelog
 
+## v1.0.4 — 2026-09-04
+
+Documentation only. No behaviour changes, and the tarball now matches what the README describes.
+
+### Fixed
+
+- The stated size matches the file again. `tracker.py` is 970 lines and the capture script is 178, so 1,148 in total. The v1.0.3 tarball carried 967 because a comment was corrected right after the tag, and `wc -l` is the first thing a reader runs.
+- Threshold notifications are explained by what was measured rather than by what was assumed. A banner appears only when Tokease runs as the `.app` bundle, which carries its own bundle identifier. From Homebrew or a source checkout the process runs under the Python interpreter's identity and macOS shows nothing, while `rumps.notification` still returns cleanly, so nothing reaches the log either. Signing is not the reason: the bundle that does show a banner is only ad-hoc signed. The menu comment, `docs/specs/display-strategy.md` and the README said otherwise.
+- The statusline README announced a 15-minute staleness threshold. It has been 20 since v1.0.3, and the `~` marker was not mentioned there at all.
+- The desktop sampling cadence reads "every 5 to 15 minutes" everywhere, including the landing page and the roadmap, which still said "about every 5 minutes".
+
+### Added
+
+- Two roadmap entries that the project talked about as tracked but had written down nowhere: drawing the ring icon with CoreGraphics instead of Pillow, and a `jq` variant of the capture script.
+
 ## v1.0.3 — 2026-09-04
 
 ### Fixed

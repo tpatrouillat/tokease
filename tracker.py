@@ -189,7 +189,7 @@ STAR_URL = "https://github.com/tpatrouillat/tokease"
 
 # Shown in the Support submenu so a bug report can state which build it is.
 # Keep in sync with setup.py and the git tag.
-__version__ = "1.0.3"
+__version__ = "1.0.4"
 
 # Login-item registration uses the .app's CFBundleDisplayName — must match
 # Info.plist exactly or `delete login item` won't find it.
