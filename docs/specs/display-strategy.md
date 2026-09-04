@@ -16,8 +16,10 @@ GAP-5b are closed as FIXED-6 and FIXED-7.
 
 Refs: [ADR 0001](../adr/0001-pivot-source-statusline.md) (statusline source),
 [ADR 0003](../adr/0003-source-secondaire-plan-usage-desktop.md) (desktop
-source), [statusline-data-source.md](statusline-data-source.md) (file
-contract), [honest-freshness.md](honest-freshness.md) (the 26 % incident).
+source), [ADR 0004](../adr/0004-garde-pre-reset-capture-partielle.md)
+(proposed, the pre-reset guard of GAP-4),
+[statusline-data-source.md](statusline-data-source.md) (file contract),
+[honest-freshness.md](honest-freshness.md) (the 26 % incident).
 
 ## 1. Why this document exists
 
@@ -541,8 +543,8 @@ void, the same way `_merge_window` voids a desktop sample that predates a
 known reset. That check can live in `_update_display`, where `_last_reset`
 is at hand, or the capture script can persist the dropped window's
 `resets_at` so the guard survives an app restart. Both stay inside
-`~/.tokease`. The choice between the two is an architecture decision,
-opened as ADR 0004.
+`~/.tokease`. The choice between the two is an architecture decision, opened
+as [ADR 0004](../adr/0004-garde-pre-reset-capture-partielle.md).
 
 ### 7.4 Choices that belong to the product owner
 
@@ -620,7 +622,8 @@ settled in 7.4).
 
 Updated on `fix/display-strategy-gaps`: ADR 0003 now states the age ceiling,
 the new-window re-anchor on a reset time never seen, and the mixed merge
-dated from the older source. `docs/CHANGELOG.md` lists each behaviour.
+dated from the older source. `docs/CHANGELOG.md` lists each behaviour. ADR
+0004 (proposed) opens the choice for GAP-4.
 
 To revise:
 
