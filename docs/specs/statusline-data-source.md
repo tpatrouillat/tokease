@@ -51,11 +51,12 @@ invalid.
 
 ## Consumer — `tracker.py`
 
-`fetch_usage()` reads the `~/.tokease/usage.json` file (single source,
-statusline) and normalizes it into the internal shape `_update_display`
+`fetch_usage()` reads the `~/.tokease/usage.json` file (primary source; the
+desktop history of [ADR 0003](../adr/0003-source-secondaire-plan-usage-desktop.md)
+is merged in by freshness) and normalizes it into the internal shape `_update_display`
 expects
 (`{"five_hour": {"utilization": …, "resets_at": ISO}, …}`, `used_percentage`→`utilization`,
-epoch→ISO), adding `_meta`. There is no source switching anymore: the endpoint
+epoch→ISO), adding `_meta`. There is no user-facing source switching: the endpoint
 mode was removed (see [ADR 0002](../adr/0002-retrait-mode-endpoint.md)).
 
 ### Error states
@@ -68,9 +69,9 @@ mode was removed (see [ADR 0002](../adr/0002-retrait-mode-endpoint.md)).
 
 ### Freshness & reset
 
-- **Staleness**: if `now − captured_at > 15 min`, flag the data as stale (the
-  *Updated* line gets a ⚠ prefix). This signals that Claude Code is not
-  running.
+- **Staleness**: if `now − captured_at > 20 min`, flag the data as stale (the
+  *Updated* line gets a ⚠ prefix). This signals that no Claude client is
+  refreshing it (threshold set in `honest-freshness.md`).
 - **Window reset**: if `resets_at < now`, the window has rolled over since the
   capture, so the stored `used_percentage` is no longer valid. We display
   "(reset)" and do not draw the ring as if it were current.

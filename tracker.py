@@ -8,7 +8,8 @@ Two local data sources, merged by freshness:
    Primary source, the only one that provides reset times.
 2. the quota history sampled by the Claude desktop app
    (docs/adr/0003-source-secondaire-plan-usage-desktop.md). Read-only,
-   refreshed ~5 min while the app runs, whatever surface is being used.
+   refreshed every 5 min (median; p90 45 min) while the app runs, whatever
+   surface is being used.
 In both cases the data is written locally by an official Claude client:
 never a read of the OAuth token, never a call to the Anthropic endpoint.
 
@@ -102,7 +103,7 @@ def _render_dynamic_icon(session_pct, weekly_pct):
     a visible outline.
 
     Returns the path of the freshly written PNG, or None when Pillow is absent
-    (the caller then keeps the existing static icon).
+    or the PNG cannot be written (the caller then keeps the existing icon).
     """
     if not _PILLOW_AVAILABLE:
         return None
@@ -125,8 +126,12 @@ def _render_dynamic_icon(session_pct, weekly_pct):
                      fill=(0, 0, 0, 255), width=stroke)
 
     img = img.resize((_ICON_SIZE_FINAL, _ICON_SIZE_FINAL), Image.LANCZOS)
-    _TOKEASE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
-    img.save(_DYNAMIC_ICON_PATH)
+    try:
+        _TOKEASE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        img.save(_DYNAMIC_ICON_PATH)
+    except OSError as exc:  # full disk, read-only or deleted ~/.tokease: keep the last icon
+        print(f"tokease: cannot write icon: {exc!r}", file=sys.stderr)
+        return None
     return _DYNAMIC_ICON_PATH
 
 # ---------------------------------------------------------------------------
@@ -159,8 +164,8 @@ _KEY_TITLE_WEEKLY = "title_weekly"
 # (statusline/tokease-statusline.py). Read on every refresh in statusline mode.
 _STATUSLINE_FILE = _TOKEASE_DIR / "usage.json"
 
-# Quota history sampled (5 to 15 min) by the Claude desktop app. Read-only
-# secondary source, undocumented internal format (see ADR 0003).
+# Quota history sampled by the Claude desktop app (median 5 min, p90 45 min).
+# Read-only secondary source, undocumented internal format (see ADR 0003).
 _DESKTOP_HISTORY_FILE = (
     Path.home() / "Library" / "Application Support" / "Claude" / "plan-usage-history.json"
 )
@@ -169,6 +174,10 @@ _DESKTOP_HISTORY_FILE = (
 # Claude client is refreshing it. 20 min: measured on 1086 desktop samples the
 # cadence is 5 min or 15 min, so 15 would flag normal operation 15 % of the time.
 _STALE_AFTER_SECS = 20 * 60
+# A reading cannot outlive the window it describes: past these, whatever the
+# feeds say, the window has certainly ended and its percentage is void.
+_FIVE_HOUR_SECS = 5 * 3600
+_SEVEN_DAY_SECS = 7 * 24 * 3600
 
 # Two-space spacer between icon and percentage so the digits don't crowd the
 # rings. Menu bar font renders one space at ~4 px; two = comfortable gap.
@@ -190,6 +199,8 @@ LOGIN_ITEM_NAME = "Tokease"
 FIVE_HOUR_DEFAULT = "5-hour: --"
 WEEKLY_DEFAULT = "Weekly: --"
 UPDATED_DEFAULT = "Updated: --"
+# A reading whose capture time is missing or unreadable: R1 has no exception.
+UPDATED_UNKNOWN = "⚠ capture time unknown"
 
 # ---------------------------------------------------------------------------
 # Settings persistence (NSUserDefaults)
@@ -436,9 +447,19 @@ def _merge_usage(statusline, desktop):
         if (now.timestamp() - desk_at) > _STALE_AFTER_SECS:
             return statusline
         merged = dict(statusline)
+        filled = False
         for key in ("five_hour", "seven_day"):
             if key not in merged and desktop.get(key):
                 merged[key] = desktop[key]
+                filled = True
+        if filled:
+            # A filled window is only as fresh as the desktop sample it came
+            # from, so the whole display dates itself from that sample rather
+            # than claim the capture's freshness, and names it as the source
+            # the shown time belongs to.
+            merged["_meta"] = {**merged.get("_meta", {}),
+                               "captured_at": desk_at,
+                               "source": desktop.get("_meta", {}).get("source")}
         return merged
     sl_fresh = (now.timestamp() - sl_at) <= _STALE_AFTER_SECS
     merged = {"_meta": desktop["_meta"]}
@@ -468,6 +489,16 @@ def fetch_usage():
 # ---------------------------------------------------------------------------
 # Time formatting
 # ---------------------------------------------------------------------------
+
+def _humanize_age(seconds):
+    """Short age for the freshness line: 45m, 3h, 2d rather than 4320m."""
+    minutes = int(seconds // 60)
+    if minutes < 60:
+        return f"{minutes}m"
+    if minutes < 24 * 60:
+        return f"{minutes // 60}h"
+    return f"{minutes // (24 * 60)}d"
+
 
 def _parse_iso(iso):
     """Parse an ISO-8601 timestamp (from _epoch_to_iso) into a tz-aware datetime.
@@ -548,6 +579,7 @@ class App(rumps.App):
         # Notification state: None = no baseline yet (first observation).
         # Tracked in-memory only; resets on restart.
         self._last_pct = None
+        self._last_reset = None  # reset time of the window _last_pct belongs to
 
         # Usage display items
         self.m5h   = rumps.MenuItem("5-hour: ...")
@@ -678,12 +710,32 @@ class App(rumps.App):
     def _open_star(self, _):
         webbrowser.open(STAR_URL)
 
-    def _maybe_notify(self, pct):
-        """Fire a notification when pct crosses a threshold upward."""
+    def _maybe_notify(self, pct, resets_at=None):
+        """Fire a notification when pct crosses a threshold upward.
+
+        A window carries its own reset time, so a reset time later than the one
+        on file means a new window. Its baseline is 0 whatever the old one
+        reached, otherwise a new window opening under the previous value would
+        never look like a crossing and its alert would be lost. Only a later
+        time counts: an unchanged or jittery one is the same window running.
+        """
+        now = datetime.now(timezone.utc)
         previous = self._last_pct
+        seen = _parse_iso(self._last_reset)
         self._last_pct = pct
+        if resets_at is not None:
+            self._last_reset = resets_at
+        elif seen is not None and seen <= now:
+            # The desktop feed carries no reset time, so once the window we had
+            # on file has ended we can no longer name the window we are
+            # tracking. Forgetting it stops the next capture from looking like
+            # a brand new window and re-announcing a threshold already passed.
+            self._last_reset = None
         if not self.alerts_enabled or previous is None:
             return
+        opened = _parse_iso(resets_at)
+        if opened is not None and seen is not None and opened > seen:
+            previous = 0
         crossed = [t for t in NOTIFY_THRESHOLDS if previous < t <= pct]
         if not crossed:
             return
@@ -804,12 +856,13 @@ class App(rumps.App):
                 self.icon = str(icon_path)
 
     @staticmethod
-    def _window_row(label, section, now):
+    def _window_row(label, section, now, age=None, span=None):
         """Format one usage-window line → (text, pct_for_ring).
 
-        pct_for_ring is None when the window already reset since the capture:
-        the stored % is no longer valid, so the caller skips that ring and
-        shows '—' rather than a stale number.
+        pct_for_ring is None when the stored % cannot still be true: either
+        the window reset since the capture, or the reading has outlived the
+        window it describes. The caller then skips that ring and shows '—'
+        rather than a number nothing supports.
         """
         # Clamp 0..100 at the source: the feed can return an aberrant % at
         # startup (Claude Code bug #52326) — otherwise it leaks into the
@@ -818,22 +871,24 @@ class App(rumps.App):
         dt = _parse_iso(section.get("resets_at"))
         if dt is not None and dt <= now:
             return f"{label}: — (reset; awaiting Claude Code)", None
+        if age is not None and span is not None and age > span:
+            return f"{label}: — (reading older than the window)", None
         return f"{label}: {pct}% (resets {fmt_reset(section.get('resets_at'))})", pct
 
     @staticmethod
     def _freshness_label(captured_at, now, source=None):
         """'Updated' line, flagging stale data (no Claude client refreshing it)."""
         if not captured_at:
-            return UPDATED_DEFAULT
+            return UPDATED_UNKNOWN
         try:
             cap = datetime.fromtimestamp(float(captured_at), timezone.utc)
             local = cap.astimezone().strftime("%H:%M")
         except (TypeError, ValueError, OverflowError, OSError):
-            return UPDATED_DEFAULT
+            return UPDATED_UNKNOWN
         age = (now - cap).total_seconds()
         via = "Claude app" if source == "desktop" else "Claude Code"
         if age > _STALE_AFTER_SECS:
-            return f"⚠ {local} · stale {int(age // 60)}m ({via} idle?)"
+            return f"⚠ {local} · stale {_humanize_age(age)} ({via} idle?)"
         return f"Updated: {local} (via {via})"
 
     def _update_display(self, data):
@@ -841,11 +896,15 @@ class App(rumps.App):
         meta = data.get("_meta", {})
         session_pct = weekly_pct = None  # None = window absent → "—" badge/ring, not "0%"
 
+        cap_at = _captured_at(data)
+        age = (now.timestamp() - cap_at) if cap_at else None
+
         # 5h session (also drives the menu bar title and the threshold alerts)
         if h := data.get("five_hour"):
-            self.m5h.title, session_pct = self._window_row("5-hour", h, now)
+            self.m5h.title, session_pct = self._window_row(
+                "5-hour", h, now, age, _FIVE_HOUR_SECS)
             if session_pct is not None:
-                self._maybe_notify(session_pct)
+                self._maybe_notify(session_pct, h.get("resets_at"))
             else:
                 # Window just reset: re-anchor at 0, or a new cycle that opens
                 # above a threshold would not read as a crossing and its alert
@@ -856,7 +915,8 @@ class App(rumps.App):
 
         # 7-day weekly window
         if d := data.get("seven_day"):
-            self.m7d.title, weekly_pct = self._window_row("Weekly", d, now)
+            self.m7d.title, weekly_pct = self._window_row(
+                "Weekly", d, now, age, _SEVEN_DAY_SECS)
         else:
             self.m7d.title = WEEKLY_DEFAULT
 
@@ -871,9 +931,11 @@ class App(rumps.App):
             weekly_txt = f"{weekly_pct}%" if weekly_pct is not None else "—"
             title_pct = f"{title_pct} / {weekly_txt}"
         # The title is what the user actually reads, so a stale number says so.
-        cap_at = _captured_at(data)
-        if cap_at and (now.timestamp() - cap_at) > _STALE_AFTER_SECS \
-                and (session_pct is not None or weekly_pct is not None):
+        shows_a_number = session_pct is not None or (
+            self.title_weekly and weekly_pct is not None)
+        # An unknown age is not a fresh one, but it does not void the window
+        # either: nothing says the window has ended (age stays None above).
+        if shows_a_number and (age is None or age > _STALE_AFTER_SECS):
             title_pct = f"~{title_pct}"
         self._apply_display(title_pct, icon_path)
 

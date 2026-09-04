@@ -80,9 +80,12 @@ def _read_current():
     """Current usage.json, or {} when absent/unreadable. Never raises."""
     try:
         with open(_OUT, encoding="utf-8") as fh:
-            return json.load(fh)
+            loaded = json.load(fh)
     except (OSError, ValueError):
         return {}
+    # Valid JSON that is not an object would break every later .get() and kill
+    # the capture for good, since the file would then never be rewritten.
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _atomic_write(payload):
@@ -134,11 +137,28 @@ def main():
             if win is not None:
                 payload[key] = win
 
+    current = _read_current()
+
+    # Claude Code re-runs the statusline on events that carry no new
+    # measurement (permission mode, vim toggle, /compact, a user-set
+    # refreshInterval). Re-stamping identical windows would make an old
+    # reading look current, outrank a truer desktop sample, and let one
+    # threshold alert fire twice. Keep the timestamp of the measurement.
+    # A window dropped at its reset is not a new measurement of the ones that remain.
+    seen = current.get("captured_at")
+    present = [key for key in ("five_hour", "seven_day") if payload.get(key)]
+    if (
+        isinstance(seen, (int, float))
+        and present
+        and all(payload[key] == current.get(key) for key in present)
+    ):
+        payload["captured_at"] = int(seen)
+
     # Claude Code renders the statusline before it has any rate_limits to hand
     # over (session start, /clear, resume). Writing then would replace good
     # windows with an empty capture and the app would fall back to "Waiting".
     # Keep the previous reading instead — the app already flags it as stale.
-    if _has_window(payload) or not _has_window(_read_current()):
+    if _has_window(payload) or not _has_window(current):
         try:
             _atomic_write(payload)
         except OSError as exc:

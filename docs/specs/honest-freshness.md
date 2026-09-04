@@ -13,7 +13,7 @@ quota was in fact exhausted. Reconstructed from the two local files:
 | 23:11 | 26 % | none |
 | 23:26 | *missing* | none |
 | 23:41 | 100 % | none |
-| 02:40 next day | — | `seven_day: 0 %`, no `five_hour` at all, origin unknown |
+| 02:40 next day | — | `seven_day: 0 %`, no `five_hour` at all; origin explained in `display-strategy.md` § 3.2 |
 
 Root causes, all confirmed against the code:
 
@@ -66,8 +66,10 @@ visibly flagged" becomes true only once B ships.
 
 ## Out of scope
 
-Monotonic guard on `_apply_usage`, and the origin of the 02:40 capture
-(no session, scheduled task or daemon activity found at that time).
+The monotonic guard on `_apply_usage` and the origin of the 02:40 capture were
+out of scope here. Both are settled in `display-strategy.md`: the origin in
+section 3.2 (Claude Code drops a window at its `resets_at` and re-runs the
+statusline without it), the guard as FIXED-4 and FIXED-8.
 
 Also left alone: a merged reading reports the `_meta` of its fresher source,
 so a window filled from the other source can be older than the "Updated" line
