@@ -1051,6 +1051,22 @@ class TestDesktopSource(TestStatuslineSource):
         self.assertEqual(data["_meta"]["source"], "desktop")
         self.assertAlmostEqual(data["_meta"]["captured_at"], now - 300, delta=1)
 
+    def test_a_weekly_only_capture_older_than_the_desktop_lets_the_desktop_win(self):
+        # Routing check, not a fix: once the reset-drop capture keeps the
+        # measurement's time it is older than the desktop sample, so C6 and C7
+        # go through the desktop-newer branch instead of the fill.
+        now = datetime.now(timezone.utc).timestamp()
+        self._write({
+            "captured_at": int(now - 3600),
+            "seven_day": {"used_percentage": 9, "resets_at": None},
+        })
+        self._write_desktop({"version": 2,
+                             "samples": [self._sample(int((now - 300) * 1000), fh=12, sd=18)]})
+        data, _ = tracker.fetch_usage()
+        self.assertEqual(data["five_hour"]["utilization"], 12)
+        self.assertEqual(data["seven_day"]["utilization"], 18)
+        self.assertEqual(data["_meta"]["source"], "desktop")
+
     def test_merge_fresher_partial_statusline_ignores_stale_desktop(self):
         # Symmetric guard: an old desktop sample must not be shown under a
         # fresh "Updated" line.
@@ -1315,6 +1331,88 @@ class TestStatuslineScript(unittest.TestCase):
         time.sleep(1.1)
         _, second = self._run_in(td.name, payload(43))
         self.assertGreater(second["captured_at"], first["captured_at"])
+
+    def test_a_capture_that_lost_a_window_keeps_the_timestamp(self):
+        # Claude Code drops a window once its resets_at passes and re-runs the
+        # script with the other window unchanged. That is not a new
+        # measurement of the window that remains.
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        both = json.dumps({"rate_limits": {
+            "five_hour": {"used_percentage": 42, "resets_at": 1800000000},
+            "seven_day": {"used_percentage": 8, "resets_at": 1800500000},
+        }})
+        weekly_only = json.dumps({"rate_limits": {
+            "seven_day": {"used_percentage": 8, "resets_at": 1800500000},
+        }})
+        _, first = self._run_in(td.name, both)
+        time.sleep(1.1)
+        _, second = self._run_in(td.name, weekly_only)
+        self.assertEqual(second["captured_at"], first["captured_at"])
+        self.assertNotIn("five_hour", second)
+        self.assertEqual(second["seven_day"], first["seven_day"])
+
+    def test_a_window_that_reappears_restamps_the_capture(self):
+        # Guard, green before and after: a window that appears is a new
+        # measurement, whatever the other window did.
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        weekly_only = json.dumps({"rate_limits": {
+            "seven_day": {"used_percentage": 8, "resets_at": 1800500000},
+        }})
+        both = json.dumps({"rate_limits": {
+            "five_hour": {"used_percentage": 12, "resets_at": 1800000000},
+            "seven_day": {"used_percentage": 8, "resets_at": 1800500000},
+        }})
+        _, first = self._run_in(td.name, weekly_only)
+        time.sleep(1.1)
+        _, second = self._run_in(td.name, both)
+        self.assertGreater(second["captured_at"], first["captured_at"])
+
+    def test_a_changed_weekly_in_a_partial_capture_restamps(self):
+        # Guard: keeping the timestamp must need every window present to be
+        # equal, not just one of them.
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        both = json.dumps({"rate_limits": {
+            "five_hour": {"used_percentage": 42, "resets_at": 1800000000},
+            "seven_day": {"used_percentage": 8, "resets_at": 1800500000},
+        }})
+        moved = json.dumps({"rate_limits": {
+            "seven_day": {"used_percentage": 9, "resets_at": 1800500000},
+        }})
+        _, first = self._run_in(td.name, both)
+        time.sleep(1.1)
+        _, second = self._run_in(td.name, moved)
+        self.assertGreater(second["captured_at"], first["captured_at"])
+
+    def test_a_windowless_re_run_restamps_a_windowless_file(self):
+        # Deliberate side effect of the rule: with no window present there is
+        # no measurement to repeat. Harmless, the app reads such a file as
+        # "waiting" and never reaches its timestamp.
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        stdin = json.dumps({"model": {"id": "x"}})
+        _, first = self._run_in(td.name, stdin)
+        time.sleep(1.1)
+        _, second = self._run_in(td.name, stdin)
+        self.assertGreater(second["captured_at"], first["captured_at"])
+
+    def test_a_non_dict_usage_file_does_not_block_the_capture(self):
+        # Valid JSON that is not an object used to raise AttributeError on the
+        # timestamp comparison, so the file was never rewritten again and the
+        # capture stayed dead while statusline.err grew on every render.
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        out = Path(td.name) / ".tokease" / "usage.json"
+        out.parent.mkdir(parents=True)
+        out.write_text("[1, 2]", encoding="utf-8")
+        _, payload = self._run_in(td.name, json.dumps({"rate_limits": {
+            "five_hour": {"used_percentage": 42, "resets_at": 1800000000},
+        }}))
+        self.assertIn("five_hour", payload)
+        err = Path(td.name) / ".tokease" / "statusline.err"
+        self.assertNotIn("AttributeError", err.read_text(encoding="utf-8") if err.exists() else "")
 
     def test_no_rate_limits_writes_windowless_file_when_none_existed(self):
         # First capture of a session: nothing to preserve, so a windowless

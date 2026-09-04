@@ -14,6 +14,7 @@
 - The freshness line reads in hours and days rather than `stale 4320m`, and names the desktop when the time shown is a desktop sample.
 - A title showing no number is no longer marked stale. Marking a lone dash said nothing.
 - The capture script no longer re-dates an unchanged reading. Claude Code re-runs the statusline on events that carry no new measurement, and each re-run used to look like a fresh one, which let old values outrank a truer desktop sample and could fire the same threshold alert twice.
+- The capture script keeps the measurement's timestamp when a window vanished at its reset. Claude Code drops a window once its reset time passes and re-runs the statusline with the other window unchanged. That capture used to be dated anew, so a weekly value hours old looked fresh and outranked a truer desktop sample.
 
 ### Docs
 

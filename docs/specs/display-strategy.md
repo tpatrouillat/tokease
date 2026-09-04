@@ -1,7 +1,7 @@
 # Spec: display strategy (what the menu bar shows, and why)
 
 Date: 2026-09-04. Status: proposed. Describes the code on
-`fix/display-strategy-gaps` (167 tests green).
+`fix/display-strategy-gaps` (173 tests green).
 
 Revision note. The first version of this document was written against
 `main` after `fix/honest-freshness` and listed five gaps, GAP-1 to GAP-5.
@@ -103,7 +103,8 @@ and what it implies for freshness:
 
 Consequence: `captured_at` was a write time, not a measurement time. The
 capture script now keeps the previous timestamp when nothing changed
-(FIXED-4 in section 7.2), with one residual case in section 7.3.
+(FIXED-4 in section 7.2), including when a window vanished at its reset
+(FIXED-4, FIXED-8).
 
 ### 3.3 What the app does between the sources
 
@@ -176,10 +177,11 @@ client, read as is.** No Keychain, no network, writes confined to
 more than that is out of bounds, and section 7 says so where it applies.
 
 R10. **A capture without a new measurement keeps its timestamp.** The
-capture script re-stamps `captured_at` only when a window changed. Identical
-windows re-sent by Claude Code for a non-quota reason keep the time of the
-measurement they repeat (FIXED-4). A capture in which a window vanished
-counts as changed and is stamped anew (GAP-3 residual, section 7.3).
+capture script re-stamps `captured_at` only when a window it carries
+changed. Identical windows re-sent by Claude Code for a non-quota reason keep
+the time of the measurement they repeat (FIXED-4), and so does a capture in
+which a window vanished at its reset while the other is unchanged (FIXED-8).
+A window that appears, or changes, is a new measurement and is stamped anew.
 
 ## 5. What the title claims (confidence ladder)
 
@@ -233,7 +235,7 @@ The CLI user's case.
 | B1 | Active terminal session, capture ≤ 20 min | statusline | `42%` | `5-hour: 42% (resets 2h 10m)`, `via Claude Code` | on crossing | OK |
 | B2 | Session closed, capture aged, resets still ahead | statusline | `~42%` | stale + countdowns | no | OK |
 | B3 | Capture present, 5h `resets_at` has passed, no newer capture | statusline | `—` (5h row void), weekly still shown | `5-hour: — (reset; awaiting Claude Code)` | baseline re-anchored at 0 | OK. The title reads `—`, never `~—`, whatever the weekly's age (FIXED-6) |
-| B4 | The 5h window reaches `resets_at` while a terminal session is idle: Claude Code drops the window and re-runs the script, which writes a weekly-only capture with a fresh timestamp | statusline | `—`, weekly shown as fresh | `5-hour: --`, `Updated` now | not at this render (window absent, `_last_pct` and `_last_reset` untouched), but the next capture carries a reset time never seen and anchors the baseline at 0 (F8) | FIXED-2 for the alert. The weekly is re-stamped because the capture differs from the file by the missing window: GAP-3 residual |
+| B4 | The 5h window reaches `resets_at` while a terminal session is idle: Claude Code drops the window and re-runs the script, which writes a weekly-only capture | statusline | `—`, weekly at the measurement's age | `5-hour: --`, `Updated` at the measurement time, stale once it is 20 min old | not at this render (window absent, `_last_pct` and `_last_reset` untouched), but the next capture carries a reset time never seen and anchors the baseline at 0 (F8) | FIXED-2 for the alert, FIXED-8 for the timestamp |
 | B5 | Session start, resume or `/clear`: Claude Code renders before it has `rate_limits` | previous capture kept by the script | unchanged | unchanged | | OK (v1.0.1) |
 | B6 | Idle session re-rendered for a non-quota reason (permission mode, vim toggle, `/compact`, a user-set `refreshInterval`): same values | statusline | `42%`, then `~42%` once the measurement is 20 min old | `Updated` at the measurement time | none (no change) | FIXED-4: the script keeps the previous `captured_at` when both windows are identical |
 | B7 | No `rate_limits` ever (Free, Team, Enterprise, or before the first response) and no earlier file | none | `…` | `Waiting for Claude Code activity…`, "Pro or Max" | no | OK |
@@ -250,8 +252,8 @@ The CLI user's case.
 | C3 | Desktop newer, statusline 5h `resets_at` passed, desktop sampled **after** the reset | desktop % without countdown | `12%` | `resets --` | baseline follows | OK |
 | C4 | Desktop newer, statusline 5h `resets_at` passed, desktop sampled **before** the reset | statusline window (void) | `—` | `reset; awaiting Claude Code` (the next desktop sample will resolve it, not Claude Code) | re-anchored | OK, wording in 7.4 |
 | C5 | Statusline newer but windowless (session start) | desktop wholesale, desktop timestamp | `42%` | `via Claude app` | | OK (PR #15 then #16 fix) |
-| C6 | Statusline newer and partial (weekly only, the reset-drop capture of B4), desktop ≤ 20 min and sampled **after** the reset | statusline weekly + desktop 5h, dated from the desktop sample | `12%` | `resets --`, `Updated` at the desktop sample time, `via Claude app` | baseline follows (no reset time on the filled window) | OK |
-| C7 | Same as C6 but the desktop sample **predates** the reset that caused the drop | statusline weekly + desktop 5h (old window) | `100%` shown as fresh for up to one desktop cadence | `Updated` at the desktop sample time (FIXED-3 changes the date, not the number) | none | GAP-4, still open |
+| C6 | Statusline partial (weekly only, the reset-drop capture of B4), desktop ≤ 20 min and sampled **after** the reset | desktop wholesale when its sample is newer than the measurement the capture repeats, which is the usual case after an idle terminal (FIXED-8), otherwise statusline weekly + desktop 5h dated from the desktop sample (FIXED-3) | `12%` | `resets --`, `Updated` at the desktop sample time, `via Claude app` | baseline follows (no reset time on the filled window) | OK |
+| C7 | Same as C6 but the desktop sample **predates** the reset that caused the drop | same routing as C6, the desktop 5h describes the old window either way. The desktop-newer branch only has a pre-reset guard when the statusline window carries the reset time, which the reset-drop capture no longer does | `100%` shown as fresh for up to one desktop cadence | `Updated` at the desktop sample time (FIXED-3 changes the date, not the number) | none | GAP-4, still open, ADR 0004 |
 | C8 | Statusline newer and partial, desktop aged | statusline only | `—` for the missing window | | | OK |
 | C9 | Desktop newer, a window missing from the desktop sample (not observed in a month of data) | desktop + statusline window if statusline ≤ 20 min | | | | OK |
 | C10 | Idle session re-rendered (B6) while the desktop has a fresher true value | desktop, being fresher | `81%` from the desktop, the display no longer goes backwards | `via Claude app` | once | FIXED-4: the re-run keeps the measurement's timestamp, so the desktop sample outranks it |
@@ -333,7 +335,7 @@ The core of the strategy is in place and matches R1 to R9:
 - Every source is parsed defensively and read-only. The capture script
   cannot raise and never overwrites good windows with an empty render.
 
-Tests cover each of these (167 green on `fix/display-strategy-gaps`).
+Tests cover each of these (173 green on `fix/display-strategy-gaps`).
 
 ### 7.2 Fixed on `fix/display-strategy-gaps`
 
@@ -410,9 +412,8 @@ time, equal the current ones
 Checked: B6 and C10 keep the measurement's timestamp, so the desktop sample
 wins when it is fresher and the statusline reading goes stale in place. F4
 is no longer reachable through C10. Within R9: one more read of the same
-file, still never raises. Not closed: a re-run in which a window vanished
-differs from the current file and is stamped anew, which is the B4 weekly
-timestamp (GAP-3 residual in 7.3). CHOICE-2 was not needed for this fix.
+file, still never raises. The case of a vanished window is FIXED-8.
+CHOICE-2 was not needed for this fix.
 
 **FIXED-5 (was GAP-6, opened by FIXED-2). The same new window could be
 anchored at 0 twice, which repeated an alert.**
@@ -463,6 +464,37 @@ Checked: `test_a_long_stale_age_reads_in_hours_or_days` (3 d and 4 h).
 `test_merge_fresher_partial_statusline_keeps_desktop_window` now asserts
 `source == "desktop"` and the desktop time. R8 rewritten above.
 
+**FIXED-8 (was the GAP-3 residual). A capture that lost a window was stamped
+as new.**
+Diagnosis: the script kept `captured_at` only when both windows were equal.
+The reset-triggered capture of B4 differed by the missing window, so its
+weekly value, which is the last response's value and can be hours old, was
+written with the current time and shown as fresh. It also made that capture
+fresher than the desktop sample and routed C6 and C7 through the fill.
+Fix: `statusline/tokease-statusline.py` keeps the timestamp when every window
+present in the payload equals the current file's, with at least one present.
+A window that appears or changes still stamps the capture anew. A capture
+carrying no window at all is stamped anew too, since there is no measurement
+to repeat, which is harmless: the app reads a windowless file as `waiting`
+and never reaches its timestamp
+(`test_a_windowless_re_run_restamps_a_windowless_file`).
+Checked: `test_a_capture_that_lost_a_window_keeps_the_timestamp` (red
+before), `test_a_window_that_reappears_restamps_the_capture`,
+`test_a_changed_weekly_in_a_partial_capture_restamps`. B4 now shows the
+weekly at its real age. C6 usually routes through the desktop-newer branch,
+since the capture keeps a time older than the desktop sample
+(`test_a_weekly_only_capture_older_than_the_desktop_lets_the_desktop_win`).
+When the desktop sample is newer but itself aged, that same branch now
+applies instead of the fill guard, so the statusline weekly is no longer
+shown under a fresh `Updated` line: the display carries the `~` marker and
+`stale Nh`. This does not close GAP-4: in C7 the desktop sample wins the
+merge and still carries the old window, with the same 5h value and the same
+`_meta` as before. Within R9: same file, same directory, still never raises.
+The same commit makes `_read_current` return `{}` for a file holding valid
+JSON that is not an object, which used to raise `AttributeError` on the
+comparison and leave the capture dead for good
+(`test_a_non_dict_usage_file_does_not_block_the_capture`, red before).
+
 ### 7.3 Gaps still open
 
 Ordered by impact on the user. Each gives the location and the constraint,
@@ -471,8 +503,9 @@ the design is the implementer's call. All fit inside R9.
 **GAP-4 (unchanged). The partial-capture fill has no pre-reset guard.**
 Not touched by the branch. The fill in `_merge_usage` copies the desktop 5h
 window whenever the desktop sample is at most 20 minutes old, and the
-capture it completes is, in the documented case, the one Claude Code emits
-when the 5h window resets. If the desktop sample predates that reset, the
+desktop reading it takes, through the fill or through the desktop-newer
+branch since FIXED-8, is in the documented case sampled around the reset
+Claude Code just reported. If the desktop sample predates that reset, the
 old window's percentage (often 100 %) is shown as fresh with no countdown
 until the next desktop sample (C7). FIXED-3 changes only the date under it,
 and the age ceiling does not help since the sample is minutes old. It is
@@ -489,18 +522,6 @@ is at hand, or the capture script can persist the dropped window's
 `resets_at` so the guard survives an app restart. Both stay inside
 `~/.tokease`. The choice between the two is an architecture decision,
 opened as ADR 0004.
-
-**GAP-3 residual. A capture that lost a window is stamped as new.**
-The script keeps `captured_at` only when both windows are equal. The
-reset-triggered capture of B4 differs by the missing window, so its weekly
-value, which is the last response's value and can be hours old, is written
-with the current time and shown as fresh. It is also what makes that
-capture fresher than the desktop sample and routes C6 and C7 through the
-fill. Location: the equality test in `statusline/tokease-statusline.py`.
-Keeping the timestamp when every window present in the payload equals the
-current file's, with at least one present, covers it. Low impact on its
-own, the weekly moves slowly, and it does not close GAP-4 (the desktop
-sample would then win the merge and still carry the old window).
 
 **GAP-5c (cosmetic, unlikely). No or garbled `captured_at`.**
 A statusline file with no usable `captured_at` is ranked as maximally old
@@ -525,7 +546,8 @@ or add a softer intermediate marker for desktop-sourced readings past their
 median cadence, or show the age in the title itself. All stay within R9.
 
 **CHOICE-2 (reduced). Tie-breaking, and a drop as evidence of a new
-window.** FIXED-4 closed GAP-3 by keeping the measurement's timestamp,
+window.** FIXED-4 and FIXED-8 closed GAP-3 by keeping the measurement's
+timestamp,
 without any "highest reading wins" rule, so the tie-break no longer shapes a
 fix and C13 stays on write time. What is left is the desktop-only feed,
 which has no reset time: a new window is only visible there as a drop, the
@@ -594,7 +616,7 @@ To revise:
   freshness fix.
 - `honest-freshness.md` lists the origin of the 02:40 capture as unknown.
   Section 3.2 explains it (window dropped at `resets_at`, script re-run).
-  Its "out of scope" monotonic guard is GAP-3 here.
+  Its "out of scope" monotonic guard is FIXED-4 and FIXED-8 here.
 - ADR 0003 states the desktop cadence as 5 to 15 minutes. The month of data
   behind this document shows the tail matters more than the mode: p90 is 45
   minutes. A sentence on the tail would make the "lag up to ~20 min" line
@@ -609,8 +631,8 @@ Every rule above is satisfied by reading two local files and writing inside
 hook payload, or any change to the capture script's never-raise contract.
 FIXED-4 already changed what the capture script writes (it keeps a
 timestamp) and added one read of its own file, still without raising. The
-GAP-3 residual and one of the two options for GAP-4 would change it again
-(keeping a timestamp, keeping a reset time), which stays inside the same
+FIXED-8 changed it again (keeping a timestamp when a window vanished) and one
+option for GAP-4 would too (keeping a reset time), both inside the same
 file and the same directory. FIXED-5 is in-memory state only. A rule that
 would need the measurement time
 from Claude Code itself is not available on the documented surface and is
