@@ -1,9 +1,10 @@
 # Changelog
 
-## Unreleased
+## v1.0.3 — 2026-09-04
 
 ### Fixed
 
+- A percentage measured before a reset is no longer shown as fresh. When Claude Code drops a window at its reset time, the reading falls back to the desktop feed, which carries no reset time. A sample taken before that reset describes the window that ended, often near 100 %, and used to show as live for up to one desktop sampling gap. It now shows `—` and raises no alert (ADR 0004, option A). The guard lives in memory, so a restart inside that gap loses it until the next sample.
 - A stale reading no longer looks live in the menu bar: past the freshness threshold the percentage is prefixed with `~` (`~26%`). Before this, only the dropdown flagged it, and the number is what you actually read.
 - The freshness threshold moves from 15 to 20 minutes. Measured over a month of desktop samples the app's cadence is 5 or 15 minutes, so 15 flagged normal operation as stale about 15 % of the time.
 - A partial statusline capture no longer wipes a window it doesn't carry. A capture with only the weekly window used to blank the 5-hour reading until the next desktop sample. The desktop value now fills the gap, unless it is itself stale.

@@ -17,7 +17,7 @@ GAP-5b are closed as FIXED-6 and FIXED-7.
 Refs: [ADR 0001](../adr/0001-pivot-source-statusline.md) (statusline source),
 [ADR 0003](../adr/0003-source-secondaire-plan-usage-desktop.md) (desktop
 source), [ADR 0004](../adr/0004-garde-pre-reset-capture-partielle.md)
-(proposed, the pre-reset guard of GAP-4),
+(accepted, option A, the pre-reset guard of FIXED-9),
 [statusline-data-source.md](statusline-data-source.md) (file contract),
 [honest-freshness.md](honest-freshness.md) (the 26 % incident).
 
@@ -258,7 +258,7 @@ The CLI user's case.
 | C4 | Desktop newer, statusline 5h `resets_at` passed, desktop sampled **before** the reset | statusline window (void) | `—` | `reset; awaiting Claude Code` (the next desktop sample will resolve it, not Claude Code) | re-anchored | OK, wording in 7.4 |
 | C5 | Statusline newer but windowless (session start) | desktop wholesale, desktop timestamp | `42%` | `via Claude app` | | OK (PR #15 then #16 fix) |
 | C6 | Statusline partial (weekly only, the reset-drop capture of B4), desktop ≤ 20 min and sampled **after** the reset | desktop wholesale when its sample is newer than the measurement the capture repeats, which is the usual case after an idle terminal (FIXED-8), otherwise statusline weekly + desktop 5h dated from the desktop sample (FIXED-3) | `12%` | `resets --`, `Updated` at the desktop sample time, `via Claude app` | baseline follows (no reset time on the filled window) | OK |
-| C7 | Same as C6 but the desktop sample **predates** the reset that caused the drop | same routing as C6, the desktop 5h describes the old window either way. The desktop-newer branch only has a pre-reset guard when the statusline window carries the reset time, which the reset-drop capture no longer does | `100%` shown as fresh for up to one desktop cadence | `Updated` at the desktop sample time (FIXED-3 changes the date, not the number) | none | GAP-4, still open, ADR 0004 |
+| C7 | Same as C6 but the desktop sample **predates** the reset that caused the drop | same routing as C6, the desktop 5h describes the old window either way. The desktop-newer branch only has a pre-reset guard when the statusline window carries the reset time, which the reset-drop capture no longer does | `100%` was shown as fresh for up to one desktop cadence | `Updated` at the desktop sample time (FIXED-3 changes the date, not the number) | none | FIXED-9 (ADR 0004, option A) |
 | C8 | Statusline newer and partial, desktop aged | statusline only | `—` for the missing window | | | OK |
 | C9 | Desktop newer, a window missing from the desktop sample (not observed in a month of data) | desktop + statusline window if statusline ≤ 20 min | | | | OK |
 | C10 | Idle session re-rendered (B6) while the desktop has a fresher true value | desktop, being fresher | `81%` from the desktop, the display no longer goes backwards | `via Claude app` | once | FIXED-4: the re-run keeps the measurement's timestamp, so the desktop sample outranks it |
@@ -401,7 +401,7 @@ Checked: the fill only happens when the desktop sample is at most 20
 minutes old, so the merged age never reaches the `~` threshold or the age
 ceiling through this path, and the desktop-newer branch already dated the
 merge from the desktop sample. R8 is rewritten above. This is not a fix for
-C7: the filled window can still describe the old window (GAP-4). The `via`
+C7: the filled window could describe the old window (FIXED-9). The `via`
 label now names the desktop next to the desktop's time (FIXED-7).
 
 **FIXED-4 (was GAP-3, for the identical-capture case). `captured_at` was
@@ -492,7 +492,7 @@ since the capture keeps a time older than the desktop sample
 When the desktop sample is newer but itself aged, that same branch now
 applies instead of the fill guard, so the statusline weekly is no longer
 shown under a fresh `Updated` line: the display carries the `~` marker and
-`stale Nh`. This does not close GAP-4: in C7 the desktop sample wins the
+`stale Nh`. This does not close C7 on its own: in C7 the desktop sample wins the
 merge and still carries the old window, with the same 5h value and the same
 `_meta` as before. Within R9: same file, same directory, still never raises.
 The same commit makes `_read_current` return `{}` for a file holding valid
@@ -523,7 +523,7 @@ carry a fresh capture time so they keep testing what they were written for.
 One gap is left. It gives the location and the constraint, the design is
 opened in ADR 0004. It fits inside R9.
 
-**GAP-4 (unchanged). The partial-capture fill has no pre-reset guard.**
+**FIXED-9 (was GAP-4). The partial-capture fill now has a pre-reset guard.**
 Not touched by the branch. The fill in `_merge_usage` copies the desktop 5h
 window whenever the desktop sample is at most 20 minutes old, and the
 desktop reading it takes, through the fill or through the desktop-newer
@@ -623,7 +623,7 @@ settled in 7.4).
 Updated on `fix/display-strategy-gaps`: ADR 0003 now states the age ceiling,
 the new-window re-anchor on a reset time never seen, and the mixed merge
 dated from the older source. `docs/CHANGELOG.md` lists each behaviour. ADR
-0004 (proposed) opens the choice for GAP-4.
+0004 (accepted, option A) closes GAP-4 as FIXED-9.
 
 Revised on `fix/display-strategy-gaps`: `statusline-data-source.md` (20-minute
 threshold, statusline as primary rather than only source), `honest-freshness.md`
@@ -638,7 +638,7 @@ hook payload, or any change to the capture script's never-raise contract.
 FIXED-4 already changed what the capture script writes (it keeps a
 timestamp) and added one read of its own file, still without raising. The
 FIXED-8 changed it again (keeping a timestamp when a window vanished) and one
-option for GAP-4 would too (keeping a reset time), both inside the same
+option B for GAP-4 would have too (keeping a reset time), both inside the same
 file and the same directory. FIXED-5 is in-memory state only. A rule that
 would need the measurement time
 from Claude Code itself is not available on the documented surface and is

@@ -27,9 +27,9 @@ if [[ ! -d "$VENV_DIR" ]]; then
 fi
 
 echo "Installing build dependencies..."
-"$VENV_DIR/bin/pip" install --upgrade pip -q
-"$VENV_DIR/bin/pip" install -r requirements.txt -q
-"$VENV_DIR/bin/pip" install py2app -q
+"$VENV_DIR/bin/python" -m pip install --upgrade pip -q
+"$VENV_DIR/bin/python" -m pip install -r requirements.txt -q
+"$VENV_DIR/bin/python" -m pip install py2app -q
 
 # --- Clean previous builds ---
 echo "Cleaning previous builds..."
