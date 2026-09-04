@@ -93,7 +93,7 @@
             {
                 "@type": "Question",
                 "name": "How is this different from the other menu bar trackers?",
-                "acceptedAnswer": { "@type": "Answer", "text": "They make different trade-offs, and several are excellent. The one that shaped Tokease is size: the app is a single 967-line Python file, plus a 178-line script if you want reset countdowns. No HTTP client is imported anywhere in it, so there is no update check, no telemetry, no crash reporter. In a large codebase \"it does not phone home\" is a promise you accept. Here it is something you can verify yourself in about ten minutes." }
+                "acceptedAnswer": { "@type": "Answer", "text": "They make different trade-offs, and several are excellent. The one that shaped Tokease is size: the app is a single 970-line Python file, plus a 178-line script if you want reset countdowns. No HTTP client is imported anywhere in it, so there is no update check, no telemetry, no crash reporter. In a large codebase \"it does not phone home\" is a promise you accept. Here it is something you can verify yourself in about ten minutes." }
             },
             {
                 "@type": "Question",
@@ -918,7 +918,7 @@
     <div class="section-header reveal">
         <div class="section-label">Small enough to check</div>
         <h2 class="section-title">Read it before you run it.</h2>
-        <p class="section-sub">The app is one 967-line Python file, plus a 178-line script if you want reset countdowns. No HTTP client is imported anywhere in it, so there is no update check, no telemetry, no crash reporter. That is not a promise, it is something you can verify in about ten minutes.</p>
+        <p class="section-sub">The app is one 970-line Python file, plus a 178-line script if you want reset countdowns. No HTTP client is imported anywhere in it, so there is no update check, no telemetry, no crash reporter. That is not a promise, it is something you can verify in about ten minutes.</p>
     </div>
     <div class="trust-card reveal">
         <div class="trust-icon" aria-hidden="true">
@@ -927,7 +927,7 @@
         <div>
             <h3>Token-free by construction, not by promise.</h3>
             <p>Tokease reads two local files, both written by official Claude apps for their own use: the quota history the Claude desktop app refreshes while it runs, and the <strong style="color:var(--text)">documented <code>rate_limits</code> fields</strong> Claude Code 2.1.x and later hand to their statusline script. It reads exactly those, and nothing else. It <strong style="color:var(--text)">never reads your OAuth token</strong>, never opens your Keychain, and <strong style="color:var(--text)">never calls any Anthropic endpoint</strong>.</p>
-            <p>No server, no analytics, no telemetry, no phone-home. There is no token to misuse and nothing that leaves your Mac. The whole app is one MIT-licensed Python file of 967 lines: <a href="https://github.com/tpatrouillat/tokease/blob/main/tracker.py" rel="noopener">read <code>tracker.py</code> on GitHub</a> and verify it yourself.</p>
+            <p>No server, no analytics, no telemetry, no phone-home. There is no token to misuse and nothing that leaves your Mac. The whole app is one MIT-licensed Python file of 970 lines: <a href="https://github.com/tpatrouillat/tokease/blob/main/tracker.py" rel="noopener">read <code>tracker.py</code> on GitHub</a> and verify it yourself.</p>
         </div>
     </div>
     <div class="trust-grid stagger" id="trustGrid">
@@ -1006,7 +1006,7 @@
         </details>
         <details class="faq">
             <summary>How is this different from the other menu bar trackers?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body">They make different trade-offs, and several are excellent. The one that shaped Tokease is size: the app is a single 967-line Python file, plus a 178-line script if you want reset countdowns. No HTTP client is imported anywhere in it, so there is no update check, no telemetry, no crash reporter. In a large codebase "it does not phone home" is a promise you accept. Here it is something you can verify yourself in about ten minutes.</div>
+            <div class="faq-body">They make different trade-offs, and several are excellent. The one that shaped Tokease is size: the app is a single 970-line Python file, plus a 178-line script if you want reset countdowns. No HTTP client is imported anywhere in it, so there is no update check, no telemetry, no crash reporter. In a large codebase "it does not phone home" is a promise you accept. Here it is something you can verify yourself in about ten minutes.</div>
         </details>
         <details class="faq">
             <summary>How is this different from ccusage?<span class="faq-plus" aria-hidden="true"></span></summary>

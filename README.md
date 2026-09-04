@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/logo-256-demo.png" alt="Tokease" width="200" height="200">
   <h1>Tokease</h1>
-  <p>A lightweight macOS menu bar app showing your Claude 5-hour and weekly limits<br/><strong>One 967-line Python file, plus a 178-line script. No HTTP client is imported anywhere in it, so you can check what it does before you run it.</strong></p>
+  <p>A lightweight macOS menu bar app showing your Claude 5-hour and weekly limits<br/><strong>One 970-line Python file, plus a 178-line script. No HTTP client is imported anywhere in it, so you can check what it does before you run it.</strong></p>
   <p>
     <a href="https://github.com/tpatrouillat/tokease/actions/workflows/ci.yml"><img src="https://github.com/tpatrouillat/tokease/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
@@ -23,11 +23,11 @@ Requires macOS 12 Monterey or later and a Claude Pro or Max plan. Zero config if
 
 Tokease reads only two local files: the quota history the Claude desktop app writes on your Mac, and the `rate_limits` data Claude Code hands to its statusline, which the 178-line capture script saves to `~/.tokease`. No OAuth token read from the Keychain, no hidden API call, no User-Agent spoofing.
 
-That is a sentence any tracker can write. What you can actually check is the size. The app is one 967-line Python file, plus a 178-line capture script if you want reset countdowns. The import block at the top of [`tracker.py`](tracker.py) is the whole dependency story, and there is no HTTP client in it, so there is no update check, no telemetry and no crash reporter. The only subprocess it spawns is `osascript`, for launch-at-login. Open the file, search for `urllib`, and you have your answer in a minute.
+That is a sentence any tracker can write. What you can actually check is the size. The app is one 970-line Python file, plus a 178-line capture script if you want reset countdowns. The import block at the top of [`tracker.py`](tracker.py) is the whole dependency story, and there is no HTTP client in it, so there is no update check, no telemetry and no crash reporter. The only subprocess it spawns is `osascript`, for launch-at-login. Open the file, search for `urllib`, and you have your answer in a minute.
 
 Three things it does:
 
-1. **Small enough to read before you run it.** One 967-line file plus a 178-line optional capture script. No HTTP client imported, so no update check, no telemetry, no crash reporter.
+1. **Small enough to read before you run it.** One 970-line file plus a 178-line optional capture script. No HTTP client imported, so no update check, no telemetry, no crash reporter.
 2. **Shows the limit you have left, not the history you spent.** Your 5-hour and weekly remaining capacity, with reset countdowns. (Threshold notifications at 80% and 95% only appear when Tokease runs as the `.app` bundle, which has its own bundle identifier. Homebrew and source installs run under the Python interpreter's identity, and macOS shows nothing. Verified on macOS 26: the call raises no error either way, so there is nothing in the log to tell you — see the roadmap.)
 3. **Token-free by construction.** The only data sources are files official Claude clients write locally for their own use. No token read, no endpoint call, nothing to sign up for. MIT.
 
