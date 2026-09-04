@@ -64,7 +64,7 @@ printing anything, so it doesn't interfere with your statusline's output.
 
 - The menu bar shows data **as of the last time Claude Code refreshed its
   statusline**. When Claude Code is closed, it shows the last known value with a
-  timestamp, and flags it as stale after 15 minutes.
+  timestamp, and flags it as stale after 20 minutes, with a `~` in front of the number.
 - Only the **5-hour** and **weekly** windows are available (2 rings). Per-model
   (Sonnet/Opus) splits and paid overage aren't exposed by the statusline feed,
   so Tokease doesn't show them — by design, it never reads your token.
