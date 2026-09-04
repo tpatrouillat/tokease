@@ -32,3 +32,6 @@ build/
 
 # Local knowledge-graph build artifacts (internal use only)
 graphify-out/
+
+# MCP partagés : symlink vers brain/.mcp.json, propre à cette machine
+.mcp.json
