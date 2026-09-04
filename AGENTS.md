@@ -1,12 +1,12 @@
-# Tokease — guidance projet
+# Tokease — project guidance
 
-> **Ce repo porte le *comment*.** Le *pourquoi* — cadrage produit, décisions, état du lancement — vit dans Brain :
-> [`../../brain/projects/Tokease/`](../../brain/projects/Tokease/) · règles du workspace [`../../brain/AGENTS.md`](../../brain/AGENTS.md) · conventions [Python](../../brain/knowledge/tooling/conventions/python.md).
-> Le contexte machine (arborescence, MCP, routage des sorties) est chargé automatiquement depuis `~/.claude/CLAUDE.md`, qui importe [`../../brain/context/cartographie.md`](../../brain/context/cartographie.md). Les autres liens ci-dessus ne se chargent pas tout seuls : les ouvrir en début de session.
+> **This repo holds the *how*.** The *why* — product framing, decisions, launch status — lives in Brain:
+> `../../brain/projects/Tokease/` · workspace rules `../../brain/AGENTS.md` · Python conventions (`../../brain/knowledge/tooling/conventions/python.md`).
+> Machine context (directory tree, MCP, output routing) is loaded automatically from `~/.claude/CLAUDE.md`, which imports `../../brain/context/cartographie.md`. The other paths above do not load on their own: open them at the start of the session. Paths local to the development machine.
 
-App **menu bar macOS** qui suit l'usage et le quota Claude Code. Python 3.14 · rumps · Pillow · py2app. Pas de web, pas de Supabase.
+**macOS menu bar** app that tracks Claude Code usage and quota. Python 3.14 · rumps · Pillow · py2app. No web, no Supabase.
 
-Livré en v1.0 et public. Distribution par Homebrew via le tap `tpatrouillat/homebrew-tap` : toute release touche les deux repos.
+Shipped as v1.0 and public. Distributed via Homebrew through the tap `tpatrouillat/homebrew-tap`: every release touches both repos.
 
 ## Build & Verify
 
@@ -17,8 +17,8 @@ ruff check .
 python -m pytest
 ```
 
-## Points d'attention
+## Things to watch
 
-- Le lecteur de quota ne doit **jamais** lire un token d'authentification : c'est la promesse publique du produit (ADR 0003), vérifiée en CI.
-- Deux sources d'usage, la plus fraîche gagne : historique de quota de l'app Claude Desktop (zéro-config) et statusline Claude Code (optionnelle, seule à donner les comptes à rebours).
-- Le repo est public : aucun secret, et les claims du README engagent le produit.
+- The quota reader must **never** read an authentication token: that is the product's public promise ([ADR 0002](docs/adr/0002-retrait-mode-endpoint.md)), verified in CI.
+- Two usage sources, the fresher one wins: Claude Desktop app quota history (zero-config) and Claude Code statusline (optional, the only one that provides reset countdowns).
+- The repo is public: no secrets, and the README claims bind the product.
