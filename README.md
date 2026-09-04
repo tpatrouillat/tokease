@@ -1,7 +1,7 @@
 <div align="center">
   <img src="assets/logo-256-demo.png" alt="Tokease" width="200" height="200">
   <h1>Tokease</h1>
-  <p>A lightweight macOS menu bar app showing your Claude 5-hour and weekly limits<br/><strong>One 865-line Python file, plus a 158-line script. No HTTP client is imported anywhere in it, so you can check what it does before you run it.</strong></p>
+  <p>A lightweight macOS menu bar app showing your Claude 5-hour and weekly limits<br/><strong>One 970-line Python file, plus a 178-line script. No HTTP client is imported anywhere in it, so you can check what it does before you run it.</strong></p>
   <p>
     <a href="https://github.com/tpatrouillat/tokease/actions/workflows/ci.yml"><img src="https://github.com/tpatrouillat/tokease/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
     <img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT">
@@ -21,14 +21,14 @@ Requires macOS 12 Monterey or later and a Claude Pro or Max plan. Zero config if
 
 ## Why Tokease
 
-Tokease reads only two local files: the quota history the Claude desktop app writes on your Mac, and the `rate_limits` data Claude Code hands to its statusline, which the 158-line capture script saves to `~/.tokease`. No OAuth token read from the Keychain, no hidden API call, no User-Agent spoofing.
+Tokease reads only two local files: the quota history the Claude desktop app writes on your Mac, and the `rate_limits` data Claude Code hands to its statusline, which the 178-line capture script saves to `~/.tokease`. No OAuth token read from the Keychain, no hidden API call, no User-Agent spoofing.
 
-That is a sentence any tracker can write. What you can actually check is the size. The app is one 865-line Python file, plus a 158-line capture script if you want reset countdowns. The import block at the top of [`tracker.py`](tracker.py) is the whole dependency story, and there is no HTTP client in it, so there is no update check, no telemetry and no crash reporter. The only subprocess it spawns is `osascript`, for launch-at-login. Open the file, search for `urllib`, and you have your answer in a minute.
+That is a sentence any tracker can write. What you can actually check is the size. The app is one 970-line Python file, plus a 178-line capture script if you want reset countdowns. The import block at the top of [`tracker.py`](tracker.py) is the whole dependency story, and there is no HTTP client in it, so there is no update check, no telemetry and no crash reporter. The only subprocess it spawns is `osascript`, for launch-at-login. Open the file, search for `urllib`, and you have your answer in a minute.
 
 Three things it does:
 
-1. **Small enough to read before you run it.** One 865-line file plus a 158-line optional capture script. No HTTP client imported, so no update check, no telemetry, no crash reporter.
-2. **Shows the limit you have left, not the history you spent.** Your 5-hour and weekly remaining capacity, with reset countdowns. (Threshold notifications at 80% and 95% exist in the code but macOS only delivers them for a signed .app bundle, so they do not fire on Homebrew or source installs — see the roadmap.)
+1. **Small enough to read before you run it.** One 970-line file plus a 178-line optional capture script. No HTTP client imported, so no update check, no telemetry, no crash reporter.
+2. **Shows the limit you have left, not the history you spent.** Your 5-hour and weekly remaining capacity, with reset countdowns. (Threshold notifications at 80% and 95% only appear when Tokease runs as the `.app` bundle, which has its own bundle identifier. Homebrew and source installs run under the Python interpreter's identity, and macOS shows nothing. Verified on macOS 26: the call raises no error either way, so there is nothing in the log to tell you — see the roadmap.)
 3. **Token-free by construction.** The only data sources are files official Claude clients write locally for their own use. No token read, no endpoint call, nothing to sign up for. MIT.
 
 ## Features
@@ -37,7 +37,7 @@ Three things it does:
 - **Reset countdowns**: see when each window rolls over
 - **Honest freshness**: shows when a Claude client last refreshed the data (desktop app or Claude Code), and marks the number `~42%` in the menu bar once it goes stale
 - **Customizable display**: icon + percentage, icon only, or percentage only, plus an option to show both percentages (`5h / weekly`)
-- **Settings menu**: display modes, refresh interval, alert thresholds (80% / 95%, signed `.app` build only), launch at login (`.app` build; use `brew services` or the LaunchAgent otherwise)
+- **Settings menu**: display modes, refresh interval, alert thresholds (80% / 95%, `.app` build only), launch at login (`.app` build; use `brew services` or the LaunchAgent otherwise)
 - **Lightweight**: pure Python, two small dependencies (`rumps` + `Pillow`)
 - **No telemetry**: no account, no tracking, nothing phones home
 

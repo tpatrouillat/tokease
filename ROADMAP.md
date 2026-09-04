@@ -4,7 +4,7 @@ Where this project is, and where it might go.
 
 ## v1.0 — what ships now
 
-A single-file macOS menu bar app that shows your 5-hour / weekly remaining capacity as two rings, read from two local files official Claude apps already write: the Claude desktop app's quota history (zero config, refreshed about every 5 minutes) and the `rate_limits` data Claude Code publishes to its statusline (optional, adds reset countdowns). That's it. No token read, no endpoint call. A small single-file Python app, MIT, two small dependencies (`rumps` for the menu bar, `Pillow` for the dynamic icon).
+A single-file macOS menu bar app that shows your 5-hour / weekly remaining capacity as two rings, read from two local files official Claude apps already write: the Claude desktop app's quota history (zero config, refreshed every 5 to 15 minutes) and the `rate_limits` data Claude Code publishes to its statusline (optional, adds reset countdowns). That's it. No token read, no endpoint call. A small single-file Python app, MIT, two small dependencies (`rumps` for the menu bar, `Pillow` for the dynamic icon).
 
 > The legacy endpoint mode (which read the OAuth token from the Keychain and called an undocumented endpoint) is removed from v1.0 and frozen at the git tag `v0.9.0-endpoint`.
 
@@ -42,6 +42,7 @@ No v1.1 work. v1.0.1 polish only — bug fixes, UX hardening, more tests around 
 
 **Tracked polish ideas:**
 - **Signed and notarized `.app` (double-click install)** — the py2app build already works (`build.sh` produces `Tokease.app`). What's missing is the Apple Developer Program (~99 USD/year) for codesigning and notarization. Without it, a downloaded `.app` hits Gatekeeper's "can't be opened" dialog, which is a worse first impression than the one-line brew install. Worth the yearly fee if launch traction justifies it.
+- **Threshold notifications outside the `.app`** — the 80 % and 95 % alerts only show a banner when Tokease runs as the bundle, which carries its own bundle identifier. From Homebrew or source the process runs under the Python interpreter's identity and macOS displays nothing, silently: measured on macOS 26, `rumps.notification` returns cleanly in both cases, so no error reaches the log. An ad-hoc signature is enough for the banner, so this is about bundle identity rather than the Developer Program. Options if it matters: ship the menu bar item as the reminder instead, or move alerts to `UNUserNotificationCenter` behind a real bundle.
 - **Ring clear-out animation** — when a 5-hour or weekly limit resets, briefly animate the affected ring from its previous fill back to empty (4–5 frames over ~400ms, driven by `rumps.Timer`). Pure cosmetic, but it makes resets feel earned.
 - **Enterprise / Team plan support** — credit-based billing instead of 5-hour/weekly windows, so the 2-ring UI doesn't map. Blocked on whether Claude Code's statusline ever exposes a credit-style signal for these plans; until then, Pro/Max only (the README says so).
 

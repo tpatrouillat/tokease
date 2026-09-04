@@ -747,8 +747,11 @@ class App(rumps.App):
                 message=f"You've passed {threshold}% of your 5-hour limit.",
             )
         except Exception as exc:
-            # rumps.notification needs a signed bundle on recent macOS; from source
-            # it can't fire — log rather than mask, but never crash the refresh.
+            # Kept as a guard, not as a diagnostic: measured on macOS 26, the
+            # call returns cleanly from a source install too, and macOS simply
+            # shows no banner because the process carries the Python
+            # interpreter's bundle id. Only the .app build displays one.
+            # Never crash the refresh over a notification.
             print(f"tokease: notification skipped: {exc!r}", file=sys.stderr)
 
     def _start_timer(self):
