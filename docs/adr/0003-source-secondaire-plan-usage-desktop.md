@@ -22,7 +22,7 @@ Paths investigated and rejected (2026-07-20, official docs + tests on this machi
 - **Claude Code caches** (`~/.claude.json`, `~/.claude/**`): nothing structural.
 
 **Discovery.** The **Claude desktop app** (`/Applications/Claude.app`) samples
-the plan quota **every 5 to 15 minutes** while it runs, and persists it to:
+the plan quota **every 5 to 15 minutes in normal operation** while it runs, and persists it to:
 
 ```
 ~/Library/Application Support/Claude/plan-usage-history.json
@@ -34,7 +34,9 @@ Observed format (version 2): `{"version": 2, "samples": [{"t": <epoch ms>,
 statusline. Re-measured on 1086 samples over a month, the cadence is bimodal:
 half the gaps are 5 min, a quarter are 15 min, and the app skips samples while
 idle. A reading can therefore be up to ~20 min old and still be normal
-operation, which is why `_STALE_AFTER_SECS` is 20 min and not 15. The data
+operation, which is why `_STALE_AFTER_SECS` is 20 min and not 15. The tail
+matters more than the mode: on the month behind `../specs/display-strategy.md`
+(807 samples) p90 is 45 min and 5 % of gaps exceed 4 hours. The data
 stays fresh **even when only the VS Code extension is
 used** (and even during Claude.ai/Desktop usage, since this is the account's
 quota).
@@ -72,7 +74,7 @@ the statusline by freshness:
 - **Age ceiling**: a reading cannot outlive the window it describes, so a 5h
   reading over 5 h old and a weekly reading over 7 d old are shown as `—`
   rather than as a number nothing supports.
-- **Lag up to ~20 min**: between two desktop samples the percentage is frozen
+- **Lag up to ~20 min in normal operation, 45 min at p90**: between two desktop samples the percentage is frozen
   and can be far behind reality (on 2026-09-01 the menu bar sat at 26 % for
   30 min while the 5h window went to 100 %). Past the stale threshold the
   title prefixes the number with `~`, so a frozen reading says so itself.

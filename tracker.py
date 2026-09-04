@@ -8,7 +8,8 @@ Two local data sources, merged by freshness:
    Primary source, the only one that provides reset times.
 2. the quota history sampled by the Claude desktop app
    (docs/adr/0003-source-secondaire-plan-usage-desktop.md). Read-only,
-   refreshed ~5 min while the app runs, whatever surface is being used.
+   refreshed every 5 min (median; p90 45 min) while the app runs, whatever
+   surface is being used.
 In both cases the data is written locally by an official Claude client:
 never a read of the OAuth token, never a call to the Anthropic endpoint.
 
@@ -163,8 +164,8 @@ _KEY_TITLE_WEEKLY = "title_weekly"
 # (statusline/tokease-statusline.py). Read on every refresh in statusline mode.
 _STATUSLINE_FILE = _TOKEASE_DIR / "usage.json"
 
-# Quota history sampled (5 to 15 min) by the Claude desktop app. Read-only
-# secondary source, undocumented internal format (see ADR 0003).
+# Quota history sampled by the Claude desktop app (median 5 min, p90 45 min).
+# Read-only secondary source, undocumented internal format (see ADR 0003).
 _DESKTOP_HISTORY_FILE = (
     Path.home() / "Library" / "Application Support" / "Claude" / "plan-usage-history.json"
 )

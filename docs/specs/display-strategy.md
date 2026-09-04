@@ -625,20 +625,10 @@ the new-window re-anchor on a reset time never seen, and the mixed merge
 dated from the older source. `docs/CHANGELOG.md` lists each behaviour. ADR
 0004 (proposed) opens the choice for GAP-4.
 
-To revise:
-
-- `statusline-data-source.md` still states the 15-minute threshold and
-  describes the statusline as the only source. Both predate ADR 0003 and the
-  freshness fix.
-- `honest-freshness.md` lists the origin of the 02:40 capture as unknown.
-  Section 3.2 explains it (window dropped at `resets_at`, script re-run).
-  Its "out of scope" monotonic guard is FIXED-4 and FIXED-8 here.
-- ADR 0003 states the desktop cadence as 5 to 15 minutes. The month of data
-  behind this document shows the tail matters more than the mode: p90 is 45
-  minutes. A sentence on the tail would make the "lag up to ~20 min" line
-  honest.
-- The tracker's module docstring still says the desktop refreshes "~5 min",
-  and the comment above `_DESKTOP_HISTORY_FILE` says 5 to 15.
+Revised on `fix/display-strategy-gaps`: `statusline-data-source.md` (20-minute
+threshold, statusline as primary rather than only source), `honest-freshness.md`
+(origin of the 02:40 capture, monotonic guard pointed to FIXED-4 and FIXED-8),
+ADR 0003 and the tracker's comments (cadence tail: p90 45 min).
 
 ## 9. Invariant check
 
