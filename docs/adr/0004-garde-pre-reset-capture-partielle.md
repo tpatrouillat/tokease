@@ -1,6 +1,6 @@
 # ADR 0004 — Pre-reset guard for a 5h window filled from the desktop feed
 
-- **Status**: Proposed (2026-09-04)
+- **Status**: Accepted (2026-09-04) — option A
 - **Decision maker**: Thibault
 - **Affects**: `tracker.py` (`_update_display` or `_merge_usage`), possibly
   `statusline/tokease-statusline.py` and the `usage.json` contract
@@ -94,54 +94,42 @@ cautious side and the user sees a number that was true a moment earlier. The
 cost is that the spec keeps one scenario where the menu bar is confidently
 wrong, which is the thing the whole document exists to remove.
 
-## Decision (proposed)
+## Decision
 
-**B**, with the carry-over clause. A and B close exactly the same scenario and
-neither is more correct than the other. The whole gap between them is
-"survives a restart, and no implicit call order to preserve" against "does not
-touch the file contract". That is the trade to weigh, and it is a small one,
-so B is a recommendation and not a foregone conclusion. A is the fallback if
-touching the `usage.json` contract is unwelcome, and C is defensible on the
-numbers above.
+**A**, the in-memory guard, implemented in `_predates_last_reset` and called
+from `_update_display` before the notify path.
 
-Nothing is implemented while this ADR is Proposed. The decision is Thibault's.
+B and A close the same scenario and neither is more correct. B buys one thing
+A does not have: the guard survives a restart inside the gap. It costs a field
+in a documented file contract and a carry-over clause inside the capture
+script, whose governing rule is that it must never raise and never disturb
+Claude Code. Paying in that script, for a window that lasts one desktop
+cadence and only matters if the app restarts inside it, is the wrong trade.
+A keeps every new line inside the app, where an exception is contained, and it
+is six lines against twenty.
+
+The objection to A was an implicit call order that nothing stated. That is
+answered rather than accepted: the helper's docstring says why it must run
+before `_maybe_notify`, and `test_voided_window_keeps_the_reset_on_file_for_the_next_render`
+fails if a later edit moves the call after it.
+
+The limit A leaves is documented, not hidden: after a restart inside the gap,
+`_last_reset` is empty and the stale desktop percentage shows again until the
+next sample. Option B stays on the table if that restart case is ever observed
+in the wild.
 
 ## Consequences
 
-If B is chosen: C7 closes, the guard is symmetric with the one `_merge_window`
-already applies in C4, and the invariant of R9 holds. The costs are one more
-field in a documented file, a revision of `statusline-data-source.md`, and a
-new visible case where a desktop reading that lags a reset the terminal
-already saw shows `—` for up to one desktop cadence. That last one is R3
-working as written, not a regression.
+C7 closes for a running app: a desktop sample measured at or before a reset
+the terminal already reported shows `— (reset; awaiting a newer sample)`
+instead of a confident percentage, and raises no alert. The `usage.json`
+contract is unchanged, the capture script is untouched, and the R9 invariant
+holds (two local files read, `~/.tokease` written).
 
-If A is chosen: the same scenario closes with no contract change, at the cost
-of state that dies with the app and of an ordering inside `_update_display`
-that a later edit could break without any test noticing unless one is written
-for it.
+The costs: `_last_reset` dies with the process, so a restart inside the gap
+reopens C7 until the next desktop sample; and `_update_display` now has a call
+order that matters, pinned by a test rather than by convention.
 
-If C is chosen: nothing changes and the spec records the bound.
-
-Open in every case: a reset the statusline never saw leaves no evidence at
-all. A user who has been away from the terminal since before the reset has
-nothing in either file to guard against. Recovering that would mean reading a
-drop in the desktop feed as a new window, which is CHOICE-2 in the display
-strategy and is out of scope here.
-
-## Left to Thibault
-
-- A, B or C.
-- If B: the name of the field, whether `schema` bumps, and whether the weekly
-  window gets the same guard (the weekly does not jump from 100 to 0 in
-  practice, but the symmetry is free).
-- If A: the wording of the void row (reuse `reset; awaiting Claude Code` or a
-  variant).
-- When: inside this PR, or after #21 merges.
-
-## References
-
-- `docs/specs/display-strategy.md`: C7, GAP-4, FIXED-3, FIXED-5, FIXED-8.
-- `docs/specs/honest-freshness.md`: the 2026-09-01 incident.
-- ADR 0003: desktop feed, cadence, fresher-wins.
-- Claude Code statusline documentation: a window is dropped once its
-  `resets_at` passes, and the script is re-run.
+Six lines in `tracker.py`, six tests. Three of them were run red against the
+previous code and green after, and the patch was reverted to confirm they hold
+it up.

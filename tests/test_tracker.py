@@ -670,6 +670,97 @@ class TestApplyDisplayModes(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Tests: pre-reset guard (ADR 0004, scenario C7)
+# ---------------------------------------------------------------------------
+class TestPreResetGuard(unittest.TestCase):
+    """A desktop sample taken before a reset the terminal already reported
+    describes the window that ended. It used to show as fresh, often at 100 %,
+    for up to one desktop cadence (p90 45 min)."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            app = tracker.App()
+        app.display_mode = tracker.DISPLAY_PCT
+        return app
+
+    @staticmethod
+    def _desktop_reading(pct, captured_at):
+        """A desktop-filled 5h window: a percentage and no reset time."""
+        return {
+            "five_hour": {"utilization": pct},
+            "seven_day": {"utilization": 18, "resets_at": "2099-03-10T00:00:00Z"},
+            "_meta": {"captured_at": captured_at, "source": "desktop"},
+        }
+
+    def test_sample_predating_a_passed_reset_is_voided(self):
+        now = datetime.now(timezone.utc)
+        reset = now - timedelta(minutes=10)
+        app = self._make_app()
+        app._last_reset = reset.isoformat().replace("+00:00", "Z")
+        app._last_pct = 100
+        # measured before the reset the terminal already reported
+        app._update_display(
+            self._desktop_reading(100, (reset - timedelta(minutes=5)).timestamp()))
+        self.assertEqual(app.title, "—")
+        self.assertIn("—", app.m5h.title)
+
+    def test_sample_taken_after_the_reset_is_shown(self):
+        now = datetime.now(timezone.utc)
+        reset = now - timedelta(minutes=10)
+        app = self._make_app()
+        app._last_reset = reset.isoformat().replace("+00:00", "Z")
+        app._last_pct = 100
+        app._update_display(
+            self._desktop_reading(7, (reset + timedelta(minutes=1)).timestamp()))
+        self.assertEqual(app.title, "7%")
+
+    def test_no_known_reset_leaves_the_reading_alone(self):
+        now = datetime.now(timezone.utc)
+        app = self._make_app()
+        app._last_reset = None
+        app._update_display(self._desktop_reading(63, now.timestamp()))
+        self.assertEqual(app.title, "63%")
+
+    def test_reset_still_ahead_leaves_the_reading_alone(self):
+        now = datetime.now(timezone.utc)
+        app = self._make_app()
+        app._last_reset = (now + timedelta(hours=1)).isoformat().replace("+00:00", "Z")
+        app._update_display(self._desktop_reading(63, now.timestamp()))
+        self.assertEqual(app.title, "63%")
+
+    def test_voided_window_keeps_the_reset_on_file_for_the_next_render(self):
+        """The guard reads _last_reset before _maybe_notify could clear it, and
+        a voided window skips the notify path, so the evidence survives until a
+        sample taken after the reset arrives. Pins that ordering."""
+        now = datetime.now(timezone.utc)
+        reset = now - timedelta(minutes=10)
+        stamp = reset.isoformat().replace("+00:00", "Z")
+        app = self._make_app()
+        app._last_reset = stamp
+        app._last_pct = 100
+        app._update_display(
+            self._desktop_reading(100, (reset - timedelta(minutes=5)).timestamp()))
+        self.assertEqual(app._last_reset, stamp)
+        # second render, same stale sample: still voided
+        app._update_display(
+            self._desktop_reading(100, (reset - timedelta(minutes=4)).timestamp()))
+        self.assertEqual(app.title, "—")
+
+    def test_a_voided_window_raises_no_alert(self):
+        now = datetime.now(timezone.utc)
+        reset = now - timedelta(minutes=10)
+        app = self._make_app()
+        app._last_reset = reset.isoformat().replace("+00:00", "Z")
+        app._last_pct = 50
+        app.alerts_enabled = True
+        with patch.object(tracker.rumps, "notification") as notif:
+            app._update_display(
+                self._desktop_reading(100, (reset - timedelta(minutes=5)).timestamp()))
+        notif.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
 # Tests: icon write failure must not break the title
 # ---------------------------------------------------------------------------
 @unittest.skipUnless(tracker._PILLOW_AVAILABLE, "Pillow absent: no PNG is written")

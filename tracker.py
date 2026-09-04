@@ -189,7 +189,7 @@ STAR_URL = "https://github.com/tpatrouillat/tokease"
 
 # Shown in the Support submenu so a bug report can state which build it is.
 # Keep in sync with setup.py and the git tag.
-__version__ = "1.0.2"
+__version__ = "1.0.3"
 
 # Login-item registration uses the .app's CFBundleDisplayName — must match
 # Info.plist exactly or `delete login item` won't find it.
@@ -855,6 +855,21 @@ class App(rumps.App):
             if icon_path:
                 self.icon = str(icon_path)
 
+    def _predates_last_reset(self, window, cap_at, now):
+        """True when this 5h reading was measured before a reset we already saw.
+
+        Claude Code drops a window at its `resets_at` and re-runs the
+        statusline without it, so the reading shown then comes from the desktop
+        feed, which carries no reset time. If that sample was taken before the
+        reset, its percentage describes the window that ended, often near
+        100 %. `_last_reset` is the only trace of that reset left, and it is in
+        memory only: a restart inside the gap loses the guard (ADR 0004).
+        """
+        if window.get("resets_at") or not cap_at:
+            return False
+        last = _parse_iso(self._last_reset)
+        return last is not None and last <= now and cap_at <= last.timestamp()
+
     @staticmethod
     def _window_row(label, section, now, age=None, span=None):
         """Format one usage-window line → (text, pct_for_ring).
@@ -903,6 +918,12 @@ class App(rumps.App):
         if h := data.get("five_hour"):
             self.m5h.title, session_pct = self._window_row(
                 "5-hour", h, now, age, _FIVE_HOUR_SECS)
+            if self._predates_last_reset(h, cap_at, now):
+                # ADR 0004 option A. Read _last_reset HERE, before _maybe_notify
+                # below could clear it, and skip that call so the evidence
+                # survives until a sample taken after the reset arrives.
+                self.m5h.title = "5-hour: — (reset; awaiting a newer sample)"
+                session_pct = None
             if session_pct is not None:
                 self._maybe_notify(session_pct, h.get("resets_at"))
             else:
