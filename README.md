@@ -142,7 +142,7 @@ When a reset time has passed, Tokease shows `--` rather than guessing the next o
 
 Two caveats on the desktop history file. Its format is internal to the Claude app and undocumented, so a future update could change it. Tokease parses it defensively (any anomaly falls back to the statusline feed) and pins its expectations to the observed `version: 2`. And older Claude Desktop builds may not write this file at all: if `plan-usage-history.json` doesn't exist on your machine, update the desktop app or wire the statusline.
 
-One upstream change would close the remaining gap, and Tokease would pick it up automatically:
+One upstream change would narrow the gap, and Tokease would pick it up automatically. It would not close it: Claude Desktop, claude.ai and headless `claude -p` never run a statusline at all, so the countdowns still depend on an interactive CLI session.
 
 - [anthropics/claude-code#55643](https://github.com/anthropics/claude-code/issues/55643): statusline support in the VS Code extension panel — the Claude Code surface that never refreshes the countdowns, unlike the integrated terminal. Closed by the stale bot for inactivity rather than on a product decision.
 
