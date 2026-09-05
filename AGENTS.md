@@ -19,6 +19,6 @@ python -m pytest
 
 ## Things to watch
 
-- The quota reader must **never** read an authentication token: that is the product's public promise ([ADR 0002](docs/adr/0002-retrait-mode-endpoint.md)), verified in CI.
+- The quota reader must **never** read an authentication token: that is the product's public promise ([ADR 0002](docs/adr/0002-retrait-mode-endpoint.md)), verified in CI by `TokenFreeInvariantTest` (tests/test_tracker.py), which reads the AST of every shipped file. It is a regression tripwire, not a proof: the file staying small enough to read remains the real argument.
 - Two usage sources, the fresher one wins: Claude Desktop app quota history (zero-config) and Claude Code statusline (optional, the only one that provides reset countdowns).
 - The repo is public: no secrets, and the README claims bind the product.

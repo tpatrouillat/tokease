@@ -9,6 +9,7 @@ the freshness merge, display logic (2 rings), empty states, and interval
 management.
 """
 
+import ast
 import json
 import os
 import subprocess
@@ -1977,6 +1978,168 @@ class TestStrategyGaps(unittest.TestCase):
             app._update_display(data)
         self.assertIn("5-hour: 42%", app.m5h.title)
         self.assertEqual(render.call_args[0][0], 42)
+
+
+class TokenFreeInvariantTest(unittest.TestCase):
+    """The product's public promise, enforced instead of documented.
+
+    README, AGENTS.md and ADR 0002 state that Tokease never reads an
+    authentication token and never opens a network connection. Nothing
+    checked it, so the claim held only as long as everyone remembered it.
+
+    This is a regression tripwire, not a proof: it stops the v0.9 endpoint
+    code (or an equivalent) from being pasted back in. A contributor
+    determined to reach the network could still do it through PyObjC or a
+    shell command, which is why the reviewable-in-a-minute file size stays
+    the real argument.
+
+    The checks read the AST, not the raw text, so a comment or docstring
+    that merely *mentions* the Keychain never trips them.
+    """
+
+    FORBIDDEN_IMPORTS = frozenset({
+        "urllib", "requests", "httpx", "http", "socket", "aiohttp",
+        "ftplib", "smtplib", "telnetlib", "xmlrpc", "asyncio", "ssl",
+        "keyring", "secretstorage",
+        # PyObjC bridge to the Keychain. objc/Quartz/CoreGraphics stay
+        # allowed: the roadmap plans to draw the icon with them.
+        "Security",
+    })
+    # Reading a credential back, whether through the CLI or the Security
+    # framework that PyObjC puts within reach.
+    FORBIDDEN_STRINGS = ("find-generic-password", "SecItemCopyMatching",
+                         "NSURLSession", "Claude Code-credentials")
+
+    @staticmethod
+    def _shipped():
+        root = Path(__file__).resolve().parent.parent
+        return {
+            "tracker.py",
+            "statusline/tokease-statusline.py",
+            "assets/build-logos.py",
+            "assets/build-menubar-icon.py",
+        }, root
+
+    def _trees(self):
+        names, root = self._shipped()
+        for name in sorted(names):
+            path = root / name
+            self.assertTrue(path.is_file(), f"{name} is missing")
+            source = path.read_text()
+            yield name, source, ast.parse(source)
+
+    def test_the_guard_covers_every_shipped_python_file(self):
+        # A closed list silently stops guarding the day code moves into a
+        # new module, so the list itself is checked against the repo.
+        names, root = self._shipped()
+        tracked = subprocess.run(
+            ["git", "ls-files", "*.py"], cwd=root,
+            capture_output=True, text=True, check=True,
+        ).stdout.split()
+        shipped = {
+            f for f in tracked
+            if not f.startswith(("tests/", "build/")) and f != "setup.py"
+        }
+        self.assertEqual(
+            shipped, names,
+            "a shipped .py file is not covered by the token-free guard; "
+            "add it to _shipped().",
+        )
+
+    def test_no_shipped_file_imports_a_network_client(self):
+        for name, _source, tree in self._trees():
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    roots = [a.name.split(".")[0] for a in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    roots = [(node.module or "").split(".")[0]]
+                else:
+                    continue
+                for root_name in roots:
+                    self.assertNotIn(
+                        root_name, self.FORBIDDEN_IMPORTS,
+                        f"{name} imports {root_name!r}: Tokease must not be "
+                        f"able to reach the network (ADR 0002).",
+                    )
+
+    def test_no_shipped_file_names_a_credential_api(self):
+        for name, _source, tree in self._trees():
+            docstrings = {
+                id(n.body[0].value)
+                for n in ast.walk(tree)
+                if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                                  ast.AsyncFunctionDef))
+                and n.body and isinstance(n.body[0], ast.Expr)
+                and isinstance(n.body[0].value, ast.Constant)
+                and isinstance(n.body[0].value.value, str)
+            }
+            literals = [
+                n.value for n in ast.walk(tree)
+                if isinstance(n, ast.Constant) and isinstance(n.value, str)
+                and id(n) not in docstrings
+            ]
+            attributes = [
+                n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)
+            ]
+            for needle in self.FORBIDDEN_STRINGS:
+                for text in literals:
+                    self.assertNotIn(
+                        needle, text,
+                        f"{name} contains {needle!r}: Tokease must never read "
+                        f"a credential (ADR 0002).",
+                    )
+                self.assertNotIn(needle, attributes, f"{name} calls {needle}.")
+
+    def test_the_only_binary_any_shipped_file_spawns_is_osascript(self):
+        # Every shipped file, not just tracker.py: a curl added to the
+        # statusline script would break the same promise. Both the argv head
+        # of any spawn-shaped call (attribute or bare name, list or tuple,
+        # run/Popen/check_output/system/exec*) and any literal that looks like
+        # a command are collected, so an alias or a renamed import does not
+        # slip past.
+        SPAWNERS = {"run", "Popen", "call", "check_call", "check_output",
+                    "getoutput", "getstatusoutput", "system", "popen",
+                    "execl", "execle", "execlp", "execv", "execve", "execvp",
+                    "execvpe", "spawnl", "spawnv", "spawnvp", "spawnve",
+                    "posix_spawn", "posix_spawnp", "startfile"}
+        found = set()
+        for name, _source, tree in self._trees():
+            # A renamed import hides the callee: `from subprocess import run
+            # as _r` must make _r a spawner too.
+            spawners = set(SPAWNERS)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module in {"subprocess", "os"}:
+                    for alias in node.names:
+                        if alias.name in SPAWNERS and alias.asname:
+                            spawners.add(alias.asname)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    func = node.func
+                    called = (func.attr if isinstance(func, ast.Attribute)
+                              else func.id if isinstance(func, ast.Name) else None)
+                    if called in spawners:
+                        # Positional argv, or the keyword forms run(args=...)
+                        # and Popen(args=...) / execv(path=...).
+                        candidates = list(node.args[:1])
+                        candidates += [k.value for k in node.keywords
+                                       if k.arg in {"args", "path", "file", "cmd"}]
+                        for first in candidates:
+                            if isinstance(first, (ast.List, ast.Tuple)) and first.elts:
+                                first = first.elts[0]
+                            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                                head = first.value.split()[0] if first.value.split() else ""
+                                found.add((name, head))
+                if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    if node.value.startswith(("/usr/bin/", "/usr/sbin/", "/bin/",
+                                              "/usr/local/bin/", "/opt/", "/sbin/")):
+                        found.add((name, node.value))
+        self.assertEqual(
+            found, {("tracker.py", "/usr/bin/osascript")},
+            "a shipped file names or spawns a binary other than osascript: "
+            f"{sorted(found)}",
+        )
+        # webbrowser.open() also ends up at /usr/bin/osascript, but inside the
+        # standard library, so it is out of reach of this check.
 
 
 if __name__ == "__main__":
