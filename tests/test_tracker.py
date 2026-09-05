@@ -2090,38 +2090,40 @@ class TokenFreeInvariantTest(unittest.TestCase):
                     )
                 self.assertNotIn(needle, attributes, f"{name} calls {needle}.")
 
-    def test_the_only_binary_tracker_spawns_is_osascript(self):
-        # Scope: the binaries tracker.py itself passes to subprocess. It does
-        # not cover webbrowser.open(), which reaches /usr/bin/osascript inside
-        # the standard library -- the same binary, but not visible from here.
-        _names, root = self._shipped()
-        tree = ast.parse((root / "tracker.py").read_text())
-        spawned = set()
-        for node in ast.walk(tree):
-            if not isinstance(node, ast.Call):
-                continue
-            func = node.func
-            if not (isinstance(func, ast.Attribute) and func.attr in {"run", "Popen", "call"}):
-                continue
-            if not node.args or not isinstance(node.args[0], ast.List):
-                continue
-            head = node.args[0].elts[0] if node.args[0].elts else None
-            if isinstance(head, ast.Constant) and isinstance(head.value, str):
-                spawned.add(head.value)
+    def test_the_only_binary_any_shipped_file_spawns_is_osascript(self):
+        # Every shipped file, not just tracker.py: a curl added to the
+        # statusline script would break the same promise. Both the argv head
+        # of any spawn-shaped call (attribute or bare name, list or tuple,
+        # run/Popen/check_output/system/exec*) and any literal that looks like
+        # a command are collected, so an alias or a renamed import does not
+        # slip past.
+        SPAWNERS = {"run", "Popen", "call", "check_call", "check_output",
+                    "getoutput", "getstatusoutput", "system", "popen",
+                    "execv", "execvp", "execve", "spawnv", "spawnvp"}
+        found = set()
+        for name, _source, tree in self._trees():
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Call):
+                    func = node.func
+                    called = (func.attr if isinstance(func, ast.Attribute)
+                              else func.id if isinstance(func, ast.Name) else None)
+                    if called in SPAWNERS and node.args:
+                        first = node.args[0]
+                        if isinstance(first, (ast.List, ast.Tuple)) and first.elts:
+                            first = first.elts[0]
+                        if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                            found.add((name, first.value.split()[0] if first.value else ""))
+                if isinstance(node, ast.Constant) and isinstance(node.value, str):
+                    if node.value.startswith(("/usr/bin/", "/usr/sbin/", "/bin/",
+                                              "/usr/local/bin/", "/opt/")):
+                        found.add((name, node.value))
         self.assertEqual(
-            spawned, {"/usr/bin/osascript"},
-            "tracker.py spawns a binary other than osascript.",
+            found, {("tracker.py", "/usr/bin/osascript")},
+            "a shipped file names or spawns a binary other than osascript: "
+            f"{sorted(found)}",
         )
-        # Catches the same thing through an aliased or renamed call.
-        paths = {
-            n.value for n in ast.walk(tree)
-            if isinstance(n, ast.Constant) and isinstance(n.value, str)
-            and n.value.startswith(("/usr/bin/", "/usr/sbin/", "/bin/"))
-        }
-        self.assertEqual(
-            paths, {"/usr/bin/osascript"},
-            "tracker.py names a system binary other than osascript.",
-        )
+        # webbrowser.open() also ends up at /usr/bin/osascript, but inside the
+        # standard library, so it is out of reach of this check.
 
 
 if __name__ == "__main__":
