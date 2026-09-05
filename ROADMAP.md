@@ -25,7 +25,7 @@ These are real possibilities, not promises. Which one (if any) gets built depend
 
 ### If there's strong pull for more
 
-Pick **one** of the following based on what issues and comments actually ask for. Not both. Not all three.
+Pick **one** of the following based on what issues and comments actually ask for. Not two of them. Not all seven.
 
 1. **iPhone companion app (native Swift)** — read-only view of the same `usage.json`, synced from the Mac by a small local helper. Transport design is deliberately open: anything that talks over a network, even on your own LAN, would ship opt-in, off by default, behind its own ADR. Estimated 4–6 weeks.
 2. **Second-tool support (most likely: Cursor or Lovable)** — only if that tool's vendor exposes a stable, authorized way to read remaining limits, or the community surfaces one with a known cadence. Estimated 1–2 weeks per tool.
