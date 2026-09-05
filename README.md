@@ -126,7 +126,7 @@ Tokease is probably running fine and your menu bar is full. On notched MacBooks,
 The percentages are **account-level**: they cover everything on your subscription, from claude.ai chat and Claude Desktop (Cowork included) to the VS Code extension and the CLI. The ring is never wrong about how much quota you've used. The only question is how fresh the last reading is.
 
 - **Claude Desktop running**: readings every 5 to 15 minutes, whatever surface you work in. Worst case the number in the menu bar is that far behind reality, and longer if the desktop app goes idle. This is the recommended setup. Just keep the desktop app open (it lives in your menu bar anyway).
-- **Only the statusline wired**: readings refresh while an interactive `claude` terminal session is active (the CLI, or the VS Code *integrated terminal*). The VS Code extension panel, Claude Desktop and headless `claude -p` never execute statuslines ([#55643](https://github.com/anthropics/claude-code/issues/55643), closed "not planned"). With the statusline as sole source, the rings go stale between CLI sessions.
+- **Only the statusline wired**: readings refresh while an interactive `claude` terminal session is active (the CLI, or the VS Code *integrated terminal*). The VS Code extension panel, Claude Desktop and headless `claude -p` never execute statuslines ([#55643](https://github.com/anthropics/claude-code/issues/55643), closed by the stale bot). With the statusline as sole source, the rings go stale between CLI sessions.
 - **Both** (best): desktop history keeps the rings fresh, and statusline captures add the reset countdowns whenever you use the CLI.
 
 Past 20 minutes without a refresh from either source, the menu bar number is prefixed with `~` and the dropdown says how old it is. Reset windows that have already rolled over are detected too. An old percentage is never shown as if it were fresh.
@@ -142,10 +142,11 @@ When a reset time has passed, Tokease shows `--` rather than guessing the next o
 
 Two caveats on the desktop history file. Its format is internal to the Claude app and undocumented, so a future update could change it. Tokease parses it defensively (any anomaly falls back to the statusline feed) and pins its expectations to the observed `version: 2`. And older Claude Desktop builds may not write this file at all: if `plan-usage-history.json` doesn't exist on your machine, update the desktop app or wire the statusline.
 
-Upstream feature requests that would make this cleaner (Tokease benefits automatically if any of them ships):
-- [anthropics/claude-code#38380](https://github.com/anthropics/claude-code/issues/38380): expose usage/rate-limit data via a CLI flag or hook event
-- [anthropics/claude-code#55643](https://github.com/anthropics/claude-code/issues/55643): statusline support in the VS Code extension
-- [anthropics/claude-code#33257](https://github.com/anthropics/claude-code/issues/33257): native usage indicator
+One upstream change would narrow the gap, and Tokease would pick it up automatically. It would not close it: Claude Desktop, claude.ai and headless `claude -p` never run a statusline at all, so the countdowns still depend on an interactive CLI session.
+
+- [anthropics/claude-code#55643](https://github.com/anthropics/claude-code/issues/55643): statusline support in the VS Code extension panel — the Claude Code surface that never refreshes the countdowns, unlike the integrated terminal. Closed by the stale bot for inactivity rather than on a product decision.
+
+Two older requests are worth reading for context rather than as pending work. [#38380](https://github.com/anthropics/claude-code/issues/38380) asked for usage data through a CLI flag or hook event. That flag never shipped, but another read path did: `rate_limits` has been in the statusline stdin from Claude Code 2.1.80 on, and that is exactly the feed Tokease reads. [#33257](https://github.com/anthropics/claude-code/issues/33257) is about a native *context* indicator in Claude Desktop, which is a different measurement from quota.
 
 A local, opt-in **drift estimator** (estimate usage between captures from the local session logs all surfaces write) is a v1.1 candidate. See [ROADMAP.md](ROADMAP.md).
 
