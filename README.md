@@ -65,8 +65,7 @@ This is an independent project, **not affiliated with or endorsed by Anthropic**
 
 ```bash
 brew install tpatrouillat/tap/tokease
-tokease          # launch immediately
-brew services start tokease   # auto-start at login
+brew services start tokease   # starts it now, and again at login
 ```
 
 Bypasses Gatekeeper (no Apple Developer signing required), installs the Python virtualenv automatically, and `brew upgrade` handles updates.
@@ -123,7 +122,7 @@ Tokease is probably running fine and your menu bar is full. On notched MacBooks,
 
 ## A note on freshness
 
-The percentages are **account-level**: they cover everything on your subscription, from claude.ai chat and Claude Desktop (Cowork included) to the VS Code extension and the CLI. The ring is never wrong about how much quota you've used. The only question is how fresh the last reading is.
+The percentages are **account-level**: they cover everything on your subscription, from claude.ai chat and Claude Desktop (Cowork included) to the VS Code extension and the CLI. Every reading is a real measurement, never an estimate: Tokease does no arithmetic of its own on your usage, it shows the last number an official Claude app wrote down. What it cannot know is what happened since. Between two captures a heavy session can move the real figure a long way from the one on screen, which is why the age of the reading matters as much as the reading.
 
 - **Claude Desktop running**: readings every 5 to 15 minutes, whatever surface you work in. Worst case the number in the menu bar is that far behind reality, and longer if the desktop app goes idle. This is the recommended setup. Just keep the desktop app open (it lives in your menu bar anyway).
 - **Only the statusline wired**: readings refresh while an interactive `claude` terminal session is active (the CLI, or the VS Code *integrated terminal*). The VS Code extension panel, Claude Desktop and headless `claude -p` never execute statuslines ([#55643](https://github.com/anthropics/claude-code/issues/55643), closed "not planned"). With the statusline as sole source, the rings go stale between CLI sessions.
