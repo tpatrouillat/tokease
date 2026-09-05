@@ -1979,5 +1979,39 @@ class TestStrategyGaps(unittest.TestCase):
         self.assertEqual(render.call_args[0][0], 42)
 
 
+class ResetDateIsLocalTest(unittest.TestCase):
+    """A reset date is a calendar date, so it belongs to the user's calendar.
+
+    fmt_reset() showed the UTC date. A reset at 04:00 UTC is the previous
+    evening everywhere in the Americas, so the Weekly line was a day ahead
+    for most of the US -- on the countdown feature the product advertises.
+    """
+
+    # 2026-09-06T04:00:00Z: Sep 6 in UTC, Sep 5 in the Americas.
+    ISO = "2026-09-06T04:00:00Z"
+
+    def _fmt_in(self, tz_name):
+        previous = os.environ.get("TZ")
+        os.environ["TZ"] = tz_name
+        time.tzset()
+        try:
+            return tracker.fmt_reset(self.ISO)
+        finally:
+            if previous is None:
+                os.environ.pop("TZ", None)
+            else:
+                os.environ["TZ"] = previous
+            time.tzset()
+
+    def test_the_date_follows_the_users_timezone(self):
+        # Far enough ahead that fmt_reset returns a date, not a countdown.
+        with patch.object(tracker, "datetime", wraps=datetime) as dt:
+            dt.now.return_value = datetime(2026, 9, 1, tzinfo=timezone.utc)
+            west = self._fmt_in("America/Los_Angeles")
+            east = self._fmt_in("Asia/Tokyo")
+        self.assertEqual(west, "Sep 05", "the Americas see the reset a day earlier")
+        self.assertEqual(east, "Sep 06", "Asia sees it on the UTC date")
+        self.assertNotEqual(west, east, "the date must depend on the timezone")
+
 if __name__ == "__main__":
     unittest.main()

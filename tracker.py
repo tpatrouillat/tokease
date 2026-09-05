@@ -546,7 +546,11 @@ def fmt_reset(iso):
         h = diff.seconds // 3600
         m = (diff.seconds % 3600) // 60
         return f"{h}h {m}m" if h else f"{m}m"
-    return dt.strftime("%b %d")
+    # Local calendar date, not UTC: a reset at 04:00 UTC is the previous
+    # evening in the Americas, and showing "Sep 07" for a Sep 06 reset is a
+    # day off for most of the US. The countdown above is timezone-free, so
+    # only this branch was affected.
+    return dt.astimezone().strftime("%b %d")
 
 
 # ---------------------------------------------------------------------------
