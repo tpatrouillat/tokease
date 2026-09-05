@@ -2099,23 +2099,39 @@ class TokenFreeInvariantTest(unittest.TestCase):
         # slip past.
         SPAWNERS = {"run", "Popen", "call", "check_call", "check_output",
                     "getoutput", "getstatusoutput", "system", "popen",
-                    "execv", "execvp", "execve", "spawnv", "spawnvp"}
+                    "execl", "execle", "execlp", "execv", "execve", "execvp",
+                    "execvpe", "spawnl", "spawnv", "spawnvp", "spawnve",
+                    "posix_spawn", "posix_spawnp", "startfile"}
         found = set()
         for name, _source, tree in self._trees():
+            # A renamed import hides the callee: `from subprocess import run
+            # as _r` must make _r a spawner too.
+            spawners = set(SPAWNERS)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.ImportFrom) and node.module in {"subprocess", "os"}:
+                    for alias in node.names:
+                        if alias.name in SPAWNERS and alias.asname:
+                            spawners.add(alias.asname)
             for node in ast.walk(tree):
                 if isinstance(node, ast.Call):
                     func = node.func
                     called = (func.attr if isinstance(func, ast.Attribute)
                               else func.id if isinstance(func, ast.Name) else None)
-                    if called in SPAWNERS and node.args:
-                        first = node.args[0]
-                        if isinstance(first, (ast.List, ast.Tuple)) and first.elts:
-                            first = first.elts[0]
-                        if isinstance(first, ast.Constant) and isinstance(first.value, str):
-                            found.add((name, first.value.split()[0] if first.value else ""))
+                    if called in spawners:
+                        # Positional argv, or the keyword forms run(args=...)
+                        # and Popen(args=...) / execv(path=...).
+                        candidates = list(node.args[:1])
+                        candidates += [k.value for k in node.keywords
+                                       if k.arg in {"args", "path", "file", "cmd"}]
+                        for first in candidates:
+                            if isinstance(first, (ast.List, ast.Tuple)) and first.elts:
+                                first = first.elts[0]
+                            if isinstance(first, ast.Constant) and isinstance(first.value, str):
+                                head = first.value.split()[0] if first.value.split() else ""
+                                found.add((name, head))
                 if isinstance(node, ast.Constant) and isinstance(node.value, str):
                     if node.value.startswith(("/usr/bin/", "/usr/sbin/", "/bin/",
-                                              "/usr/local/bin/", "/opt/")):
+                                              "/usr/local/bin/", "/opt/", "/sbin/")):
                         found.add((name, node.value))
         self.assertEqual(
             found, {("tracker.py", "/usr/bin/osascript")},
