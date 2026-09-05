@@ -9,6 +9,7 @@ the freshness merge, display logic (2 rings), empty states, and interval
 management.
 """
 
+import ast
 import json
 import os
 import subprocess
@@ -1977,6 +1978,150 @@ class TestStrategyGaps(unittest.TestCase):
             app._update_display(data)
         self.assertIn("5-hour: 42%", app.m5h.title)
         self.assertEqual(render.call_args[0][0], 42)
+
+
+class TokenFreeInvariantTest(unittest.TestCase):
+    """The product's public promise, enforced instead of documented.
+
+    README, AGENTS.md and ADR 0002 state that Tokease never reads an
+    authentication token and never opens a network connection. Nothing
+    checked it, so the claim held only as long as everyone remembered it.
+
+    This is a regression tripwire, not a proof: it stops the v0.9 endpoint
+    code (or an equivalent) from being pasted back in. A contributor
+    determined to reach the network could still do it through PyObjC or a
+    shell command, which is why the reviewable-in-a-minute file size stays
+    the real argument.
+
+    The checks read the AST, not the raw text, so a comment or docstring
+    that merely *mentions* the Keychain never trips them.
+    """
+
+    FORBIDDEN_IMPORTS = frozenset({
+        "urllib", "requests", "httpx", "http", "socket", "aiohttp",
+        "ftplib", "smtplib", "telnetlib", "xmlrpc", "asyncio", "ssl",
+        "keyring", "secretstorage",
+        # PyObjC bridge to the Keychain. objc/Quartz/CoreGraphics stay
+        # allowed: the roadmap plans to draw the icon with them.
+        "Security",
+    })
+    # Reading a credential back, whether through the CLI or the Security
+    # framework that PyObjC puts within reach.
+    FORBIDDEN_STRINGS = ("find-generic-password", "SecItemCopyMatching",
+                         "NSURLSession", "Claude Code-credentials")
+
+    @staticmethod
+    def _shipped():
+        root = Path(__file__).resolve().parent.parent
+        return {
+            "tracker.py",
+            "statusline/tokease-statusline.py",
+            "assets/build-logos.py",
+            "assets/build-menubar-icon.py",
+        }, root
+
+    def _trees(self):
+        names, root = self._shipped()
+        for name in sorted(names):
+            path = root / name
+            self.assertTrue(path.is_file(), f"{name} is missing")
+            source = path.read_text()
+            yield name, source, ast.parse(source)
+
+    def test_the_guard_covers_every_shipped_python_file(self):
+        # A closed list silently stops guarding the day code moves into a
+        # new module, so the list itself is checked against the repo.
+        names, root = self._shipped()
+        tracked = subprocess.run(
+            ["git", "ls-files", "*.py"], cwd=root,
+            capture_output=True, text=True, check=True,
+        ).stdout.split()
+        shipped = {
+            f for f in tracked
+            if not f.startswith(("tests/", "build/")) and f != "setup.py"
+        }
+        self.assertEqual(
+            shipped, names,
+            "a shipped .py file is not covered by the token-free guard; "
+            "add it to _shipped().",
+        )
+
+    def test_no_shipped_file_imports_a_network_client(self):
+        for name, _source, tree in self._trees():
+            for node in ast.walk(tree):
+                if isinstance(node, ast.Import):
+                    roots = [a.name.split(".")[0] for a in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    roots = [(node.module or "").split(".")[0]]
+                else:
+                    continue
+                for root_name in roots:
+                    self.assertNotIn(
+                        root_name, self.FORBIDDEN_IMPORTS,
+                        f"{name} imports {root_name!r}: Tokease must not be "
+                        f"able to reach the network (ADR 0002).",
+                    )
+
+    def test_no_shipped_file_names_a_credential_api(self):
+        for name, _source, tree in self._trees():
+            docstrings = {
+                id(n.body[0].value)
+                for n in ast.walk(tree)
+                if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                                  ast.AsyncFunctionDef))
+                and n.body and isinstance(n.body[0], ast.Expr)
+                and isinstance(n.body[0].value, ast.Constant)
+                and isinstance(n.body[0].value.value, str)
+            }
+            literals = [
+                n.value for n in ast.walk(tree)
+                if isinstance(n, ast.Constant) and isinstance(n.value, str)
+                and id(n) not in docstrings
+            ]
+            attributes = [
+                n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)
+            ]
+            for needle in self.FORBIDDEN_STRINGS:
+                for text in literals:
+                    self.assertNotIn(
+                        needle, text,
+                        f"{name} contains {needle!r}: Tokease must never read "
+                        f"a credential (ADR 0002).",
+                    )
+                self.assertNotIn(needle, attributes, f"{name} calls {needle}.")
+
+    def test_the_only_binary_tracker_spawns_is_osascript(self):
+        # Scope: the binaries tracker.py itself passes to subprocess. It does
+        # not cover webbrowser.open(), which reaches /usr/bin/osascript inside
+        # the standard library -- the same binary, but not visible from here.
+        _names, root = self._shipped()
+        tree = ast.parse((root / "tracker.py").read_text())
+        spawned = set()
+        for node in ast.walk(tree):
+            if not isinstance(node, ast.Call):
+                continue
+            func = node.func
+            if not (isinstance(func, ast.Attribute) and func.attr in {"run", "Popen", "call"}):
+                continue
+            if not node.args or not isinstance(node.args[0], ast.List):
+                continue
+            head = node.args[0].elts[0] if node.args[0].elts else None
+            if isinstance(head, ast.Constant) and isinstance(head.value, str):
+                spawned.add(head.value)
+        self.assertEqual(
+            spawned, {"/usr/bin/osascript"},
+            "tracker.py spawns a binary other than osascript.",
+        )
+        # Catches the same thing through an aliased or renamed call.
+        paths = {
+            n.value for n in ast.walk(tree)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)
+            and n.value.startswith(("/usr/bin/", "/usr/sbin/", "/bin/"))
+        }
+        self.assertEqual(
+            paths, {"/usr/bin/osascript"},
+            "tracker.py names a system binary other than osascript.",
+        )
 
 
 if __name__ == "__main__":
