@@ -142,10 +142,11 @@ When a reset time has passed, Tokease shows `--` rather than guessing the next o
 
 Two caveats on the desktop history file. Its format is internal to the Claude app and undocumented, so a future update could change it. Tokease parses it defensively (any anomaly falls back to the statusline feed) and pins its expectations to the observed `version: 2`. And older Claude Desktop builds may not write this file at all: if `plan-usage-history.json` doesn't exist on your machine, update the desktop app or wire the statusline.
 
-Upstream feature requests that would make this cleaner (Tokease benefits automatically if any of them ships):
-- [anthropics/claude-code#38380](https://github.com/anthropics/claude-code/issues/38380): expose usage/rate-limit data via a CLI flag or hook event
-- [anthropics/claude-code#55643](https://github.com/anthropics/claude-code/issues/55643): statusline support in the VS Code extension
-- [anthropics/claude-code#33257](https://github.com/anthropics/claude-code/issues/33257): native usage indicator
+One upstream change would close the remaining gap, and Tokease would pick it up automatically:
+
+- [anthropics/claude-code#55643](https://github.com/anthropics/claude-code/issues/55643): statusline support in the VS Code extension panel — the Claude Code surface that never refreshes the countdowns, unlike the integrated terminal. Closed by the stale bot for inactivity rather than on a product decision.
+
+Two older requests are worth reading for context rather than as pending work. [#38380](https://github.com/anthropics/claude-code/issues/38380) asked for usage data through a CLI flag or hook event. That flag never shipped, but another read path did: `rate_limits` has been in the statusline stdin from Claude Code 2.1.80 on, and that is exactly the feed Tokease reads. [#33257](https://github.com/anthropics/claude-code/issues/33257) is about a native *context* indicator in Claude Desktop, which is a different measurement from quota.
 
 A local, opt-in **drift estimator** (estimate usage between captures from the local session logs all surfaces write) is a v1.1 candidate. See [ROADMAP.md](ROADMAP.md).
 
