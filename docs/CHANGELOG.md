@@ -1,5 +1,13 @@
 # Changelog
 
+## v1.0.5 — 2026-09-06
+
+### Fixed
+
+- The Weekly reset date showed the UTC calendar day instead of the local one. `fmt_reset` formatted a UTC datetime with `strftime`, so a reset at 04:00 UTC — the previous evening across the Americas — read as "Sep 07" for a reset that was locally "Sep 06, 17:00". The 24-hour countdown itself was unaffected, since it is timezone-free. Found by Grok in a full product audit.
+- Two README claims the same audit disproved: "the ring is never wrong about how much quota you've used" said the opposite of the freshness section it introduced, and the Quick Install snippet ran `tokease` then `brew services start` — the formula already starts the app via `run_at_load`, so following the README launched two menu bar icons.
+- Two upstream GitHub issues cited in the ROADMAP as "both still open" have been closed as duplicates since August; three more upstream requests in the README were closed by the inactivity bot, not by a product decision, and are now described that way.
+
 ## v1.0.4 — 2026-09-04
 
 Documentation only. No behaviour changes, and the tarball now matches what the README describes.
