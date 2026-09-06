@@ -95,21 +95,35 @@ the statusline by freshness:
 - **Multi-org**: the `org` field must be respected if several orgs appear (we
   take the most recent sample, displayed org not handled in v1).
 
-**ToS compliance (analysis verified on 2026-07-20)**
+**ToS compliance (analysis verified on 2026-07-20; corrected 2026-09-07 — see below)**
 - The Consumer Terms (Oct 8, 2025) forbid neither reading local files created
   by Anthropic apps nor anything comparable. The reverse engineering clause
   targets decompilation ("reduce our Services to human-readable form", and a
-  plain-text JSON already is). The automated access/scraping clauses target
-  access to the **Services** (servers), not the user's disk.
+  plain-text JSON already is).
+- **Correction (2026-09-07):** the earlier version of this analysis claimed
+  the automated-access/scraping clauses target the Services "(servers), not
+  the user's disk." That is wrong: the Terms define **Services** as "Claude.ai,
+  Claude Pro, and other products and services... along with any associated
+  apps, software, and websites" — the desktop app is a Service under that
+  definition. The clause forbids accessing *the Services* "through automated
+  or non-human means"; whether reading a file the app already wrote to disk,
+  with the app not queried or scripted in any way, counts as "accessing" it
+  is genuinely unresolved by the text, not settled in Tokease's favor. Found
+  during a Codex challenge pass (2026-09-06) that cited the Terms directly;
+  verified against the live page before correcting this ADR.
 - The February 2026 clarification is scoped to **routing requests to
   Anthropic's servers with a subscription token** ("route requests through
-  Free, Pro, or Max plan credentials"). Tokease makes no network call.
+  Free, Pro, or Max plan credentials"). Tokease makes no network call, which
+  that specific clarification does not reach either way.
 - Direct precedent: ccusage and friends have been reading Claude Code's
   undocumented local JSONL files since mid-2025, at scale, with no known
   enforcement, including after the January-February 2026 OAuth purge.
 - Retained classification: statusline source = authorized (documented
-  surface), desktop source = weak grey area, no identifiable violation of the
-  current terms. To re-check if Anthropic changes its Terms.
+  surface), desktop source = **genuine grey area** (downgraded from "weak
+  grey area, no identifiable violation" — see correction above), no known
+  enforcement precedent against comparable read-only local-file tools. To
+  re-check if Anthropic changes its Terms, or if it addresses ccusage-style
+  tools.
 
 **Rejected alternatives**
 - *The extension's terminal mode* (`"claudeCode.useTerminal": true`): works,

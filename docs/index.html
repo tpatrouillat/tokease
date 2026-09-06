@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tokease: Claude usage limit tracker for the Mac menu bar</title>
-    <meta name="description" content="Free open-source Mac menu bar app showing your remaining Claude 5-hour and weekly limits as two rings. No token read, no API call. Install with Homebrew.">
+    <meta name="description" content="Free open-source Mac menu bar app showing how much of your Claude 5-hour and weekly limits you've used, as two rings. No token read, no API call. Install with Homebrew.">
     <meta name="theme-color" content="#09090b">
     <meta name="robots" content="index, follow">
     <meta name="author" content="Thibault Patrouillat">
@@ -19,7 +19,7 @@
     <!-- Open Graph -->
     <meta property="og:type" content="website">
     <meta property="og:title" content="Tokease: Claude usage limit tracker for the Mac menu bar">
-    <meta property="og:description" content="Free open-source Mac menu bar app showing your remaining Claude 5-hour and weekly limits as two rings. Zero config, no token read, no API call. Install with Homebrew.">
+    <meta property="og:description" content="Free open-source Mac menu bar app showing how much of your Claude 5-hour and weekly limits you've used, as two rings. Zero config, no token read, no API call. Install with Homebrew.">
     <meta property="og:image" content="https://tpatrouillat.github.io/tokease/og-image.png">
     <meta property="og:image:alt" content="Tokease: two concentric Activity rings alongside the product name">
     <meta property="og:url" content="https://tpatrouillat.github.io/tokease/">
@@ -28,7 +28,7 @@
     <!-- Twitter -->
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Tokease: Claude usage limit tracker for the Mac menu bar">
-    <meta name="twitter:description" content="Free open-source Mac menu bar app showing your remaining Claude 5-hour and weekly limits as two rings. Zero config, no token read, no API call.">
+    <meta name="twitter:description" content="Free open-source Mac menu bar app showing how much of your Claude 5-hour and weekly limits you've used, as two rings. Zero config, no token read, no API call.">
     <meta name="twitter:image" content="https://tpatrouillat.github.io/tokease/og-image.png">
     <meta name="twitter:image:alt" content="Tokease: two concentric Activity rings alongside the product name">
 
@@ -93,12 +93,12 @@
             {
                 "@type": "Question",
                 "name": "How is this different from the other menu bar trackers?",
-                "acceptedAnswer": { "@type": "Answer", "text": "They make different trade-offs, and several are excellent. The one that shaped Tokease is size: the app is a single 970-line Python file, plus a 178-line script if you want reset countdowns. No HTTP client is imported anywhere in it, so there is no update check, no telemetry, no crash reporter. In a large codebase \"it does not phone home\" is a promise you accept. Here it is something you can verify yourself in about ten minutes." }
+                "acceptedAnswer": { "@type": "Answer", "text": "They make different trade-offs, and several are excellent. The one that shaped Tokease is size: the app is a single 970-line Python file, plus a 178-line script if you want reset countdowns. No HTTP client is imported anywhere in it, and no network call is coded anywhere in the app's own logic — not a proof, just what two files a reader can grep in a minute; no update check, no telemetry, no crash reporter shipped in this code. In a large codebase \"it does not phone home\" is a promise you accept. Here it is something you can verify yourself in about ten minutes." }
             },
             {
                 "@type": "Question",
                 "name": "How is this different from ccusage?",
-                "acceptedAnswer": { "@type": "Answer", "text": "ccusage parses your local Claude Code JSONL log files to estimate token spend, a great breakdown of what you already used. Tokease shows the complementary thing: the limit you have left. Your remaining 5-hour and weekly windows, live in the menu bar." }
+                "acceptedAnswer": { "@type": "Answer", "text": "ccusage parses your local Claude Code JSONL log files to estimate token spend, a great breakdown of what you already used. Tokease shows the complementary thing: how much of your 5-hour and weekly windows you've used, live in the menu bar." }
             },
             {
                 "@type": "Question",
@@ -873,7 +873,7 @@
 <section id="showcase">
     <div class="section-header reveal">
         <div class="section-label">See it in action</div>
-        <h2 class="section-title">Your remaining 5-hour and weekly limits, one glance away</h2>
+        <h2 class="section-title">Your 5-hour and weekly limits, one glance away</h2>
         <p class="section-sub">Two rings fill as you spend your 5-hour and weekly windows, right next to the clock. In short, a lightweight Claude rate limit monitor for your Mac: you see the wall coming before you hit it.</p>
     </div>
     <div class="reveal">
@@ -918,7 +918,7 @@
     <div class="section-header reveal">
         <div class="section-label">Small enough to check</div>
         <h2 class="section-title">Read it before you run it.</h2>
-        <p class="section-sub">The app is one 970-line Python file, plus a 178-line script if you want reset countdowns. No HTTP client is imported anywhere in it, so there is no update check, no telemetry, no crash reporter. That is not a promise, it is something you can verify in about ten minutes.</p>
+        <p class="section-sub">The app is one 970-line Python file, plus a 178-line script if you want reset countdowns. No HTTP client is imported anywhere in it, and no network call is coded anywhere in the app's own logic — not a proof, just what two files a reader can grep in a minute; no update check, no telemetry, no crash reporter shipped in this code. That is not a promise, it is something you can verify in about ten minutes.</p>
     </div>
     <div class="trust-card reveal">
         <div class="trust-icon" aria-hidden="true">
@@ -1006,11 +1006,11 @@
         </details>
         <details class="faq">
             <summary>How is this different from the other menu bar trackers?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body">They make different trade-offs, and several are excellent. The one that shaped Tokease is size: the app is a single 970-line Python file, plus a 178-line script if you want reset countdowns. No HTTP client is imported anywhere in it, so there is no update check, no telemetry, no crash reporter. In a large codebase "it does not phone home" is a promise you accept. Here it is something you can verify yourself in about ten minutes.</div>
+            <div class="faq-body">They make different trade-offs, and several are excellent. The one that shaped Tokease is size: the app is a single 970-line Python file, plus a 178-line script if you want reset countdowns. No HTTP client is imported anywhere in it, and no network call is coded anywhere in the app's own logic — not a proof, just what two files a reader can grep in a minute; no update check, no telemetry, no crash reporter shipped in this code. In a large codebase "it does not phone home" is a promise you accept. Here it is something you can verify yourself in about ten minutes.</div>
         </details>
         <details class="faq">
             <summary>How is this different from ccusage?<span class="faq-plus" aria-hidden="true"></span></summary>
-            <div class="faq-body"><a href="https://github.com/ryoppippi/ccusage" rel="noopener">ccusage</a> parses your local Claude Code JSONL log files to estimate token spend, a great breakdown of what you already used. Tokease shows the complementary thing: the limit you have <em>left</em>. Your remaining 5-hour and weekly windows, live in the menu bar.</div>
+            <div class="faq-body"><a href="https://github.com/ryoppippi/ccusage" rel="noopener">ccusage</a> parses your local Claude Code JSONL log files to estimate token spend, a great breakdown of what you already used. Tokease shows the complementary thing: how much of your 5-hour and weekly windows you've <em>used</em>, live in the menu bar.</div>
         </details>
         <details class="faq">
             <summary>Does it work with Claude Desktop or Cowork?<span class="faq-plus" aria-hidden="true"></span></summary>

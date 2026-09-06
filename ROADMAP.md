@@ -4,7 +4,7 @@ Where this project is, and where it might go.
 
 ## v1.0 — what ships now
 
-A single-file macOS menu bar app that shows your 5-hour / weekly remaining capacity as two rings, read from two local files official Claude apps already write: the Claude desktop app's quota history (zero config, refreshed every 5 to 15 minutes) and the `rate_limits` data Claude Code publishes to its statusline (optional, adds reset countdowns). That's it. No token read, no endpoint call. A small single-file Python app, MIT, two small dependencies (`rumps` for the menu bar, `Pillow` for the dynamic icon).
+A single-file macOS menu bar app that shows how much of your 5-hour / weekly windows you've used as two rings, read from two local files official Claude apps already write: the Claude desktop app's quota history (zero config, refreshed every 5 to 15 minutes) and the `rate_limits` data Claude Code publishes to its statusline (optional, adds reset countdowns). That's it. No token read, no endpoint call. A small single-file Python app, MIT, two small dependencies (`rumps` for the menu bar, `Pillow` for the dynamic icon).
 
 > The legacy endpoint mode (which read the OAuth token from the Keychain and called an undocumented endpoint) is removed from v1.0 and frozen at the git tag `v0.9.0-endpoint`.
 
@@ -46,6 +46,8 @@ No v1.1 work. v1.0.1 polish only — bug fixes, UX hardening, more tests around 
 - **Ring clear-out animation** — when a 5-hour or weekly limit resets, briefly animate the affected ring from its previous fill back to empty (4–5 frames over ~400ms, driven by `rumps.Timer`). Pure cosmetic, but it makes resets feel earned.
 - **Draw the ring icon with CoreGraphics instead of Pillow.** Pillow is roughly 35k lines and 14 MB, imported to draw two arcs. PyObjC is already a dependency and CoreGraphics can draw them, which would drop the second dependency and shrink the install. Same output, smaller trust surface.
 - **A `jq` or shell variant of the statusline capture.** The capture script pays Python interpreter startup on every statusline render, where a `jq` one-liner would cost a few milliseconds. The Python script stays the reference, the faster variant would be optional.
+- **Hash-pin the Homebrew formula's wheels.** `rumps` and `Pillow` are version-pinned but not hash-pinned: `pip install` in `Formula/tokease.rb` trusts PyPI at install time. Homebrew's `resource` blocks (with a `sha256` per wheel) are the standard fix for Python formulas; not urgent, but worth doing at the first post-launch bump.
+- **Round the displayed percentage instead of truncating it.** The feed gives a float; the display does an integer conversion that always rounds down (`99.7` shows as `99`), always in the direction of "less used than reality." A dedicated conversion for the percentage (round, then clamp so `100` only shows when the source is actually at 100) would fix this without touching the shared integer helper used elsewhere for the refresh interval.
 - **Enterprise / Team plan support** — credit-based billing instead of 5-hour/weekly windows, so the 2-ring UI doesn't map. Blocked on whether Claude Code's statusline ever exposes a credit-style signal for these plans; until then, Pro/Max only (the README says so).
 
 ### If the hook doesn't land
