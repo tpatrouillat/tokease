@@ -1,5 +1,12 @@
 # Changelog
 
+## v1.0.6 — 2026-09-07
+
+### Fixed
+
+- The displayed percentage truncated instead of rounding: `28.999%` showed as `28%`, always understating usage. A dedicated `_display_pct` conversion rounds instead — except right at the top edge, where a rounded 100 is only shown once the source itself reaches 100, so `99.6%` still reads `99` rather than falsely announcing the wall has been hit. `_safe_int` is untouched (still used, truncating, for the refresh interval).
+- The Homebrew formula's `pip install` trusted PyPI at install time with no integrity check. It now installs from a hash-pinned requirements list (`--require-hashes`) covering `rumps`, `Pillow` (both macOS wheel architectures) and rumps' own `pyobjc-core` / `pyobjc-framework-Cocoa` dependencies.
+
 ## v1.0.5 — 2026-09-06
 
 ### Fixed

@@ -156,6 +156,42 @@ class TestSafeInt(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Tests: _display_pct
+# ---------------------------------------------------------------------------
+class TestDisplayPct(unittest.TestCase):
+    def test_rounds_up(self):
+        self.assertEqual(tracker._display_pct(47.6), 48)
+
+    def test_rounds_down(self):
+        self.assertEqual(tracker._display_pct(28.2), 28)
+
+    def test_never_rounds_to_100_below_source(self):
+        # 99.6 rounds to 100 mathematically, but the source isn't at 100 yet.
+        self.assertEqual(tracker._display_pct(99.6), 99)
+        self.assertEqual(tracker._display_pct(99.99), 99)
+        self.assertEqual(tracker._display_pct(99.5), 99)
+
+    def test_half_rounds_up_not_to_even(self):
+        # Python's round() is banker's rounding (round(28.5) == 28); this must not be.
+        self.assertEqual(tracker._display_pct(28.5), 29)
+        self.assertEqual(tracker._display_pct(80.5), 81)
+        self.assertEqual(tracker._display_pct(94.5), 95)
+
+    def test_true_hundred_shows_hundred(self):
+        self.assertEqual(tracker._display_pct(100), 100)
+        self.assertEqual(tracker._display_pct(150), 100)
+
+    def test_negative_clamped_to_zero(self):
+        self.assertEqual(tracker._display_pct(-10), 0)
+
+    def test_none_and_junk(self):
+        self.assertEqual(tracker._display_pct(None), 0)
+        self.assertEqual(tracker._display_pct("abc"), 0)
+        self.assertEqual(tracker._display_pct("1e400"), 0)
+        self.assertEqual(tracker._display_pct(float("inf")), 0)
+
+
+# ---------------------------------------------------------------------------
 # Tests: fmt_reset
 # ---------------------------------------------------------------------------
 class TestFmtReset(unittest.TestCase):
@@ -502,6 +538,13 @@ class TestEdgeCases(unittest.TestCase):
         data = _make_usage(five_hour_pct=100)
         app._update_display(data)
         self.assertEqual(app.title, "100%")
+
+    def test_rounds_instead_of_truncating(self):
+        app = self._make_app()
+        data = _make_usage(five_hour_pct=28.999, seven_day_pct=99.6)
+        app._update_display(data)
+        self.assertIn("5-hour: 29%", app.m5h.title)
+        self.assertIn("Weekly: 99%", app.m7d.title)  # 99.6 rounds to 100, but source < 100
 
     def test_over_hundred_clamped_in_title(self):
         # The feed can go above 100; the title and the icon must be clamped.

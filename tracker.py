@@ -18,6 +18,7 @@ The per-model split (Sonnet/Opus) and the paid overage are not in this feed.
 """
 
 import json
+import math
 import os
 import subprocess
 import sys
@@ -189,7 +190,7 @@ STAR_URL = "https://github.com/tpatrouillat/tokease"
 
 # Shown in the Support submenu so a bug report can state which build it is.
 # Keep in sync with setup.py and the git tag.
-__version__ = "1.0.5"
+__version__ = "1.0.6"
 
 # Login-item registration uses the .app's CFBundleDisplayName — must match
 # Info.plist exactly or `delete login item` won't find it.
@@ -295,6 +296,35 @@ def _safe_int(val, default=0):
         # (e.g. 1e400 → inf); int(inf) would otherwise raise outside the
         # refresh's try block.
         return default
+
+
+def _display_pct(val):
+    """Round a utilization value for the displayed percentage.
+
+    _safe_int truncates (99.7 -> 99), always understating usage — fine for the
+    refresh interval (its only other caller) but misleading here. Rounds instead
+    (half up, not Python's round()-to-even: 79.5 must read 80, not 79), except
+    right at the top edge: a rounded 100 is only shown when the source itself
+    is >= 100, so "99.6%" reads as 99, not a wall that hasn't been hit yet.
+
+    This is the single source feeding the title, menu rows, ring icon AND the
+    80/95% threshold alert (see _window_row) — an alert can fire a fraction of
+    a point before the true crossing (79.6 -> shown/alerted "80"), but staying
+    one source keeps what's announced always matching what's on screen; a
+    separate un-rounded threshold check would drift from the displayed number.
+    """
+    try:
+        raw = float(val)
+    except (TypeError, ValueError, OverflowError):
+        return 0
+    if not math.isfinite(raw):
+        return 0
+    if raw <= 0:
+        return 0
+    if raw >= 100:
+        return 100
+    rounded = math.floor(raw + 0.5)  # round half up
+    return 99 if rounded >= 100 else rounded
 
 
 def _epoch_to_iso(value):
@@ -885,7 +915,7 @@ class App(rumps.App):
         # Clamp 0..100 at the source: the feed can return an aberrant % at
         # startup (Claude Code bug #52326) — otherwise it leaks into the
         # dropdown menu line and the notification (not just the title/icon).
-        pct = min(100, _safe_int(section.get("utilization")))
+        pct = _display_pct(section.get("utilization"))
         dt = _parse_iso(section.get("resets_at"))
         if dt is not None and dt <= now:
             return f"{label}: — (reset; awaiting Claude Code)", None
