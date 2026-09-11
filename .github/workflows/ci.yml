@@ -40,5 +40,5 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - run: 'pip install --only-binary=:all: "pytest==9.1.1" "Pillow==12.3.0"'   # rumps is mocked in the tests, no need to install it
+      - run: 'pip install --only-binary=:all: "pytest==9.1.1" "$(grep -i ^Pillow== requirements.txt)"'   # Pillow pin read from requirements.txt so Dependabot bumps cannot drift; rumps is mocked in the tests, no need to install it
       - run: python -m pytest -q

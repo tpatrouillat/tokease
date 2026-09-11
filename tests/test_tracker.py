@@ -2218,5 +2218,32 @@ class ResetDateIsLocalTest(unittest.TestCase):
         self.assertEqual(east, "Sep 06", "Asia sees it on the UTC date")
         self.assertNotEqual(west, east, "the date must depend on the timezone")
 
+
+class LoginItemInjectionGuardTest(unittest.TestCase):
+    """`_set_login_item` interpolates a path into an AppleScript string.
+
+    The path comes from `sys.executable`, so a quote or a backslash in it is
+    not an attack today; the guard is defence-in-depth. Nothing pinned it, so
+    a later refactor could drop the check and let a hostile install path close
+    the string literal and append its own `osascript` statement.
+    """
+
+    def test_a_path_that_could_break_the_string_never_reaches_osascript(self):
+        for path in ('/Applications/Bad"App.app',
+                     "/Applications/Bad\\App.app",
+                     "/Applications/Bad\nApp.app"):
+            with patch.object(tracker.subprocess, "run") as run:
+                tracker._set_login_item(True, path)
+            self.assertEqual(run.call_count, 0, f"{path!r} reached osascript")
+
+    def test_a_clean_path_is_embedded_in_the_script(self):
+        with patch.object(tracker.subprocess, "run") as run:
+            tracker._set_login_item(True, "/Applications/Tokease.app")
+        run.assert_called_once()
+        cmd = run.call_args[0][0]
+        self.assertEqual(cmd[0], "/usr/bin/osascript")
+        self.assertIn('path:"/Applications/Tokease.app"', cmd[-1])
+
+
 if __name__ == "__main__":
     unittest.main()
