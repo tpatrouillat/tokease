@@ -263,6 +263,11 @@ class TestAppDisplay(unittest.TestCase):
             app = tracker.App()
         return app
 
+    def test_rumps_uses_tokease_application_support_namespace(self):
+        # rumps crée Application Support/<name> : ne jamais utiliser Claude.
+        app = self._make_app()
+        self.assertEqual(app.name, "Tokease")
+
     def test_full_data_display(self):
         app = self._make_app()
         data = _make_usage(five_hour_pct=42, seven_day_pct=18)

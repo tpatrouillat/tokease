@@ -1,5 +1,11 @@
 # Changelog
 
+## v1.0.7 — 2026-09-11
+
+### Fixed
+
+- The menu bar framework (`rumps`) was initialised with the app name `Claude`, and `rumps.App.__init__` creates `~/Library/Application Support/<name>/` at startup. On a machine without the Claude desktop app, Tokease therefore created a `Claude/` directory inside the very tree PRIVACY.md promises it only ever reads. Nothing was ever written into it and no token was read, but the public read-only promise was inaccurate. The app now uses its own name, so the directory it touches is `Application Support/Tokease/` — empty, and documented in PRIVACY.md. The menu bar title, the login item name and the stored preferences (NSUserDefaults) are unaffected.
+
 ## v1.0.6 — 2026-09-07
 
 ### Fixed
