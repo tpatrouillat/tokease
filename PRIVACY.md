@@ -25,6 +25,8 @@ doesn't touch.
 
 ## What it stores
 
+- An empty `~/Library/Application Support/Tokease/` directory, created by
+  the menu bar framework (`rumps`) at startup.
 - App preferences (display mode, weekly percentage toggle, refresh interval,
   alert toggle) in the standard macOS `NSUserDefaults` for the app.
 - The captured usage windows in `~/.tokease/usage.json`, a best-effort error
