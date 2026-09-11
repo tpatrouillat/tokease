@@ -190,7 +190,7 @@ STAR_URL = "https://github.com/tpatrouillat/tokease"
 
 # Shown in the Support submenu so a bug report can state which build it is.
 # Keep in sync with setup.py and the git tag.
-__version__ = "1.0.6"
+__version__ = "1.0.7"
 
 # Login-item registration uses the .app's CFBundleDisplayName — must match
 # Info.plist exactly or `delete login item` won't find it.
@@ -600,7 +600,7 @@ class App(rumps.App):
         # crash the app, just fall back to text-only menu bar.
         icon = str(_ICON_PATH) if _ICON_PATH.exists() else None
         super().__init__(
-            "Claude", title="...", icon=icon, template=True, quit_button=None,
+            "Tokease", title="...", icon=icon, template=True, quit_button=None,
         )
         self._timer = None
         self._reset_timer = None  # one-shot threading.Timer that fires just after a usage window rolls over
