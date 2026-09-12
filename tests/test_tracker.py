@@ -12,6 +12,7 @@ management.
 import ast
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -2248,6 +2249,42 @@ class LoginItemInjectionGuardTest(unittest.TestCase):
         cmd = run.call_args[0][0]
         self.assertEqual(cmd[0], "/usr/bin/osascript")
         self.assertIn('path:"/Applications/Tokease.app"', cmd[-1])
+
+
+class VersionConsistencyTest(unittest.TestCase):
+    """The shipped version is written in three places nothing ties together.
+
+    `docs/index.html` carries a JSON-LD `softwareVersion` that search engines
+    and the landing page quote; it stayed at 1.0.6 after tracker.py and
+    setup.py moved to 1.0.7, so the public page advertised a version that was
+    never shipped. A forgotten bump is a documentation bug, not a crash, which
+    is exactly the kind nothing catches on its own.
+    """
+
+    def _extract(self, relative, pattern):
+        path = Path(__file__).resolve().parent.parent / relative
+        # Read as text: index.html is not Python, and setup.py is a py2app
+        # `setup()` call, so importing either to read a constant is off limits.
+        match = re.search(pattern, path.read_text(encoding="utf-8"))
+        self.assertIsNotNone(match, f"{relative}: no match for {pattern!r}")
+        return match.group(1)
+
+    def test_every_shipped_version_string_matches_tracker(self):
+        expected = tracker.__version__
+        found = {
+            "docs/index.html softwareVersion": self._extract(
+                "docs/index.html", r'"softwareVersion":\s*"([^"]+)"'),
+            "setup.py CFBundleVersion": self._extract(
+                "setup.py", r'"CFBundleVersion":\s*"([^"]+)"'),
+            "setup.py CFBundleShortVersionString": self._extract(
+                "setup.py", r'"CFBundleShortVersionString":\s*"([^"]+)"'),
+        }
+        for where, value in found.items():
+            self.assertEqual(
+                value, expected,
+                f"{where} says {value}, tracker.__version__ says {expected}; "
+                "a release must bump all three.",
+            )
 
 
 if __name__ == "__main__":
