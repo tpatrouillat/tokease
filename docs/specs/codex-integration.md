@@ -5,8 +5,8 @@ objections retained: the privacy wording was false, the reader did not
 filter `limit_id`, the tail bound was measured on the wrong event and the
 fallback across rollouts was not fail-closed). Status: **proposed, gated**,
 nothing implemented. The reader parses the tail of a conversation log, which
-is a product call, not a technical one: Brain decision 0004
-(`projects/Tokease/decisions/0004-lecture-du-journal-codex.md`, proposed,
+is a product call, not a technical one: Brain decision 0005
+(`projects/Tokease/decisions/0005-lecture-du-journal-codex.md`, proposed,
 unsigned) decides whether and how this ships. Sources frozen at repo
 `1b480ef` (`tracker.py`, `tests/test_tracker.py`) and Brain `12716ec`;
 measurements below on the 431 rollouts of this machine on 2026-09-13
@@ -182,7 +182,7 @@ retains nothing else.* The 2026-09-12 draft called this "the same argument
 as for the Claude desktop history"; it is not. That file holds only quota
 samples. This one is a conversation log, and reading it widens the surface
 from quota files to a journal, which is why the source is gated on Brain
-decision 0004 rather than admitted by R9 alone (ADR 0005).
+decision 0005 rather than admitted by R9 alone (ADR 0005).
 
 ### 1.5 Normalised shape
 
@@ -310,7 +310,7 @@ promise cheap on a 5.6 MB file, and the hide/show plumbing. Neither is
 optional. The 2026-09-13 revision makes the reader **smaller**, not larger:
 the `limit_id` filter is one line, the fail-closed selection removes the
 candidate loop and its constant (about 8 lines). The cost of this
-integration is not code size; it is the promise (§ 4, Brain 0004) and the
+integration is not code size; it is the promise (§ 4, Brain 0005) and the
 absence rate (§ 1.2).
 
 ### `tests/test_tracker.py` (~220 lines added, 1 changed)
@@ -400,7 +400,7 @@ PR**. Listed, not edited here (`main` is frozen; the wording is the PR's).
 | `README.md` | 53 | "Tokease merges two local, read-only sources" | still true for Claude; add that Codex is a third, separate, never merged |
 | `README.md` | 154 | "Tokease only reads two local files: `~/.tokease/usage.json` […] and […] `plan-usage-history.json`" | add `~/.codex/sessions/**/rollout-*.jsonl`: the newest one, its last 512 KB, parsed line by line from the end until the last quota event, four numbers kept, the conversation lines crossed on the way deserialised then discarded |
 | `README.md` | 187 | "It relies on local files written by Claude apps" | "written by Claude apps and the Codex CLI"; add OpenAI to the non-affiliation |
-| `PRIVACY.md` | 8–14 "What it reads" | two bullets | a third bullet for the rollout, worded as what the reader does: loads the last 512 KB of the newest Codex session log, parses it line by line from the end until the last quota event, keeps four numbers (used percentage, window length, reset time per window), discards the rest. The lines it crosses include conversation and tool output: deserialised, never kept, never written. `auth.json`, `config.toml` and everything else under `~/.codex` are never opened. **Must not say** "never reads the conversation". Final wording is Brain 0004's |
+| `PRIVACY.md` | 8–14 "What it reads" | two bullets | a third bullet for the rollout, worded as what the reader does: loads the last 512 KB of the newest Codex session log, parses it line by line from the end until the last quota event, keeps four numbers (used percentage, window length, reset time per window), discards the rest. The lines it crosses include conversation and tool output: deserialised, never kept, never written. `auth.json`, `config.toml` and everything else under `~/.codex` are never opened. **Must not say** "never reads the conversation". Final wording is Brain 0005's |
 | `PRIVACY.md` | 57 | "Not affiliated with Anthropic." | "Not affiliated with Anthropic or OpenAI." |
 | `ROADMAP.md` | 7 | "read from two local files official Claude apps already write" | three files |
 | `ROADMAP.md` | 18 | "Most don't expose limits the way Claude Code's statusline does" | Codex does (matrix § 5); row moves to "done" for Codex, stays for the four others |
@@ -417,7 +417,7 @@ user's Codex conversation, and Tokease parses its tail. The sentence to add
 is the honest one from § 1.4, not the "same argument as the desktop
 history" line of the 2026-09-12 draft, which was false. Whether that weaker
 promise ships by default, behind an opt-in, or not at all is Brain decision
-0004; this section lists what moves, the decision says whether it moves.
+0005; this section lists what moves, the decision says whether it moves.
 
 ## 5. Open points for the challenge
 
@@ -438,7 +438,7 @@ position, not settled facts.
    with no code change. Worth checking on the current Desktop build before
    the PR. This is also the ponytail question for a product ranked
    "garniture": the reader is 88 lines, but a block absent a third of the
-   time for Desktop users is a thin lead magnet. Brain 0004 is the place to
+   time for Desktop users is a thin lead magnet. Brain 0005 is the place to
    weigh it; option C there costs nothing.
 2. **mtime as recency.** A `codex resume` of an old session touches its
    mtime and its last `token_count` may be hours old; that is what the

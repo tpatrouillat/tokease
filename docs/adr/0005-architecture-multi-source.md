@@ -1,6 +1,6 @@
 # ADR 0005 — Adding a usage source without touching the token-free invariant
 
-- **Status**: Proposed (2026-09-12; revised 2026-09-13 after the Codex challenge: R9 is necessary, not sufficient; readers are fail-closed; public claims describe what the reader does). The first source under this rule, Codex, is gated on Brain decision 0004 (proposed, unsigned)
+- **Status**: Proposed (2026-09-12; revised 2026-09-13 after the Codex challenge: R9 is necessary, not sufficient; readers are fail-closed; public claims describe what the reader does). The first source under this rule, Codex, is gated on Brain decision 0005 (proposed, unsigned)
 - **Decision maker**: Thibault
 - **Affects**: `tracker.py` (acquisition and dropdown), `tests/test_tracker.py` (`TokenFreeInvariantTest`), README, `PRIVACY.md`
 - **Builds on**: [ADR 0002](0002-retrait-mode-endpoint.md) (no token, no network), [ADR 0003](0003-source-secondaire-plan-usage-desktop.md) (read a vendor's own local file, defensively)
@@ -36,7 +36,7 @@ public promise even when the reader keeps four numbers, because the reader
 deserialises those lines before discarding them. Its admission is a
 **product decision recorded in Brain** (`projects/Tokease/decisions/`), not
 a rule this ADR can grant. Codex is the first such source: gated on Brain
-decision 0004.
+decision 0005.
 
 **One reader per source, mirroring `_read_desktop_usage`**: a module-level
 path constant, one function that returns a normalised dict or `None`, every
@@ -86,7 +86,7 @@ admitted.
 - The technical promise is unchanged: still only vendor-written local
   files, still zero token, zero network paths, still one file to audit. The
   read-surface promise is not, and this ADR does not pretend it is (see
-  the first accepted limit below, and Brain 0004).
+  the first accepted limit below, and Brain 0005).
 - Adding Codex is about 88 lines and touches no Claude code path beyond two
   keyword arguments. The fail-closed rule made the reader smaller (no
   candidate loop), not larger.
@@ -100,7 +100,7 @@ admitted.
   quota event; it keeps four numbers and drops the rest. README and
   `PRIVACY.md` must say exactly that, not "read-only" and not "never reads
   the conversation". Whether the product accepts this by default, behind an
-  opt-in, or waits for a quota-only file upstream is Brain decision 0004,
+  opt-in, or waits for a quota-only file upstream is Brain decision 0005,
   not this ADR.
 - Fail-closed costs coverage: when the newest rollout carries no usable
   quota event (Codex Desktop builds seen here write `rate_limits: null`),
@@ -132,11 +132,11 @@ admitted.
   `test_newest_rollout_without_reading_is_absent` (spec § 3).
 - *Admitting Codex by R9 alone, with "same argument as the desktop history"
   in the README*: the argument was false, the file is not a quota file.
-  Rejected; the admission is a product decision (Brain 0004).
+  Rejected; the admission is a product decision (Brain 0005).
 
 ## References
 
 - [`multi-provider-feasibility.md`](../specs/multi-provider-feasibility.md) — who passes R9
 - [`codex-integration.md`](../specs/codex-integration.md) — the first source under this rule
 - [`display-strategy.md`](../specs/display-strategy.md) — R1, R3, R4, R5, R9
-- Brain `projects/Tokease/decisions/0004-lecture-du-journal-codex.md` — the product decision that gates Codex (proposed, unsigned)
+- Brain `projects/Tokease/decisions/0005-lecture-du-journal-codex.md` — the product decision that gates Codex (proposed, unsigned)
