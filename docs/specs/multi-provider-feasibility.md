@@ -23,7 +23,7 @@ show), **consumption** (tokens or requests spent, no ceiling attached),
 
 | Tool | Data that exists | Local access (no token, no network) | Freshness | Plans covered | Promise | Verdict |
 |---|---|---|---|---|---|---|
-| **Codex** (CLI, Desktop app, `codex exec`, IDE) | Quota: `primary` / `secondary` rolling windows, `used_percent`, `window_minutes`, `resets_at` epoch, plus `credits` balance and `plan_type` | **Yes.** Every turn appends a `token_count` event carrying the full `rate_limits` snapshot to the session rollout `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. Persistence is in the open-source CLI ([`codex-rs/rollout/src/policy.rs`](https://github.com/openai/codex/blob/main/codex-rs/rollout/src/policy.rs), `EventMsg::TokenCount` in the persisted list); struct in [`codex-rs/protocol/src/protocol.rs`](https://github.com/openai/codex/blob/main/codex-rs/protocol/src/protocol.rs) (`RateLimitSnapshot`, `RateLimitWindow`). Same directory for every surface: originators seen on this machine `codex-tui`, `Codex Desktop`, `codex_exec`, `orca_desktop`. | One event per turn while Codex runs (10 to 20 s apart in an active session), nothing between sessions. Same profile as the Claude Code statusline, with one advantage: it carries `resets_at`. | ChatGPT Plus, Pro, Go, Business, Edu (windows differ by plan, see § 3). API-key users: no windows. | Compatible: file written by the official client for its own `codex resume`, read-only, format public in the vendor's repo but not declared stable (same grey level as the Claude desktop history, ADR 0003) | **Integrable today. First.** |
+| **Codex** (CLI, Desktop app, `codex exec`, IDE) | Quota: `primary` / `secondary` rolling windows, `used_percent`, `window_minutes`, `resets_at` epoch, plus `credits` balance and `plan_type`. Several limit families coexist, told apart by `limit_id`: `codex` is the account quota, others are per-model or promotional (`base_model_inference`, `codex_bengalfox` seen) | **Yes, with a caveat.** Every turn appends a `token_count` event carrying the `rate_limits` snapshot to the session rollout `~/.codex/sessions/YYYY/MM/DD/rollout-*.jsonl`. Caveat: the rollout is the session's **conversation log** (messages, reasoning, tool calls and outputs, cwd), the quota event is one line among them, and the Codex Desktop builds seen here (0.152.1, 0.153.1) write `rate_limits: null` in every `token_count`. Persistence is in the open-source CLI ([`codex-rs/rollout/src/policy.rs`](https://github.com/openai/codex/blob/main/codex-rs/rollout/src/policy.rs), `EventMsg::TokenCount` in the persisted list); struct in [`codex-rs/protocol/src/protocol.rs`](https://github.com/openai/codex/blob/main/codex-rs/protocol/src/protocol.rs) (`RateLimitSnapshot`, `RateLimitWindow`). Same directory for every surface: originators seen on this machine `codex-tui`, `Codex Desktop`, `codex_exec`, `orca_desktop`. | One event per turn while Codex runs (10 to 20 s apart in an active session), nothing between sessions. Same profile as the Claude Code statusline, with one advantage: it carries `resets_at`. | ChatGPT Plus, Pro, Go, Business, Edu (windows differ by plan, see § 3). API-key users: no windows. | R9: passes (file written by the official client for its own `codex resume`, read-only, no token, no network; format public in the vendor's repo but not declared stable). Promise: **wider than ADR 0003**. The reader parses the tail of a conversation log and deserialises conversation lines before discarding them; "two quota files" and "never reads the conversation" stop being true. That is a product decision, not an R9 check (ADR 0005) | **Integrable under R9; gated on Brain decision 0004** (proposed 2026-09-13, unsigned). First if admitted. |
 | **Cursor** (IDE, `cursor-agent`) | Credits: two dollar-denominated monthly pools ("Cursor Models", "Other Models"), reset with the billing cycle, no rolling window | **No.** Usage is shown in editor settings and the web dashboard, both fetched live ([cursor.com/docs/account/pricing](https://cursor.com/docs/account/pricing): "Usage pools", "each resetting with your monthly billing cycle"; no CLI, status bar or API surface documented). On this machine `state.vscdb` holds no usage value (only `cursor.creditGrantPrimaryDismissedPromos`, `cursor.dismissedCreditGrantIds`); `~/.cursor/` has hooks, projects, `cli-config.json`, an `ai-code-tracking.db` (lines of code, not quota). Cursor hooks hand tool events to scripts, never a balance. | n/a | n/a | Only reachable through the account session (dashboard, Admin API for Teams): token plus network | **Not integrable today.** |
 | **Gemini CLI** (`gemini` 0.58.0, Code Assist) | Quota: per-model buckets with `remainingFraction`, `remainingAmount`, `resetTime` (`RetrieveUserQuotaResponse` in [`packages/core/src/code_assist/types.ts`](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/code_assist/types.ts)); plans in [docs/resources/quota-and-pricing.md](https://github.com/google-gemini/gemini-cli/blob/main/docs/resources/quota-and-pricing.md) (1,000 req/day free, 1,500 AI Pro, 2,000 Ultra) | **No.** The CLI fetches `retrieveUserQuota` over the network and keeps it in memory (`this.lastRetrievedQuota` in [`packages/core/src/config/config.ts`](https://github.com/google-gemini/gemini-cli/blob/main/packages/core/src/config/config.ts)) for `/stats model` and `ModelQuotaDisplay.tsx`. Nothing under `~/.gemini/` on this machine carries a quota: `tmp/<project>/logs.json` is the message log, `state.json` is UI state, `oauth_creds.json` is the token (never read). Hooks and telemetry carry tokens and requests, not the buckets. | n/a | n/a | Only through the Code Assist endpoint with the OAuth token: token plus network | **Not integrable today.** Cheapest unblock of the four: the CLI already has the data in memory; an upstream request to persist the last quota response locally would make it a Codex-shaped source. |
 | **Grok** (`grok` CLI 1.0.25, Grok Bot app, grok.com) | Subscription: one weekly allowance shared across Grok products, visible in grok.com "Settings → Usage" (percentage and reset). API: prepaid credits and per-model RPS/TPM in the xAI Console ([docs.x.ai/developers/rate-limits](https://docs.x.ai/developers/rate-limits)) | **No.** The bundled CLI reference (`~/.grok/README.md`, 107 KB) documents `~/.grok/sessions/<cwd>/<id>/` with `signals.json` ("session signals (turn count, token usage)"), `summary.json`, `updates.jsonl`: consumption and context, no quota. No `/usage` or `/status` command listed. `settings_cache.json` is a signed server settings payload (feature flags), no limits. `auth.json` is the token (never read). | n/a | n/a | Only through grok.com or the API with the session token: token plus network | **Not integrable today.** |
@@ -51,7 +51,9 @@ opened.
 1. **Codex.** The only one with a vendor-written local file, and it carries
    more than the Claude desktop feed does (reset times, window length, plan).
    Its user base overlaps Tokease's (people who run several agent CLIs), and
-   the reader is the same shape as `_read_desktop_usage`.
+   the reader is the same shape as `_read_desktop_usage`, but not the same
+   surface: it parses a conversation log. Blocked on Brain 0004, not on
+   code.
 2. **Gemini CLI.** Blocked, but one upstream change away: the quota response
    already lives in the process. Worth a feature request, not code.
 3. **Cursor, Grok, Lovable.** Blocked with no local surface in sight. Cursor
@@ -104,12 +106,22 @@ assume "5-hour and weekly". Rules, reusing `display-strategy.md`:
 
 ## 4. What would change the promise
 
-Nothing here requires it: Codex fits under R9 as written. The four others
-would need a network call with the user's token, which is exactly what ADR
-0002 removed. That is a product decision if it is ever wanted, drafted (not
-signed) in Brain `projects/Tokease/decisions/0004-…`. Watch list that would
-unblock a tool without touching the promise:
+Codex fits under R9 as written, but R9 covers where the file comes from and
+what the reader may not do, not what else the file holds. The rollout is a
+conversation log; parsing its tail weakens the "two quota files" wording of
+README and `PRIVACY.md` even though four numbers are kept. That is the
+product decision drafted (not signed) in Brain
+`projects/Tokease/decisions/0004-lecture-du-journal-codex.md`: default with
+exact wording, explicit opt-in, or wait for a quota-only file upstream. The
+2026-09-12 draft of this section said "nothing here requires it"; that was
+wrong. The four others would need a network call with the user's token,
+which is exactly what ADR 0002 removed: a further, separate product
+decision if ever wanted, not drafted. Watch list that would unblock a tool
+without touching the promise:
 
+- Codex CLI persists its last `RateLimitSnapshot` in a dedicated file under
+  `~/.codex` (option C of Brain 0004): the source becomes a quota file, R9
+  suffices, the conversation log is never opened.
 - Gemini CLI persists its last `retrieveUserQuota` response under `~/.gemini`.
 - Cursor adds a usage payload to its hooks, or `cursor-agent` writes a
   status file.
@@ -126,6 +138,8 @@ unblock a tool without touching the promise:
   way Claude Code's statusline does". Verified: true for four, false for
   Codex, which exposes strictly more (window length, plan, credits).
 - README and `PRIVACY.md` bind the product to "two local files" and "one
-  1,000-line file". A Codex source makes it three files and about 1,050
-  lines; both claims must move with the code (see the integration spec).
-  Not a deviation from the brief, but a public claim the brief does not list.
+  1,000-line file". A Codex source makes it two quota files plus the tail
+  of a conversation log, and about 1,090 lines; both claims must move with
+  the code (see the integration spec § 4), and the first one gets weaker,
+  which is Brain 0004's call. Not a deviation from the brief, but a public
+  claim the brief does not list.
