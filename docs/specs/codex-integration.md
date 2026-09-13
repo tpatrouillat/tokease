@@ -3,11 +3,16 @@
 Date: 2026-09-12, revised 2026-09-13 after the Codex challenge (three
 objections retained: the privacy wording was false, the reader did not
 filter `limit_id`, the tail bound was measured on the wrong event and the
-fallback across rollouts was not fail-closed). Status: **proposed, gated**,
-nothing implemented. The reader parses the tail of a conversation log, which
-is a product call, not a technical one: Brain decision 0005
-(`projects/Tokease/decisions/0005-lecture-du-journal-codex.md`, proposed,
-unsigned) decides whether and how this ships. Sources frozen at repo
+fallback across rollouts was not fail-closed). Status: **ARCHIVED — not shipping.**
+Brain decision 0005
+(`projects/Tokease/decisions/0005-lecture-du-journal-codex.md`) was signed on
+2026-09-13 with **option C**: Tokease does not widen its reading surface from a
+quota-only file to the tail of a conversation log. Reason: the Codex block is
+absent 31 % of the time anyway (Codex Desktop writes `rate_limits: null` every
+turn), so the trust cost buys no reliability. Nothing here is implemented and
+nothing should be. This document is kept as the measured record — it becomes
+live again only if the Codex CLI persists its `RateLimitSnapshot` to a
+dedicated file, at which point R9 suffices and no product decision is needed. Sources frozen at repo
 `1b480ef` (`tracker.py`, `tests/test_tracker.py`) and Brain `12716ec`;
 measurements below on the 431 rollouts of this machine on 2026-09-13
 (read-only, `auth.json` never opened).
