@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Tokease — Uninstall (source install / LaunchAgent).
+# Tokease — Uninstall (source and Homebrew installs).
 #
 # Removes everything install.sh + statusline/install-statusline.sh created:
 #   - the LaunchAgent (auto-start) and any running tracker process
@@ -8,8 +8,10 @@
 #   - the captured-data directory ~/.tokease/
 # Touches NEITHER your Claude Code install NOR your subscription.
 #
-# Installed via Homebrew instead? Use:
+# Installed via Homebrew? Run this script first (from the formula's libexec):
+#   bash "$(brew --prefix)/opt/tokease/libexec/uninstall.sh"
 #   brew services stop tokease && brew uninstall tokease
+# `brew uninstall` alone leaves ~/.tokease/ and the statusline wiring in place.
 #
 set -euo pipefail
 

@@ -38,7 +38,7 @@ Pick **one** of the following based on what issues and comments actually ask for
 
 ### If interest is steady but modest
 
-No v1.1 work. v1.0.1 polish only — bug fixes, UX hardening, more tests around edge cases users report.
+No v1.1 work. v1.0.x polish only — bug fixes, UX hardening, more tests around edge cases users report.
 
 **Tracked polish ideas:**
 - **Signed and notarized `.app` (double-click install)** — the py2app build already works (`build.sh` produces `Tokease.app`). What's missing is the Apple Developer Program (~99 USD/year) for codesigning and notarization. Without it, a downloaded `.app` hits Gatekeeper's "can't be opened" dialog, which is a worse first impression than the one-line brew install. Worth the yearly fee if launch traction justifies it.
