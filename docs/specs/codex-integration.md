@@ -7,9 +7,10 @@ fallback across rollouts was not fail-closed). Status: **ARCHIVED — not shippi
 Brain decision 0005
 (`projects/Tokease/decisions/0005-lecture-du-journal-codex.md`) was signed on
 2026-09-13 with **option C**: Tokease does not widen its reading surface from a
-quota-only file to the tail of a conversation log. Reason: the Codex block is
-absent 31 % of the time anyway (Codex Desktop writes `rate_limits: null` every
-turn), so the trust cost buys no reliability. Nothing here is implemented and
+quota-only file to the tail of a conversation log. Reason: the trust cost buys no
+reliability — under the newest-file-only rule the block would be absent 31 % of
+**September wall time** here (§ 1.2), and no Codex Desktop file in the sample
+ever carries a quota value. Nothing here is implemented and
 nothing should be. This document is kept as the measured record — it becomes
 live again only if the Codex CLI persists its `RateLimitSnapshot` to a
 dedicated file, at which point R9 suffices and no product decision is needed. Sources frozen at repo
