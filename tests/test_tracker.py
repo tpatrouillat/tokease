@@ -411,6 +411,16 @@ class TestMainThreadMarshalling(unittest.TestCase):
             app._fetch_and_update()
         marshall.assert_called_once_with(app._apply_usage, {"foo": "bar"}, None)
 
+    def test_a_raising_fetch_still_reports_an_error_on_the_main_thread(self):
+        # If the worker thread dies on an unexpected exception, _apply_usage is
+        # never called and the menu bar freezes on "..." forever. The catch-all
+        # must degrade to the generic error state instead of vanishing.
+        app = self._make_app()
+        with patch.object(tracker, "_call_on_main") as marshall, \
+             patch.object(tracker, "fetch_usage", side_effect=RuntimeError("boom")):
+            app._fetch_and_update()
+        marshall.assert_called_once_with(app._apply_usage, None, "error")
+
     def test_reset_timer_callback_marshals_refresh(self):
         app = self._make_app()
         future = (datetime.now(timezone.utc) + timedelta(minutes=10)).isoformat().replace("+00:00", "Z")
@@ -1004,6 +1014,16 @@ class TestStatuslineSource(unittest.TestCase):
         _, err = tracker.fetch_usage()
         self.assertEqual(err, "error")
 
+    def test_unreadable_path_is_an_error_not_a_missing_statusline(self):
+        # 'nostatusline' means "never wired up" and walks the user through the
+        # setup; 'error' means "wired but broken". Only FileNotFoundError is
+        # the former — any other OSError (here a directory in the file's
+        # place, which raises IsADirectoryError) must not be mistaken for it.
+        self._file.mkdir()
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(data)
+        self.assertEqual(err, "error")
+
     def test_normalizes_both_windows(self):
         self._write({
             "schema": 1, "captured_at": 1799999000,
@@ -1370,6 +1390,30 @@ class TestStatuslineDisplay(unittest.TestCase):
         app.title_weekly = True
         app._update_display(self._data(five=43, week=25))
         self.assertIn("43% / 25%", app.title)
+
+    def test_toggling_weekly_from_the_menu_flips_persists_and_re_renders(self):
+        # The other weekly tests set the attribute directly, so the callback
+        # wired to the menu item was never exercised: a toggle that forgot to
+        # persist or to re-render would have gone unnoticed until a restart.
+        app = self._make_app()
+        self.assertFalse(app.title_weekly)
+        self.assertEqual(app.m_weekly.state, 0)
+
+        with patch("tracker._settings_set") as save, \
+             patch.object(app, "_refresh") as rerender:
+            app._toggle_title_weekly(app.m_weekly)
+        self.assertTrue(app.title_weekly)
+        self.assertEqual(app.m_weekly.state, 1)
+        save.assert_called_once_with(tracker._KEY_TITLE_WEEKLY, True)
+        rerender.assert_called_once_with(None)
+
+        with patch("tracker._settings_set") as save, \
+             patch.object(app, "_refresh") as rerender:
+            app._toggle_title_weekly(app.m_weekly)
+        self.assertFalse(app.title_weekly)
+        self.assertEqual(app.m_weekly.state, 0)
+        save.assert_called_once_with(tracker._KEY_TITLE_WEEKLY, False)
+        rerender.assert_called_once_with(None)
 
     def test_title_weekly_dash_when_window_absent(self):
         app = self._make_app()
@@ -2285,6 +2329,57 @@ class VersionConsistencyTest(unittest.TestCase):
                 f"{where} says {value}, tracker.__version__ says {expected}; "
                 "a release must bump all three.",
             )
+
+
+class LineCountClaimTest(unittest.TestCase):
+    """The auditability pitch is a number, and nothing checked the number.
+
+    README.md and docs/index.html both sell Tokease as "a 1,000-line Python
+    file, plus a 178-line script" — that size *is* the product promise: it is
+    what makes "read it before you run it" credible. But the claim lived only
+    in prose, so any edit to tracker.py or the statusline script silently
+    turned the public pitch into a false statement. Six of the last twelve
+    changes to this repo were doc/claim drift fixes, which makes this the
+    cheapest tripwire available: tie the sentence to the files it describes.
+    """
+
+    def _line_count(self, relative):
+        path = Path(__file__).resolve().parent.parent / relative
+        # `wc -l` semantics: both files end with a trailing newline, so
+        # counting "\n" is the same number a reader gets from the shell.
+        return path.read_text(encoding="utf-8").count("\n")
+
+    def test_the_line_count_claims_match_the_shipped_files(self):
+        tracker_claim = f"{self._line_count('tracker.py'):,}"
+        script_claim = str(self._line_count("statusline/tokease-statusline.py"))
+        # Both wordings vary across the pages ("1,000-line Python file",
+        # "1,000-line file", "178-line script", "178-line optional capture
+        # script"), so the patterns stay loose on the adjectives and strict on
+        # the noun that identifies which file is being described.
+        claims = (
+            ("tracker.py", r"(\d[\d,]*)-line (?:Python )?file", tracker_claim),
+            ("the statusline script",
+             r"(\d[\d,]*)-line (?:optional )?(?:capture )?script", script_claim),
+        )
+        for relative in ("README.md", "docs/index.html"):
+            path = Path(__file__).resolve().parent.parent / relative
+            text = path.read_text(encoding="utf-8")
+            for what, pattern, expected in claims:
+                found = re.findall(pattern, text)
+                self.assertTrue(
+                    found,
+                    f"{relative}: no {what} line-count claim matched "
+                    f"{pattern!r}. Either the claim was dropped or its wording "
+                    "changed — update this pattern so the number stays guarded.",
+                )
+                for value in found:
+                    self.assertEqual(
+                        value, expected,
+                        f"{relative} claims a {value}-line {what}, but the "
+                        f"shipped file is {expected} lines. The size claim is "
+                        "the auditability argument: fix the prose (or the "
+                        "file) so the public promise stays true.",
+                    )
 
 
 if __name__ == "__main__":
