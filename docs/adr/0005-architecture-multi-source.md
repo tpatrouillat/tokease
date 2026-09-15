@@ -1,6 +1,6 @@
 # ADR 0005 — Adding a usage source without touching the token-free invariant
 
-- **Status**: Proposed (2026-09-12; revised 2026-09-13 after the Codex challenge: R9 is necessary, not sufficient; readers are fail-closed; public claims describe what the reader does). The first source under this rule, Codex, is gated on Brain decision 0005 (proposed, unsigned)
+- **Status**: Proposed (2026-09-12; revised 2026-09-13 after the Codex challenge: R9 is necessary, not sufficient; readers are fail-closed; public claims describe what the reader does). The first source under this rule, Codex, is **not being built**: Brain decision 0005 was signed on 2026-09-13 as option C — wait for a quota-only file upstream rather than read a conversation log. This ADR therefore describes the rule a future source must satisfy, not work in progress
 - **Decision maker**: Thibault
 - **Affects**: `tracker.py` (acquisition and dropdown), `tests/test_tracker.py` (`TokenFreeInvariantTest`), README, `PRIVACY.md`
 - **Builds on**: [ADR 0002](0002-retrait-mode-endpoint.md) (no token, no network), [ADR 0003](0003-source-secondaire-plan-usage-desktop.md) (read a vendor's own local file, defensively)
