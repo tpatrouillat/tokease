@@ -5,7 +5,7 @@ extend-exclude = ["assets", "graphify-out", "docs", "venv"]  # scripts and artif
 
 [tool.ruff.lint]
 extend-select = ["S"]                 # keep the ruff defaults and add S, flake8-bandit for security
-ignore = ["S603", "S607"]            # subprocess with controlled input (osascript, `claude`), reviewed as safe
+ignore = ["S603", "S607"]            # subprocess with controlled input (osascript only), reviewed as safe
 
 [tool.ruff.lint.per-file-ignores]
 "tests/*" = ["S101", "S105", "S106", "S107"]   # asserts and dummy tokens are expected in tests
