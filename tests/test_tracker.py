@@ -2294,6 +2294,115 @@ class LoginItemInjectionGuardTest(unittest.TestCase):
         self.assertEqual(cmd[0], "/usr/bin/osascript")
         self.assertIn('path:"/Applications/Tokease.app"', cmd[-1])
 
+    def test_the_guard_also_covers_the_disable_branch(self):
+        # The delete script interpolates LOGIN_ITEM_NAME rather than the path,
+        # so the branch looks safe on its own; the guard only holds because it
+        # runs before the branch. Moving it inside the `enabled` arm would open
+        # the hole back up without touching the enable path this class pins.
+        for path in ('/Applications/Bad"App.app',
+                     "/Applications/Bad\\App.app",
+                     "/Applications/Bad\nApp.app"):
+            with patch.object(tracker.subprocess, "run") as run:
+                tracker._set_login_item(False, path)
+            self.assertEqual(run.call_count, 0, f"{path!r} reached osascript")
+
+    def test_a_clean_path_disables_by_deleting_the_named_login_item(self):
+        with patch.object(tracker.subprocess, "run") as run:
+            tracker._set_login_item(False, "/Applications/Tokease.app")
+        run.assert_called_once()
+        cmd = run.call_args[0][0]
+        self.assertEqual(cmd[0], "/usr/bin/osascript")
+        self.assertIn(f'delete login item "{tracker.LOGIN_ITEM_NAME}"', cmd[-1])
+
+
+class LoginItemStateTest(unittest.TestCase):
+    """The "Launch at login" checkmark claims to mirror System Events.
+
+    Three pieces hold that claim up and none were covered: `_get_app_path`
+    gates the whole feature (no `.app` bundle → the menu item is greyed out
+    instead of writing a login item pointing at a python interpreter),
+    `_is_login_item` is what the checkmark reflects, and `_toggle_login`
+    deliberately re-queries System Events instead of trusting its own write,
+    because the user can deny the Automation prompt. A refactor that let
+    `_is_login_item` raise, or that made `_toggle_login` trust the state the
+    user asked for, would leave the menu lying about the real login item.
+    """
+
+    APP_PATH = "/Applications/Tokease.app"
+    BUNDLED_EXE = "/Applications/Tokease.app/Contents/MacOS/Tokease"
+
+    def _osascript(self, stdout):
+        """A minimal stand-in for the CompletedProcess osascript returns."""
+        return SimpleNamespace(stdout=stdout, stderr="", returncode=0)
+
+    # --- _get_app_path ---------------------------------------------------
+    def test_an_unfrozen_interpreter_has_no_app_path(self):
+        # Same executable as the frozen case below: only sys.frozen decides.
+        with patch.object(tracker.sys, "executable", self.BUNDLED_EXE):
+            self.assertFalse(hasattr(tracker.sys, "frozen"),
+                             "the test runner is not a py2app bundle")
+            self.assertIsNone(
+                tracker._get_app_path(),
+                "outside a bundle the path must not be inferred from "
+                "sys.executable alone",
+            )
+
+    def test_a_frozen_executable_resolves_to_its_bundle(self):
+        with patch.object(tracker.sys, "frozen", "macosx_app", create=True), \
+             patch.object(tracker.sys, "executable", self.BUNDLED_EXE):
+            self.assertEqual(tracker._get_app_path(), self.APP_PATH)
+
+    # --- _is_login_item --------------------------------------------------
+    def test_the_login_item_is_read_from_the_osascript_listing(self):
+        listing = f"Docker, {tracker.LOGIN_ITEM_NAME}, Rectangle"
+        with patch.object(tracker.subprocess, "run",
+                          return_value=self._osascript(listing)) as run:
+            self.assertTrue(tracker._is_login_item())
+        self.assertEqual(run.call_args[0][0][0], "/usr/bin/osascript")
+
+    def test_an_absent_login_item_reads_as_off(self):
+        with patch.object(tracker.subprocess, "run",
+                          return_value=self._osascript("Docker, Rectangle")):
+            self.assertFalse(tracker._is_login_item())
+
+    def test_a_failing_osascript_reads_as_off_instead_of_raising(self):
+        # osascript is missing, blocked or hung: the menu must still build.
+        for exc in (OSError("no osascript"),
+                    subprocess.TimeoutExpired("/usr/bin/osascript", 5)):
+            with self.subTest(exc=type(exc).__name__):
+                with patch.object(tracker.subprocess, "run", side_effect=exc):
+                    self.assertFalse(tracker._is_login_item())
+
+    # --- _toggle_login ---------------------------------------------------
+    def _toggle(self, state, now_registered):
+        """Run the callback against a fake sender; return it and the write mock."""
+        sender = FakeMenuItem("Launch at login")
+        sender.state = state
+        with patch.object(tracker, "_set_login_item") as set_item, \
+             patch.object(tracker, "_is_login_item", return_value=now_registered):
+            tracker.App._toggle_login(
+                SimpleNamespace(_app_path=self.APP_PATH), sender)
+        return sender, set_item
+
+    def test_toggling_on_registers_the_bundle_and_ticks_the_box(self):
+        sender, set_item = self._toggle(state=0, now_registered=True)
+        set_item.assert_called_once_with(True, self.APP_PATH)
+        self.assertEqual(sender.state, 1)
+
+    def test_toggling_off_unregisters_and_unticks_the_box(self):
+        sender, set_item = self._toggle(state=1, now_registered=False)
+        set_item.assert_called_once_with(False, self.APP_PATH)
+        self.assertEqual(sender.state, 0)
+
+    def test_a_denied_automation_prompt_leaves_the_box_unticked(self):
+        # _set_login_item swallows the failure, so the checkmark can only come
+        # from System Events — never from the state the user asked for.
+        sender, set_item = self._toggle(state=0, now_registered=False)
+        set_item.assert_called_once_with(True, self.APP_PATH)
+        self.assertEqual(
+            sender.state, 0,
+            "the write failed silently; the menu must not claim it worked")
+
 
 class VersionConsistencyTest(unittest.TestCase):
     """The shipped version is written in three places nothing ties together.
