@@ -4,9 +4,10 @@ Ref: [ADR 0001](../adr/0001-pivot-source-statusline.md) and
 [ADR 0002](../adr/0002-retrait-mode-endpoint.md). Describes the contract
 between the statusline script (producer) and the menu bar app (consumer).
 
-> Since [ADR 0002](../adr/0002-retrait-mode-endpoint.md), the statusline is the
-> **only** data source: the endpoint mode is removed from v1.0 (frozen at the
-> tag `v0.9.0-endpoint`). Tokease therefore never reads the token.
+> Since [ADR 0002](../adr/0002-retrait-mode-endpoint.md), the endpoint mode is removed from v1.0 (frozen at the
+> tag `v0.9.0-endpoint`). Tokease therefore never reads the token. The statusline is the only source that provides
+> reset countdowns; [ADR 0003](../adr/0003-source-secondaire-plan-usage-desktop.md) added a second, read-only source
+> (the Claude desktop app quota history), and the fresher of the two wins.
 
 ## Overview
 
@@ -91,7 +92,9 @@ Claude Code allows only **one** statusline command (`settings.json` →
    `python3 ~/.tokease/tokease-statusline.py` (the installer copies the script there).
 2. **Existing statusline**: insert the capture *snippet* (3 lines) at the top
    of the existing script. It writes the file, then leaves the original
-   display intact. (We never modify `settings.json` automatically: the risk is
-   overwriting an existing statusline.)
+   display intact. (The installer only adds the `statusLine` block when no
+   `statusLine.command` already exists, after taking a timestamped backup;
+   an existing statusline is never overwritten — see
+   `statusline/install-statusline.sh`'s `write_with_jq`.)
 
 Details and snippet: `statusline/README.md`.

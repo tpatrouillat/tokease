@@ -30,7 +30,7 @@ pip install ruff pytest        # dev tools
 - Use [Conventional Commits](https://www.conventionalcommits.org/)
   (`fix:`, `feat:`, `docs:`, `chore:`…).
 - Keep PRs focused; describe what changed and why.
-- CI (ruff + pytest across Python 3.10–3.13) must be green.
+- CI (ruff + pytest across Python 3.10–3.14) must be green.
 
 ## Reporting bugs
 

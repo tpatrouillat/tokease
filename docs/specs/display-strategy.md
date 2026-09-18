@@ -1,7 +1,9 @@
 # Spec: display strategy (what the menu bar shows, and why)
 
-Date: 2026-09-04. Status: proposed. Describes the code on
-`fix/display-strategy-gaps` (176 tests green).
+Date: 2026-09-04, re-read 2026-09-11. Status: implemented (section 7.4
+choices still open). Describes the code on `main` after
+`fix/display-strategy-gaps` (PR #21) and `fix/pre-reset-guard` (PR #22);
+196 tests green.
 
 Revision note. The first version of this document was written against
 `main` after `fix/honest-freshness` and listed five gaps, GAP-1 to GAP-5.
@@ -17,7 +19,7 @@ GAP-5b are closed as FIXED-6 and FIXED-7.
 Refs: [ADR 0001](../adr/0001-pivot-source-statusline.md) (statusline source),
 [ADR 0003](../adr/0003-source-secondaire-plan-usage-desktop.md) (desktop
 source), [ADR 0004](../adr/0004-garde-pre-reset-capture-partielle.md)
-(accepted, option A, the pre-reset guard of FIXED-9),
+(accepted, option A, the pre-reset guard of FIXED-10),
 [statusline-data-source.md](statusline-data-source.md) (file contract),
 [honest-freshness.md](honest-freshness.md) (the 26 % incident).
 
@@ -212,7 +214,8 @@ Columns: source retained, what the menu bar shows in the "icon + percentage"
 and "percentage only" modes (icon mode shows the rings only), dropdown, and
 whether an alert can fire at that render. Verdict: **OK** (code matches the
 rules), **FIXED-n** (a gap of the first version, closed on
-`fix/display-strategy-gaps`, section 7.2), **GAP-n** (section 7.3),
+`fix/display-strategy-gaps`, section 7.2, or on `fix/pre-reset-guard`,
+section 7.3), **GAP-n** (none left),
 **CHOICE-n** (section 7.4).
 
 Notation: `5h` and `7d` are the readings, `t` is their age at render.
@@ -261,7 +264,7 @@ The CLI user's case.
 | C4 | Desktop newer, statusline 5h `resets_at` passed, desktop sampled **before** the reset | statusline window (void) | `—` | `reset; awaiting Claude Code` (the next desktop sample will resolve it, not Claude Code) | re-anchored | OK, wording in 7.4 |
 | C5 | Statusline newer but windowless (session start) | desktop wholesale, desktop timestamp | `42%` | `via Claude app` | | OK (PR #15 then #16 fix) |
 | C6 | Statusline partial (weekly only, the reset-drop capture of B4), desktop ≤ 20 min and sampled **after** the reset | desktop wholesale when its sample is newer than the measurement the capture repeats, which is the usual case after an idle terminal (FIXED-8), otherwise statusline weekly + desktop 5h dated from the desktop sample (FIXED-3) | `12%` | `resets --`, `Updated` at the desktop sample time, `via Claude app` | baseline follows (no reset time on the filled window) | OK |
-| C7 | Same as C6 but the desktop sample **predates** the reset that caused the drop | same routing as C6, the desktop 5h describes the old window either way. The desktop-newer branch only has a pre-reset guard when the statusline window carries the reset time, which the reset-drop capture no longer does | `100%` was shown as fresh for up to one desktop cadence | `Updated` at the desktop sample time (FIXED-3 changes the date, not the number) | none | FIXED-9 (ADR 0004, option A) |
+| C7 | Same as C6 but the desktop sample **predates** the reset that caused the drop | same routing as C6, the desktop 5h describes the old window either way. The desktop-newer branch only has a pre-reset guard when the statusline window carries the reset time, which the reset-drop capture no longer does | `100%` was shown as fresh for up to one desktop cadence | `Updated` at the desktop sample time (FIXED-3 changes the date, not the number) | none | FIXED-10 (ADR 0004, option A) |
 | C8 | Statusline newer and partial, desktop aged | statusline only | `—` for the missing window | | | OK |
 | C9 | Desktop newer, a window missing from the desktop sample (not observed in a month of data) | desktop + statusline window if statusline ≤ 20 min | | | | OK |
 | C10 | Idle session re-rendered (B6) while the desktop has a fresher true value | desktop, being fresher | `81%` from the desktop, the display no longer goes backwards | `via Claude app` | once | FIXED-4: the re-run keeps the measurement's timestamp, so the desktop sample outranks it |
@@ -343,7 +346,7 @@ The core of the strategy is in place and matches R1 to R9:
 - Every source is parsed defensively and read-only. The capture script
   cannot raise and never overwrites good windows with an empty render.
 
-Tests cover each of these (176 green on `fix/display-strategy-gaps`).
+Tests cover each of these (196 green on `main`).
 
 ### 7.2 Fixed on `fix/display-strategy-gaps`
 
@@ -404,7 +407,7 @@ Checked: the fill only happens when the desktop sample is at most 20
 minutes old, so the merged age never reaches the `~` threshold or the age
 ceiling through this path, and the desktop-newer branch already dated the
 merge from the desktop sample. R8 is rewritten above. This is not a fix for
-C7: the filled window could describe the old window (FIXED-9). The `via`
+C7: the filled window could describe the old window (FIXED-10). The `via`
 label now names the desktop next to the desktop's time (FIXED-7).
 
 **FIXED-4 (was GAP-3, for the identical-capture case). `captured_at` was
@@ -521,12 +524,13 @@ with no number stays unmarked (FIXED-6). Five older tests built their usage
 dict without any `_meta`, which the new rule reads as an unknown age, and now
 carry a fresh capture time so they keep testing what they were written for.
 
-### 7.3 Gaps still open
+### 7.3 Closed after the branch
 
-One gap is left. It gives the location and the constraint, the design is
-opened in ADR 0004. It fits inside R9.
+No gap is left. GAP-4, the last one, was closed by `fix/pre-reset-guard`
+(PR #22) once ADR 0004 was accepted (option A). The entry keeps the original
+diagnosis; the constraint it states still holds and fits inside R9.
 
-**FIXED-9 (was GAP-4). The partial-capture fill now has a pre-reset guard.**
+**FIXED-10 (was GAP-4). The partial-capture fill now has a pre-reset guard.**
 Not touched by the branch. The fill in `_merge_usage` copies the desktop 5h
 window whenever the desktop sample is at most 20 minutes old, and the
 desktop reading it takes, through the fill or through the desktop-newer
@@ -626,7 +630,7 @@ settled in 7.4).
 Updated on `fix/display-strategy-gaps`: ADR 0003 now states the age ceiling,
 the new-window re-anchor on a reset time never seen, and the mixed merge
 dated from the older source. `docs/CHANGELOG.md` lists each behaviour. ADR
-0004 (accepted, option A) closes GAP-4 as FIXED-9.
+0004 (accepted, option A) closes GAP-4 as FIXED-10.
 
 Revised on `fix/display-strategy-gaps`: `statusline-data-source.md` (20-minute
 threshold, statusline as primary rather than only source), `honest-freshness.md`

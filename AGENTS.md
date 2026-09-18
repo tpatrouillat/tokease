@@ -29,6 +29,8 @@ ruff check .
 python -m pytest
 ```
 
+CI pins ruff to the exact version in `.github/workflows/ci.yml` (currently `ruff==0.15.22`) — install that same version locally (`pip install ruff==0.15.22`) before `ruff check .`, since a newer/unpinned ruff turns on ~400 extra default rules and reports errors CI never sees (this already broke CI once).
+
 ## Things to watch
 
 - The quota reader must **never** read an authentication token: that is the product's public promise ([ADR 0002](docs/adr/0002-retrait-mode-endpoint.md)), verified in CI by `TokenFreeInvariantTest` (tests/test_tracker.py), which reads the AST of every shipped file. It is a regression tripwire, not a proof: the file staying small enough to read remains the real argument.
