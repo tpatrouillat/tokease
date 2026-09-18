@@ -15,6 +15,14 @@
 #
 set -euo pipefail
 
+# `set -u` aborts on an *unset* HOME, but an empty one survives it: every path
+# below would then resolve against the filesystem root, and step 3 would run
+# `rm -rf /.tokease`. Refuse before the first $HOME-derived path is built.
+if [[ -z "${HOME:-}" ]]; then
+  echo "error: HOME is unset or empty — refusing to guess which paths to delete." >&2
+  exit 1
+fi
+
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/com.tpatrouillat.tokease.plist"
 TOKEASE_DIR="$HOME/.tokease"
