@@ -163,7 +163,7 @@ A local, opt-in **drift estimator** (estimate usage between captures from the lo
 venv/bin/python -m unittest discover -s tests
 ```
 
-(Works with the install-script venv as-is. CI runs the same suite via `pytest` across Python 3.10–3.13. To run it that way locally: `pip install pytest && python -m pytest -q`.)
+(Works with the install-script venv as-is. CI runs the same suite via `pytest` across Python 3.10–3.14. To run it that way locally: `pip install pytest && python -m pytest -q`.)
 
 Tests cover both source readers, the freshness merge, reset logic, time formatting, and display logic using mocked data (no real API calls).
 
