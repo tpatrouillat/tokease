@@ -1582,6 +1582,37 @@ class TestStatuslineScript(unittest.TestCase):
         err = Path(td.name) / ".tokease" / "statusline.err"
         self.assertNotIn("AttributeError", err.read_text(encoding="utf-8") if err.exists() else "")
 
+    def test_error_log_restarts_past_the_cap(self):
+        # The script runs several times a minute, so a failure that repeats on
+        # every tick must not grow statusline.err forever. Past the cap the log
+        # starts over: what a bug report needs is the newest error, not the first.
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        err = Path(td.name) / ".tokease" / "statusline.err"
+        err.parent.mkdir(parents=True)
+        err.write_text("0 old\n" * 20000, encoding="utf-8")
+        self.assertGreater(err.stat().st_size, 64 * 1024)  # the file really is over the cap
+        proc, _ = self._run_in(td.name, "not json {{{")
+        self.assertEqual(proc.returncode, 0)  # must never crash the statusline
+        lines = err.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertIn("stdin not JSON", lines[0])
+
+    def test_error_log_appends_below_the_cap(self):
+        # Guard on the other side of the cap: an ordinary log still accumulates,
+        # so a handful of errors keeps its history.
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        err = Path(td.name) / ".tokease" / "statusline.err"
+        err.parent.mkdir(parents=True)
+        err.write_text("0 earlier\n", encoding="utf-8")
+        proc, _ = self._run_in(td.name, "not json {{{")
+        self.assertEqual(proc.returncode, 0)
+        lines = err.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(lines[0], "0 earlier")
+        self.assertIn("stdin not JSON", lines[1])
+
     def test_no_rate_limits_writes_windowless_file_when_none_existed(self):
         # First capture of a session: nothing to preserve, so a windowless
         # file is written (the app then shows "waiting", which is accurate).
