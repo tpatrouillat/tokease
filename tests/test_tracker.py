@@ -12,6 +12,7 @@ management.
 import ast
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -496,6 +497,16 @@ class TestConstants(unittest.TestCase):
     def test_two_rings_only(self):
         # Icon geometry = 2 rings (outer 5h, inner weekly).
         self.assertEqual(len(tracker._RING_RADII), 2)
+
+    def test_version_matches_setup_py(self):
+        # tracker.py says "Keep in sync with setup.py and the git tag";
+        # a release that bumps one and not the other would ship a Support
+        # menu label that contradicts the .app's Info.plist.
+        setup_src = (Path(__file__).resolve().parent.parent / "setup.py").read_text()
+        for key in ("CFBundleVersion", "CFBundleShortVersionString"):
+            m = re.search(rf'"{key}":\s*"([^"]+)"', setup_src)
+            self.assertIsNotNone(m, f"{key} not found in setup.py")
+            self.assertEqual(m.group(1), tracker.__version__, key)
 
 
 # ---------------------------------------------------------------------------
