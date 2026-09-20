@@ -12,6 +12,7 @@ management.
 import ast
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -496,6 +497,16 @@ class TestConstants(unittest.TestCase):
     def test_two_rings_only(self):
         # Icon geometry = 2 rings (outer 5h, inner weekly).
         self.assertEqual(len(tracker._RING_RADII), 2)
+
+    def test_version_matches_setup_py(self):
+        # tracker.py says "Keep in sync with setup.py and the git tag";
+        # a release that bumps one and not the other would ship a Support
+        # menu label that contradicts the .app's Info.plist.
+        setup_src = (Path(__file__).resolve().parent.parent / "setup.py").read_text()
+        for key in ("CFBundleVersion", "CFBundleShortVersionString"):
+            m = re.search(rf'"{key}":\s*"([^"]+)"', setup_src)
+            self.assertIsNotNone(m, f"{key} not found in setup.py")
+            self.assertEqual(m.group(1), tracker.__version__, key)
 
 
 # ---------------------------------------------------------------------------
@@ -1581,6 +1592,37 @@ class TestStatuslineScript(unittest.TestCase):
         self.assertIn("five_hour", payload)
         err = Path(td.name) / ".tokease" / "statusline.err"
         self.assertNotIn("AttributeError", err.read_text(encoding="utf-8") if err.exists() else "")
+
+    def test_error_log_restarts_past_the_cap(self):
+        # The script runs several times a minute, so a failure that repeats on
+        # every tick must not grow statusline.err forever. Past the cap the log
+        # starts over: what a bug report needs is the newest error, not the first.
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        err = Path(td.name) / ".tokease" / "statusline.err"
+        err.parent.mkdir(parents=True)
+        err.write_text("0 old\n" * 20000, encoding="utf-8")
+        self.assertGreater(err.stat().st_size, 64 * 1024)  # the file really is over the cap
+        proc, _ = self._run_in(td.name, "not json {{{")
+        self.assertEqual(proc.returncode, 0)  # must never crash the statusline
+        lines = err.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 1)
+        self.assertIn("stdin not JSON", lines[0])
+
+    def test_error_log_appends_below_the_cap(self):
+        # Guard on the other side of the cap: an ordinary log still accumulates,
+        # so a handful of errors keeps its history.
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        err = Path(td.name) / ".tokease" / "statusline.err"
+        err.parent.mkdir(parents=True)
+        err.write_text("0 earlier\n", encoding="utf-8")
+        proc, _ = self._run_in(td.name, "not json {{{")
+        self.assertEqual(proc.returncode, 0)
+        lines = err.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 2)
+        self.assertEqual(lines[0], "0 earlier")
+        self.assertIn("stdin not JSON", lines[1])
 
     def test_no_rate_limits_writes_windowless_file_when_none_existed(self):
         # First capture of a session: nothing to preserve, so a windowless

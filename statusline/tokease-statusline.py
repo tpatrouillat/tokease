@@ -32,6 +32,10 @@ from pathlib import Path
 _DIR = Path.home() / ".tokease"
 _OUT = _DIR / "usage.json"
 _ERR = _DIR / "statusline.err"
+# Claude Code re-runs this script several times a minute, so a persistent
+# failure would grow the log without bound. Past this size it starts over:
+# the newest errors are the ones a bug report needs.
+_ERR_MAX_BYTES = 64 * 1024
 _SCHEMA = 1
 
 
@@ -49,6 +53,8 @@ def _log_error(msg):
     """Record an error without crashing Claude Code's statusline."""
     try:
         _ensure_dir()
+        if _ERR.exists() and _ERR.stat().st_size > _ERR_MAX_BYTES:
+            _ERR.unlink()
         with open(_ERR, "a", encoding="utf-8") as fh:
             fh.write(f"{int(time.time())} {msg}\n")
     except OSError:

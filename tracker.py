@@ -162,7 +162,7 @@ _KEY_INTERVAL = "interval_secs"
 _KEY_TITLE_WEEKLY = "title_weekly"
 
 # File written by the Claude Code statusline capture script
-# (statusline/tokease-statusline.py). Read on every refresh in statusline mode.
+# (statusline/tokease-statusline.py). Read on every refresh.
 _STATUSLINE_FILE = _TOKEASE_DIR / "usage.json"
 
 # Quota history sampled by the Claude desktop app (median 5 min, p90 45 min).
@@ -288,7 +288,7 @@ def _set_login_item(enabled, app_path):
 # ---------------------------------------------------------------------------
 
 def _safe_int(val, default=0):
-    """Convert an API value to a clamped non-negative int, never crash."""
+    """Convert a feed value to a clamped non-negative int, never crash."""
     try:
         return max(0, int(float(val))) if val is not None else default
     except (ValueError, TypeError, OverflowError):
