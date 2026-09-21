@@ -53,7 +53,7 @@ Three things it does:
 Tokease merges two local, read-only sources. Whichever is fresher wins:
 
 1. **Claude Desktop history (zero config).** While the Claude desktop app runs, it samples your account quota every 5 to 15 minutes into a local file (`~/Library/Application Support/Claude/plan-usage-history.json`). Tokease reads it as-is. No setup: if the desktop app is running, the rings stay fresh whatever surface you're using (VS Code extension, claude.ai, Cowork, CLI). See [ADR 0003](docs/adr/0003-source-secondaire-plan-usage-desktop.md).
-2. **Claude Code statusline (adds reset countdowns).** A small capture script ([`statusline/tokease-statusline.py`](statusline/tokease-statusline.py)) runs as your Claude Code statusline command. Claude Code passes it `rate_limits.five_hour` / `.seven_day` on stdin and the script writes them to `~/.tokease/usage.json`. This is the only feed carrying the *reset times* shown next to each ring.
+2. **Claude Code statusline (adds reset countdowns).** A small capture script ([`statusline/tokease-statusline.py`](statusline/tokease-statusline.py)) runs as your Claude Code statusline command. Claude Code pipes its whole statusline JSON to it on stdin (session, model, cost and context fields among others); the script keeps only `rate_limits.five_hour` / `.seven_day` (used percentage and reset time), writes those to `~/.tokease/usage.json` and discards the rest. This is the only feed carrying the *reset times* shown next to each ring.
 
 In both cases the data is written locally *by an official Claude client* for its own use. Tokease never reads your token and never calls any endpoint. Statusline setup: [`statusline/README.md`](statusline/README.md).
 

@@ -129,6 +129,10 @@ def _render_dynamic_icon(session_pct, weekly_pct):
     img = img.resize((_ICON_SIZE_FINAL, _ICON_SIZE_FINAL), Image.LANCZOS)
     try:
         _TOKEASE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:  # tighten a pre-existing dir too, same as the capture script's _ensure_dir
+            _TOKEASE_DIR.chmod(0o700)
+        except OSError:
+            pass
         img.save(_DYNAMIC_ICON_PATH)
     except OSError as exc:  # full disk, read-only or deleted ~/.tokease: keep the last icon
         print(f"tokease: cannot write icon: {exc!r}", file=sys.stderr)
@@ -288,7 +292,7 @@ def _set_login_item(enabled, app_path):
 # ---------------------------------------------------------------------------
 
 def _safe_int(val, default=0):
-    """Convert an API value to a clamped non-negative int, never crash."""
+    """Convert a feed value to a clamped non-negative int, never crash."""
     try:
         return max(0, int(float(val))) if val is not None else default
     except (ValueError, TypeError, OverflowError):

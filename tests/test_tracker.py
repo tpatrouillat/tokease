@@ -12,6 +12,7 @@ management.
 import ast
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -1713,6 +1714,17 @@ class TestRenderIcon(unittest.TestCase):
     def test_renders_clamps_over_100(self):
         p = tracker._render_dynamic_icon(150, 999)
         self.assertTrue(Path(p).exists())
+
+    def test_tightens_preexisting_dir_to_0700(self):
+        # Parity with the capture script's _ensure_dir: a ~/.tokease created
+        # loosely (older version, manual mkdir) is tightened, not left as-is.
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / ".tokease"
+            d.mkdir(mode=0o755)
+            with patch.object(tracker, "_TOKEASE_DIR", d), \
+                 patch.object(tracker, "_DYNAMIC_ICON_PATH", d / "tokease-icon.png"):
+                self.assertIsNotNone(tracker._render_dynamic_icon(10, 10))
+            self.assertEqual(stat.S_IMODE(d.stat().st_mode), 0o700)
 
 
 # ---------------------------------------------------------------------------
