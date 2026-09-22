@@ -707,6 +707,27 @@ class TestApplyDisplayModes(unittest.TestCase):
         app._apply_display("42%", None)
         self.assertEqual(app.icon, "stub-previous.png")
 
+    def test_icon_mode_without_any_icon_falls_back_to_text(self):
+        """No icon_path and no retained icon: blanking the title would leave a
+        zero-width, invisible menu bar item with no way back."""
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_ICON
+        app.icon = None
+        app._apply_display("42%", None)
+        self.assertEqual(app.title, "42%")
+        self.assertIsNone(app.icon)
+
+    def test_error_then_failed_render_keeps_a_visible_title(self):
+        """End to end: an error tick clears the icon, the next tick cannot
+        render one — the item must still show something."""
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_ICON
+        app._apply_usage(None, "error")
+        self.assertIsNone(app.icon)
+        with patch.object(tracker, "_render_dynamic_icon", return_value=None):
+            app._update_display(_make_usage(five_hour_pct=42))
+        self.assertTrue(app.title)
+
     def test_set_display_mode_persists_and_checks_radio(self):
         app = self._make_app()
         sender = SimpleNamespace(_mode=tracker.DISPLAY_ICON)

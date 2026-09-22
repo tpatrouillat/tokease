@@ -884,9 +884,13 @@ class App(rumps.App):
             self.title = pct_text
             self.icon = None
         elif self.display_mode == DISPLAY_ICON:
-            self.title = ""
             if icon_path:
                 self.icon = str(icon_path)
+            # Blank the title only when something is actually drawn. With no
+            # icon to fall back on (error tick cleared it, no Pillow, render
+            # failed), an empty title leaves a zero-width, invisible menu bar
+            # item with no way back: show the text instead.
+            self.title = "" if self.icon else pct_text
         else:  # DISPLAY_BOTH
             self.title = f"{_TITLE_SPACER}{pct_text}"
             if icon_path:
