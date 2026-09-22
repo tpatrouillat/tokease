@@ -11,7 +11,7 @@ git clone https://github.com/tpatrouillat/tokease.git
 cd tokease
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-pip install ruff pytest        # dev tools
+pip install "ruff==0.15.22" pytest   # dev tools — same ruff pin as CI, so lint results match
 ```
 
 ## Before opening a PR
