@@ -2256,5 +2256,122 @@ class ResetDateIsLocalTest(unittest.TestCase):
         self.assertEqual(east, "Sep 06", "Asia sees it on the UTC date")
         self.assertNotEqual(west, east, "the date must depend on the timezone")
 
+
+# ---------------------------------------------------------------------------
+# Tests: login item (osascript / System Events)
+# ---------------------------------------------------------------------------
+class TestLoginItem(unittest.TestCase):
+    """The only subprocess path in the app. Never runs osascript for real:
+    `subprocess.run` is patched everywhere below."""
+
+    BUNDLE = "/Applications/Tokease.app/Contents/MacOS/Tokease"
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    # --- _get_app_path -----------------------------------------------------
+    def test_app_path_is_none_from_a_source_run(self):
+        # No sys.frozen: running from source, there is no bundle to register.
+        self.assertFalse(hasattr(sys, "frozen"), "sys.frozen leaked from another test")
+        self.assertIsNone(tracker._get_app_path())
+
+    def test_app_path_walks_up_to_the_dot_app(self):
+        with patch.object(tracker.sys, "frozen", True, create=True), \
+             patch.object(tracker.sys, "executable", self.BUNDLE):
+            self.assertEqual(tracker._get_app_path(), "/Applications/Tokease.app")
+
+    def test_app_path_is_none_when_no_parent_is_a_bundle(self):
+        with patch.object(tracker.sys, "frozen", True, create=True), \
+             patch.object(tracker.sys, "executable", "/usr/local/bin/tokease"):
+            self.assertIsNone(tracker._get_app_path())
+
+    # --- _set_login_item ---------------------------------------------------
+    def test_set_login_item_refuses_applescript_breaking_paths(self):
+        # Defence in depth: these characters would close the AppleScript
+        # string literal and let the rest of the path run as code.
+        for hostile in ('/Apps/Tok"ease.app', "/Apps/Tok\\ease.app",
+                        "/Apps/Tok\nease.app"):
+            with self.subTest(path=hostile), \
+                 patch.object(tracker.subprocess, "run") as run:
+                tracker._set_login_item(True, hostile)
+                run.assert_not_called()
+
+    def test_set_login_item_true_makes_the_login_item(self):
+        with patch.object(tracker.subprocess, "run") as run:
+            tracker._set_login_item(True, "/Applications/Tokease.app")
+        run.assert_called_once()
+        argv = run.call_args[0][0]
+        self.assertEqual(argv[0], "/usr/bin/osascript")
+        self.assertEqual(argv[1], "-e")
+        self.assertIn("make login item", argv[2])
+        self.assertIn('path:"/Applications/Tokease.app"', argv[2])
+
+    def test_set_login_item_false_deletes_the_login_item(self):
+        with patch.object(tracker.subprocess, "run") as run:
+            tracker._set_login_item(False, "/Applications/Tokease.app")
+        run.assert_called_once()
+        script = run.call_args[0][0][2]
+        self.assertIn("delete login item", script)
+        self.assertIn(f'"{tracker.LOGIN_ITEM_NAME}"', script)
+
+    def test_set_login_item_swallows_subprocess_failures(self):
+        for boom in (OSError("no osascript"),
+                     subprocess.TimeoutExpired("osascript", 5)):
+            with self.subTest(error=type(boom).__name__), \
+                 patch.object(tracker.subprocess, "run", side_effect=boom):
+                tracker._set_login_item(True, "/Applications/Tokease.app")
+
+    # --- _is_login_item ----------------------------------------------------
+    def test_is_login_item_finds_the_name_in_the_output(self):
+        out = SimpleNamespace(stdout=f"Some Other App, {tracker.LOGIN_ITEM_NAME}")
+        with patch.object(tracker.subprocess, "run", return_value=out):
+            self.assertTrue(tracker._is_login_item())
+
+    def test_is_login_item_false_when_absent(self):
+        with patch.object(tracker.subprocess, "run",
+                          return_value=SimpleNamespace(stdout="Some Other App")):
+            self.assertFalse(tracker._is_login_item())
+
+    def test_is_login_item_fails_safe(self):
+        # Automation permission denied, osascript missing or hung: report
+        # "not a login item" rather than crash the menu build.
+        for boom in (subprocess.TimeoutExpired("osascript", 5),
+                     OSError("no osascript")):
+            with self.subTest(error=type(boom).__name__), \
+                 patch.object(tracker.subprocess, "run", side_effect=boom):
+                self.assertFalse(tracker._is_login_item())
+
+    # --- _toggle_login -----------------------------------------------------
+    def test_toggle_login_follows_the_reported_state_not_the_request(self):
+        # The user can deny the Automation prompt: the checkbox must show what
+        # System Events actually reports, not what was asked for.
+        app = self._make_app()
+        sender = SimpleNamespace(state=0)
+        with patch.object(tracker, "_set_login_item") as setter, \
+             patch.object(tracker, "_is_login_item", return_value=False):
+            app._toggle_login(sender)
+        setter.assert_called_once_with(True, app._app_path)
+        self.assertEqual(sender.state, 0, "denied permission must not tick the box")
+
+    def test_toggle_login_ticks_the_box_once_registered(self):
+        app = self._make_app()
+        sender = SimpleNamespace(state=0)
+        with patch.object(tracker, "_set_login_item"), \
+             patch.object(tracker, "_is_login_item", return_value=True):
+            app._toggle_login(sender)
+        self.assertEqual(sender.state, 1)
+
+    def test_toggle_login_off_unticks_the_box(self):
+        app = self._make_app()
+        sender = SimpleNamespace(state=1)
+        with patch.object(tracker, "_set_login_item") as setter, \
+             patch.object(tracker, "_is_login_item", return_value=False):
+            app._toggle_login(sender)
+        setter.assert_called_once_with(False, app._app_path)
+        self.assertEqual(sender.state, 0)
+
+
 if __name__ == "__main__":
     unittest.main()
