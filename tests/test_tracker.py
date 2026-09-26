@@ -10,8 +10,12 @@ management.
 """
 
 import ast
+import contextlib
+import io
 import json
 import os
+import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -497,6 +501,22 @@ class TestConstants(unittest.TestCase):
         # Icon geometry = 2 rings (outer 5h, inner weekly).
         self.assertEqual(len(tracker._RING_RADII), 2)
 
+    def test_version_agrees_everywhere_it_is_published(self):
+        # Read as text: setup.py runs py2app's setup() on import.
+        root = Path(__file__).resolve().parent.parent
+        setup_src = (root / "setup.py").read_text()
+        page = (root / "docs" / "index.html").read_text()
+        found = {
+            "CFBundleVersion": re.search(r'"CFBundleVersion":\s*"([^"]+)"', setup_src),
+            "CFBundleShortVersionString":
+                re.search(r'"CFBundleShortVersionString":\s*"([^"]+)"', setup_src),
+            "softwareVersion": re.search(r'"softwareVersion":\s*"([^"]+)"', page),
+        }
+        for name, match in found.items():
+            with self.subTest(field=name):
+                self.assertIsNotNone(match, f"{name} not found")
+                self.assertEqual(match.group(1), tracker.__version__)
+
 
 # ---------------------------------------------------------------------------
 # Tests: Edge cases in display with weird data
@@ -705,6 +725,27 @@ class TestApplyDisplayModes(unittest.TestCase):
         app.icon = "stub-previous.png"
         app._apply_display("42%", None)
         self.assertEqual(app.icon, "stub-previous.png")
+
+    def test_icon_mode_without_any_icon_falls_back_to_text(self):
+        """No icon_path and no retained icon: blanking the title would leave a
+        zero-width, invisible menu bar item with no way back."""
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_ICON
+        app.icon = None
+        app._apply_display("42%", None)
+        self.assertEqual(app.title, "42%")
+        self.assertIsNone(app.icon)
+
+    def test_error_then_failed_render_keeps_a_visible_title(self):
+        """End to end: an error tick clears the icon, the next tick cannot
+        render one — the item must still show something."""
+        app = self._make_app()
+        app.display_mode = tracker.DISPLAY_ICON
+        app._apply_usage(None, "error")
+        self.assertIsNone(app.icon)
+        with patch.object(tracker, "_render_dynamic_icon", return_value=None):
+            app._update_display(_make_usage(five_hour_pct=42))
+        self.assertTrue(app.title)
 
     def test_set_display_mode_persists_and_checks_radio(self):
         app = self._make_app()
@@ -1714,6 +1755,17 @@ class TestRenderIcon(unittest.TestCase):
         p = tracker._render_dynamic_icon(150, 999)
         self.assertTrue(Path(p).exists())
 
+    def test_tightens_preexisting_dir_to_0700(self):
+        # Parity with the capture script's _ensure_dir: a ~/.tokease created
+        # loosely (older version, manual mkdir) is tightened, not left as-is.
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / ".tokease"
+            d.mkdir(mode=0o755)
+            with patch.object(tracker, "_TOKEASE_DIR", d), \
+                 patch.object(tracker, "_DYNAMIC_ICON_PATH", d / "tokease-icon.png"):
+                self.assertIsNotNone(tracker._render_dynamic_icon(10, 10))
+            self.assertEqual(stat.S_IMODE(d.stat().st_mode), 0o700)
+
 
 # ---------------------------------------------------------------------------
 # Tests: freshness label with a malformed captured_at
@@ -2222,6 +2274,193 @@ class ResetDateIsLocalTest(unittest.TestCase):
         self.assertEqual(west, "Sep 05", "the Americas see the reset a day earlier")
         self.assertEqual(east, "Sep 06", "Asia sees it on the UTC date")
         self.assertNotEqual(west, east, "the date must depend on the timezone")
+
+
+# ---------------------------------------------------------------------------
+# Tests: login item (osascript / System Events)
+# ---------------------------------------------------------------------------
+class TestLoginItem(unittest.TestCase):
+    """The only subprocess path in the app. Never runs osascript for real:
+    `subprocess.run` is patched everywhere below."""
+
+    BUNDLE = "/Applications/Tokease.app/Contents/MacOS/Tokease"
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    # --- _get_app_path -----------------------------------------------------
+    def test_app_path_is_none_from_a_source_run(self):
+        # No sys.frozen: running from source, there is no bundle to register.
+        self.assertFalse(hasattr(sys, "frozen"), "sys.frozen leaked from another test")
+        self.assertIsNone(tracker._get_app_path())
+
+    def test_app_path_walks_up_to_the_dot_app(self):
+        with patch.object(tracker.sys, "frozen", True, create=True), \
+             patch.object(tracker.sys, "executable", self.BUNDLE):
+            self.assertEqual(tracker._get_app_path(), "/Applications/Tokease.app")
+
+    def test_app_path_is_none_when_no_parent_is_a_bundle(self):
+        with patch.object(tracker.sys, "frozen", True, create=True), \
+             patch.object(tracker.sys, "executable", "/usr/local/bin/tokease"):
+            self.assertIsNone(tracker._get_app_path())
+
+    # --- _set_login_item ---------------------------------------------------
+    def test_set_login_item_refuses_applescript_breaking_paths(self):
+        # Defence in depth: these characters would close the AppleScript
+        # string literal and let the rest of the path run as code.
+        for hostile in ('/Apps/Tok"ease.app', "/Apps/Tok\\ease.app",
+                        "/Apps/Tok\nease.app"):
+            with self.subTest(path=hostile), \
+                 patch.object(tracker.subprocess, "run") as run:
+                tracker._set_login_item(True, hostile)
+                run.assert_not_called()
+
+    def test_set_login_item_true_makes_the_login_item(self):
+        with patch.object(tracker.subprocess, "run") as run:
+            tracker._set_login_item(True, "/Applications/Tokease.app")
+        run.assert_called_once()
+        argv = run.call_args[0][0]
+        self.assertEqual(argv[0], "/usr/bin/osascript")
+        self.assertEqual(argv[1], "-e")
+        self.assertIn("make login item", argv[2])
+        self.assertIn('path:"/Applications/Tokease.app"', argv[2])
+
+    def test_set_login_item_false_deletes_the_login_item(self):
+        with patch.object(tracker.subprocess, "run") as run:
+            tracker._set_login_item(False, "/Applications/Tokease.app")
+        run.assert_called_once()
+        script = run.call_args[0][0][2]
+        self.assertIn("delete login item", script)
+        self.assertIn(f'"{tracker.LOGIN_ITEM_NAME}"', script)
+
+    def test_set_login_item_swallows_subprocess_failures(self):
+        for boom in (OSError("no osascript"),
+                     subprocess.TimeoutExpired("osascript", 5)):
+            with self.subTest(error=type(boom).__name__), \
+                 patch.object(tracker.subprocess, "run", side_effect=boom):
+                tracker._set_login_item(True, "/Applications/Tokease.app")
+
+    # --- _is_login_item ----------------------------------------------------
+    def test_is_login_item_finds_the_name_in_the_output(self):
+        out = SimpleNamespace(stdout=f"Some Other App, {tracker.LOGIN_ITEM_NAME}")
+        with patch.object(tracker.subprocess, "run", return_value=out):
+            self.assertTrue(tracker._is_login_item())
+
+    def test_is_login_item_false_when_absent(self):
+        with patch.object(tracker.subprocess, "run",
+                          return_value=SimpleNamespace(stdout="Some Other App")):
+            self.assertFalse(tracker._is_login_item())
+
+    def test_is_login_item_needs_an_exact_name_not_a_substring(self):
+        out = SimpleNamespace(stdout=f"Some Other App, {tracker.LOGIN_ITEM_NAME} Helper")
+        with patch.object(tracker.subprocess, "run", return_value=out):
+            self.assertFalse(tracker._is_login_item())
+
+    def test_is_login_item_fails_safe(self):
+        # Automation permission denied, osascript missing or hung: report
+        # "not a login item" rather than crash the menu build.
+        for boom in (subprocess.TimeoutExpired("osascript", 5),
+                     OSError("no osascript")):
+            with self.subTest(error=type(boom).__name__), \
+                 patch.object(tracker.subprocess, "run", side_effect=boom):
+                self.assertFalse(tracker._is_login_item())
+
+    # --- _toggle_login -----------------------------------------------------
+    def test_toggle_login_follows_the_reported_state_not_the_request(self):
+        # The user can deny the Automation prompt: the checkbox must show what
+        # System Events actually reports, not what was asked for.
+        app = self._make_app()
+        sender = SimpleNamespace(state=0)
+        with patch.object(tracker, "_set_login_item") as setter, \
+             patch.object(tracker, "_is_login_item", return_value=False):
+            app._toggle_login(sender)
+        setter.assert_called_once_with(True, app._app_path)
+        self.assertEqual(sender.state, 0, "denied permission must not tick the box")
+
+    def test_toggle_login_ticks_the_box_once_registered(self):
+        app = self._make_app()
+        sender = SimpleNamespace(state=0)
+        with patch.object(tracker, "_set_login_item"), \
+             patch.object(tracker, "_is_login_item", return_value=True):
+            app._toggle_login(sender)
+        self.assertEqual(sender.state, 1)
+
+    def test_toggle_login_off_unticks_the_box(self):
+        app = self._make_app()
+        sender = SimpleNamespace(state=1)
+        with patch.object(tracker, "_set_login_item") as setter, \
+             patch.object(tracker, "_is_login_item", return_value=False):
+            app._toggle_login(sender)
+        setter.assert_called_once_with(False, app._app_path)
+        self.assertEqual(sender.state, 0)
+
+
+# ---------------------------------------------------------------------------
+# Tests: small paths with no coverage of their own
+# ---------------------------------------------------------------------------
+class TestUncoveredPaths(unittest.TestCase):
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    # --- _open_star --------------------------------------------------------
+    def test_open_star_opens_the_repo_url(self):
+        app = self._make_app()
+        with patch.object(tracker.webbrowser, "open") as opener:
+            app._open_star(None)
+        opener.assert_called_once_with(tracker.STAR_URL)
+
+    # --- _resolve_icon_path ------------------------------------------------
+    def test_icon_path_frozen_uses_resourcepath(self):
+        with patch.object(tracker.sys, "frozen", True, create=True), \
+             patch.dict(os.environ, {"RESOURCEPATH": "/App.app/Contents/Resources"}):
+            self.assertEqual(
+                tracker._resolve_icon_path(),
+                Path("/App.app/Contents/Resources") / "assets" / "menubar-template.png",
+            )
+
+    def test_icon_path_frozen_without_resourcepath_falls_back_to_source(self):
+        env = {k: v for k, v in os.environ.items() if k != "RESOURCEPATH"}
+        with patch.object(tracker.sys, "frozen", True, create=True), \
+             patch.dict(os.environ, env, clear=True):
+            self.assertEqual(
+                tracker._resolve_icon_path(),
+                Path(tracker.__file__).resolve().parent / "assets" / "menubar-template.png",
+            )
+
+    # --- _settings_set -----------------------------------------------------
+    def test_settings_set_writes_and_synchronizes(self):
+        defaults = MagicMock()
+        with patch.object(tracker, "_DEFAULTS", defaults):
+            tracker._settings_set("display_mode", "icon")
+        defaults.setObject_forKey_.assert_called_once_with("icon", "display_mode")
+        defaults.synchronize.assert_called_once_with()
+
+    def test_settings_set_logs_a_failed_write_without_raising(self):
+        defaults = MagicMock()
+        defaults.setObject_forKey_.side_effect = RuntimeError("boom")
+        err = io.StringIO()
+        with patch.object(tracker, "_DEFAULTS", defaults), \
+             contextlib.redirect_stderr(err):
+            tracker._settings_set("display_mode", "icon")
+        self.assertIn("settings write failed", err.getvalue())
+
+    def test_settings_set_is_a_noop_without_defaults(self):
+        with patch.object(tracker, "_DEFAULTS", None):
+            tracker._settings_set("display_mode", "icon")  # must not raise
+
+    # --- _fetch_and_update -------------------------------------------------
+    def test_fetch_exception_still_marshals_an_error_state(self):
+        app = self._make_app()
+        with patch.object(tracker, "fetch_usage", side_effect=RuntimeError("boom")), \
+             patch.object(tracker, "_call_on_main") as marshall, \
+             contextlib.redirect_stderr(io.StringIO()):
+            app._fetch_and_update()
+        marshall.assert_called_once_with(app._apply_usage, None, "error")
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -8,10 +8,14 @@
 #   - the captured-data directory ~/.tokease/
 # Touches NEITHER your Claude Code install NOR your subscription.
 #
-# Installed via Homebrew instead? Use:
+# Installed via Homebrew? Run this script first, then remove the formula:
+#   bash "$(brew --prefix)/opt/tokease/libexec/uninstall.sh"
 #   brew services stop tokease && brew uninstall tokease
+# `brew uninstall` alone leaves ~/.tokease/ and any statusline wiring behind.
 #
 set -euo pipefail
+# An empty HOME would turn every path below into /Library/..., /.tokease etc.
+[[ -n "${HOME:-}" ]] || { echo "HOME is empty or unset; refusing to run" >&2; exit 1; }
 
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/com.tpatrouillat.tokease.plist"

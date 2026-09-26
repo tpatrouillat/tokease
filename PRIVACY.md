@@ -7,7 +7,9 @@ doesn't touch.
 
 - `~/.tokease/usage.json` — the `rate_limits` windows (`five_hour`,
   `seven_day`: used percentage + reset time) that the Tokease statusline capture
-  script writes from the data **Claude Code hands to its statusline**.
+  script writes from the data **Claude Code hands to its statusline**. Claude
+  Code hands the script its whole statusline JSON; only those two windows are
+  kept, nothing else is written to disk.
 - `~/Library/Application Support/Claude/plan-usage-history.json` — the quota
   samples the **official Claude desktop app** writes locally for its own use
   (read-only; Tokease never writes to or modifies anything under the Claude

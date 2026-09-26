@@ -11,7 +11,7 @@ git clone https://github.com/tpatrouillat/tokease.git
 cd tokease
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-pip install ruff pytest        # dev tools
+pip install "ruff==0.15.22" pytest   # dev tools — same ruff pin as CI, so lint results match
 ```
 
 ## Before opening a PR
@@ -30,7 +30,7 @@ pip install ruff pytest        # dev tools
 - Use [Conventional Commits](https://www.conventionalcommits.org/)
   (`fix:`, `feat:`, `docs:`, `chore:`…).
 - Keep PRs focused; describe what changed and why.
-- CI (ruff + pytest across Python 3.10–3.13) must be green.
+- CI (ruff + pytest across Python 3.10–3.14) must be green.
 
 ## Reporting bugs
 

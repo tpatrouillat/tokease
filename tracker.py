@@ -129,6 +129,10 @@ def _render_dynamic_icon(session_pct, weekly_pct):
     img = img.resize((_ICON_SIZE_FINAL, _ICON_SIZE_FINAL), Image.LANCZOS)
     try:
         _TOKEASE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:  # tighten a pre-existing dir too, same as the capture script's _ensure_dir
+            _TOKEASE_DIR.chmod(0o700)
+        except OSError:
+            pass
         img.save(_DYNAMIC_ICON_PATH)
     except OSError as exc:  # full disk, read-only or deleted ~/.tokease: keep the last icon
         print(f"tokease: cannot write icon: {exc!r}", file=sys.stderr)
@@ -162,7 +166,7 @@ _KEY_INTERVAL = "interval_secs"
 _KEY_TITLE_WEEKLY = "title_weekly"
 
 # File written by the Claude Code statusline capture script
-# (statusline/tokease-statusline.py). Read on every refresh in statusline mode.
+# (statusline/tokease-statusline.py). Read on every refresh when present (optional source).
 _STATUSLINE_FILE = _TOKEASE_DIR / "usage.json"
 
 # Quota history sampled by the Claude desktop app (median 5 min, p90 45 min).
@@ -253,7 +257,7 @@ def _is_login_item():
              'tell application "System Events" to get the name of every login item'],
             capture_output=True, text=True, timeout=5,
         )
-        return LOGIN_ITEM_NAME in (result.stdout or "")
+        return LOGIN_ITEM_NAME in [n.strip() for n in (result.stdout or "").split(",")]
     except (OSError, subprocess.TimeoutExpired):
         return False
 
@@ -288,7 +292,7 @@ def _set_login_item(enabled, app_path):
 # ---------------------------------------------------------------------------
 
 def _safe_int(val, default=0):
-    """Convert an API value to a clamped non-negative int, never crash."""
+    """Convert a feed value to a clamped non-negative int, never crash."""
     try:
         return max(0, int(float(val))) if val is not None else default
     except (ValueError, TypeError, OverflowError):
@@ -880,9 +884,13 @@ class App(rumps.App):
             self.title = pct_text
             self.icon = None
         elif self.display_mode == DISPLAY_ICON:
-            self.title = ""
             if icon_path:
                 self.icon = str(icon_path)
+            # Blank the title only when something is actually drawn. With no
+            # icon to fall back on (error tick cleared it, no Pillow, render
+            # failed), an empty title leaves a zero-width, invisible menu bar
+            # item with no way back: show the text instead.
+            self.title = "" if self.icon else pct_text
         else:  # DISPLAY_BOTH
             self.title = f"{_TITLE_SPACER}{pct_text}"
             if icon_path:
