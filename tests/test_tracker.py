@@ -10,6 +10,8 @@ management.
 """
 
 import ast
+import contextlib
+import io
 import json
 import os
 import re
@@ -2393,6 +2395,71 @@ class TestLoginItem(unittest.TestCase):
             app._toggle_login(sender)
         setter.assert_called_once_with(False, app._app_path)
         self.assertEqual(sender.state, 0)
+
+
+# ---------------------------------------------------------------------------
+# Tests: small paths with no coverage of their own
+# ---------------------------------------------------------------------------
+class TestUncoveredPaths(unittest.TestCase):
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    # --- _open_star --------------------------------------------------------
+    def test_open_star_opens_the_repo_url(self):
+        app = self._make_app()
+        with patch.object(tracker.webbrowser, "open") as opener:
+            app._open_star(None)
+        opener.assert_called_once_with(tracker.STAR_URL)
+
+    # --- _resolve_icon_path ------------------------------------------------
+    def test_icon_path_frozen_uses_resourcepath(self):
+        with patch.object(tracker.sys, "frozen", True, create=True), \
+             patch.dict(os.environ, {"RESOURCEPATH": "/App.app/Contents/Resources"}):
+            self.assertEqual(
+                tracker._resolve_icon_path(),
+                Path("/App.app/Contents/Resources") / "assets" / "menubar-template.png",
+            )
+
+    def test_icon_path_frozen_without_resourcepath_falls_back_to_source(self):
+        env = {k: v for k, v in os.environ.items() if k != "RESOURCEPATH"}
+        with patch.object(tracker.sys, "frozen", True, create=True), \
+             patch.dict(os.environ, env, clear=True):
+            self.assertEqual(
+                tracker._resolve_icon_path(),
+                Path(tracker.__file__).resolve().parent / "assets" / "menubar-template.png",
+            )
+
+    # --- _settings_set -----------------------------------------------------
+    def test_settings_set_writes_and_synchronizes(self):
+        defaults = MagicMock()
+        with patch.object(tracker, "_DEFAULTS", defaults):
+            tracker._settings_set("display_mode", "icon")
+        defaults.setObject_forKey_.assert_called_once_with("icon", "display_mode")
+        defaults.synchronize.assert_called_once_with()
+
+    def test_settings_set_logs_a_failed_write_without_raising(self):
+        defaults = MagicMock()
+        defaults.setObject_forKey_.side_effect = RuntimeError("boom")
+        err = io.StringIO()
+        with patch.object(tracker, "_DEFAULTS", defaults), \
+             contextlib.redirect_stderr(err):
+            tracker._settings_set("display_mode", "icon")
+        self.assertIn("settings write failed", err.getvalue())
+
+    def test_settings_set_is_a_noop_without_defaults(self):
+        with patch.object(tracker, "_DEFAULTS", None):
+            tracker._settings_set("display_mode", "icon")  # must not raise
+
+    # --- _fetch_and_update -------------------------------------------------
+    def test_fetch_exception_still_marshals_an_error_state(self):
+        app = self._make_app()
+        with patch.object(tracker, "fetch_usage", side_effect=RuntimeError("boom")), \
+             patch.object(tracker, "_call_on_main") as marshall, \
+             contextlib.redirect_stderr(io.StringIO()):
+            app._fetch_and_update()
+        marshall.assert_called_once_with(app._apply_usage, None, "error")
 
 
 if __name__ == "__main__":
