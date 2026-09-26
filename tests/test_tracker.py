@@ -12,6 +12,7 @@ management.
 import ast
 import json
 import os
+import re
 import stat
 import subprocess
 import sys
@@ -497,6 +498,22 @@ class TestConstants(unittest.TestCase):
     def test_two_rings_only(self):
         # Icon geometry = 2 rings (outer 5h, inner weekly).
         self.assertEqual(len(tracker._RING_RADII), 2)
+
+    def test_version_agrees_everywhere_it_is_published(self):
+        # Read as text: setup.py runs py2app's setup() on import.
+        root = Path(__file__).resolve().parent.parent
+        setup_src = (root / "setup.py").read_text()
+        page = (root / "docs" / "index.html").read_text()
+        found = {
+            "CFBundleVersion": re.search(r'"CFBundleVersion":\s*"([^"]+)"', setup_src),
+            "CFBundleShortVersionString":
+                re.search(r'"CFBundleShortVersionString":\s*"([^"]+)"', setup_src),
+            "softwareVersion": re.search(r'"softwareVersion":\s*"([^"]+)"', page),
+        }
+        for name, match in found.items():
+            with self.subTest(field=name):
+                self.assertIsNotNone(match, f"{name} not found")
+                self.assertEqual(match.group(1), tracker.__version__)
 
 
 # ---------------------------------------------------------------------------
