@@ -2351,6 +2351,11 @@ class TestLoginItem(unittest.TestCase):
                           return_value=SimpleNamespace(stdout="Some Other App")):
             self.assertFalse(tracker._is_login_item())
 
+    def test_is_login_item_needs_an_exact_name_not_a_substring(self):
+        out = SimpleNamespace(stdout=f"Some Other App, {tracker.LOGIN_ITEM_NAME} Helper")
+        with patch.object(tracker.subprocess, "run", return_value=out):
+            self.assertFalse(tracker._is_login_item())
+
     def test_is_login_item_fails_safe(self):
         # Automation permission denied, osascript missing or hung: report
         # "not a login item" rather than crash the menu build.

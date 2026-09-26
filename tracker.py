@@ -257,7 +257,7 @@ def _is_login_item():
              'tell application "System Events" to get the name of every login item'],
             capture_output=True, text=True, timeout=5,
         )
-        return LOGIN_ITEM_NAME in (result.stdout or "")
+        return LOGIN_ITEM_NAME in [n.strip() for n in (result.stdout or "").split(",")]
     except (OSError, subprocess.TimeoutExpired):
         return False
 
