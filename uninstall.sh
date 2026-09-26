@@ -14,6 +14,8 @@
 # `brew uninstall` alone leaves ~/.tokease/ and any statusline wiring behind.
 #
 set -euo pipefail
+# An empty HOME would turn every path below into /Library/..., /.tokease etc.
+[[ -n "${HOME:-}" ]] || { echo "HOME is empty or unset; refusing to run" >&2; exit 1; }
 
 SELF_DIR="$(cd "$(dirname "$0")" && pwd)"
 LAUNCH_AGENT_PLIST="$HOME/Library/LaunchAgents/com.tpatrouillat.tokease.plist"
