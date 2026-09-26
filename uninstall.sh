@@ -8,8 +8,10 @@
 #   - the captured-data directory ~/.tokease/
 # Touches NEITHER your Claude Code install NOR your subscription.
 #
-# Installed via Homebrew instead? Use:
+# Installed via Homebrew? Run this script first, then remove the formula:
+#   bash "$(brew --prefix)/opt/tokease/libexec/uninstall.sh"
 #   brew services stop tokease && brew uninstall tokease
+# `brew uninstall` alone leaves ~/.tokease/ and any statusline wiring behind.
 #
 set -euo pipefail
 
