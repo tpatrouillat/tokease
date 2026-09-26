@@ -14,7 +14,7 @@ assignees: ''
 - Claude plan: Pro / Max  <!-- Free, Team, Enterprise are not supported -->
 - Claude desktop app running? yes / no
 - Claude Code version (`claude --version`), if you use the statusline:  <!-- needs ≥ 2.1.x -->
-- Data source shown in the dropdown ("Updated: … via Claude app / via Claude Code"):
+- "Updated" line shown in the dropdown (`Updated: HH:MM (via Claude app)`, `Updated: HH:MM (via Claude Code)`, or `⚠ HH:MM · stale 3h (Claude app idle?)`):
 - Install method: Homebrew / from source
 - Tokease version:
 
