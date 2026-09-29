@@ -394,6 +394,53 @@ class TestIntervalManagement(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Tests: periodic timer and refresh kick-off
+# ---------------------------------------------------------------------------
+class TestTimerAndRefresh(unittest.TestCase):
+    """_start_timer and _refresh are patched out by every other fixture (they
+    would start real work at __init__), so pin their own contract here."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            app = tracker.App()
+        return app
+
+    def test_start_timer_starts_a_timer_on_the_current_interval(self):
+        app = self._make_app()
+        app._start_timer()
+        self.assertIsInstance(app._timer, FakeTimer)
+        self.assertTrue(app._timer.is_alive)
+        self.assertEqual(app._timer.interval, app.interval)
+
+    def test_start_timer_stops_the_previous_timer_first(self):
+        # Changing the interval restarts the timer: the old one must not keep
+        # ticking alongside the new one.
+        app = self._make_app()
+        app._start_timer()
+        first = app._timer
+        app._start_timer()
+        self.assertFalse(first.is_alive)
+        self.assertIsNot(app._timer, first)
+        self.assertTrue(app._timer.is_alive)
+
+    def test_timer_tick_calls_refresh(self):
+        app = self._make_app()
+        app._start_timer()
+        with patch.object(app, "_refresh") as refresh:
+            app._timer.callback(app._timer)
+        refresh.assert_called_once_with(None)
+
+    def test_refresh_shows_loading_and_fetches_on_a_daemon_thread(self):
+        app = self._make_app()
+        with patch.object(tracker.threading, "Thread") as MockThread:
+            app._refresh(None)
+        self.assertEqual(app.title, "...")
+        MockThread.assert_called_once_with(target=app._fetch_and_update, daemon=True)
+        MockThread.return_value.start.assert_called_once_with()
+
+
+# ---------------------------------------------------------------------------
 # Tests: Main-thread marshalling (regression for SIGABRT crash)
 # ---------------------------------------------------------------------------
 class TestMainThreadMarshalling(unittest.TestCase):
