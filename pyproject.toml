@@ -1,7 +1,7 @@
 # Ruff config shared between local runs (uvx ruff) and CI, same rules everywhere
 [tool.ruff]
 target-version = "py310"                                  # targets Python 3.10+, see README
-extend-exclude = ["assets", "graphify-out", "docs", "venv"]  # scripts and artifacts, not source code
+extend-exclude = ["graphify-out", "docs", "venv"]  # generated artifacts and the site, not source code
 
 [tool.ruff.lint]
 extend-select = ["S"]                 # keep the ruff defaults and add S, flake8-bandit for security

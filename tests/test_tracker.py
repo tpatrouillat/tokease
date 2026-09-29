@@ -251,6 +251,12 @@ class TestFmtReset(unittest.TestCase):
         self.assertIsNone(tracker._parse_iso(1718304000))
         self.assertIn(tracker.fmt_reset(1718304000), ("--", "?"))
 
+    def test_naive_iso_is_read_as_utc(self):
+        # No offset at all: _parse_iso must still return an aware datetime
+        # (UTC), or comparing it to datetime.now(timezone.utc) would raise.
+        dt = tracker._parse_iso("2099-03-06T18:00:00")
+        self.assertEqual(dt, datetime(2099, 3, 6, 18, 0, tzinfo=timezone.utc))
+
 
 # ---------------------------------------------------------------------------
 # Tests: App display logic (2 rings, statusline source)
@@ -385,6 +391,53 @@ class TestIntervalManagement(unittest.TestCase):
              patch.object(tracker.App, "_refresh"):
             app = tracker.App()
         self.assertGreaterEqual(app.interval, 60)
+
+
+# ---------------------------------------------------------------------------
+# Tests: periodic timer and refresh kick-off
+# ---------------------------------------------------------------------------
+class TestTimerAndRefresh(unittest.TestCase):
+    """_start_timer and _refresh are patched out by every other fixture (they
+    would start real work at __init__), so pin their own contract here."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            app = tracker.App()
+        return app
+
+    def test_start_timer_starts_a_timer_on_the_current_interval(self):
+        app = self._make_app()
+        app._start_timer()
+        self.assertIsInstance(app._timer, FakeTimer)
+        self.assertTrue(app._timer.is_alive)
+        self.assertEqual(app._timer.interval, app.interval)
+
+    def test_start_timer_stops_the_previous_timer_first(self):
+        # Changing the interval restarts the timer: the old one must not keep
+        # ticking alongside the new one.
+        app = self._make_app()
+        app._start_timer()
+        first = app._timer
+        app._start_timer()
+        self.assertFalse(first.is_alive)
+        self.assertIsNot(app._timer, first)
+        self.assertTrue(app._timer.is_alive)
+
+    def test_timer_tick_calls_refresh(self):
+        app = self._make_app()
+        app._start_timer()
+        with patch.object(app, "_refresh") as refresh:
+            app._timer.callback(app._timer)
+        refresh.assert_called_once_with(None)
+
+    def test_refresh_shows_loading_and_fetches_on_a_daemon_thread(self):
+        app = self._make_app()
+        with patch.object(tracker.threading, "Thread") as MockThread:
+            app._refresh(None)
+        self.assertEqual(app.title, "...")
+        MockThread.assert_called_once_with(target=app._fetch_and_update, daemon=True)
+        MockThread.return_value.start.assert_called_once_with()
 
 
 # ---------------------------------------------------------------------------
@@ -869,6 +922,31 @@ class TestCorruptedSettings(unittest.TestCase):
 
 
 # ---------------------------------------------------------------------------
+# Tests: _settings_get reads through NSUserDefaults (faked)
+# ---------------------------------------------------------------------------
+class TestSettingsGet(unittest.TestCase):
+    def _get_with(self, defaults):
+        with patch.object(tracker, "_DEFAULTS", defaults):
+            return tracker._settings_get("some_key", "fallback")
+
+    def test_stored_value_is_returned(self):
+        defaults = MagicMock()
+        defaults.objectForKey_.return_value = "stored"
+        self.assertEqual(self._get_with(defaults), "stored")
+        defaults.objectForKey_.assert_called_once_with("some_key")
+
+    def test_unset_key_returns_default(self):
+        defaults = MagicMock()
+        defaults.objectForKey_.return_value = None
+        self.assertEqual(self._get_with(defaults), "fallback")
+
+    def test_read_failure_returns_default(self):
+        defaults = MagicMock()
+        defaults.objectForKey_.side_effect = RuntimeError("defaults unavailable")
+        self.assertEqual(self._get_with(defaults), "fallback")
+
+
+# ---------------------------------------------------------------------------
 # Tests: unknown buckets ignored
 # ---------------------------------------------------------------------------
 class TestUnknownBuckets(unittest.TestCase):
@@ -1113,6 +1191,34 @@ class TestDesktopSource(TestStatuslineSource):
         self._write_desktop({"version": 2, "samples": {"fh": 12}})
         _, err = tracker.fetch_usage()
         self.assertEqual(err, "nostatusline")
+
+    def test_desktop_sample_not_a_dict_is_rejected(self):
+        self.assertIsNone(tracker._desktop_sample_to_data(7))
+        self.assertIsNone(tracker._desktop_sample_to_data("x"))
+
+    def test_all_desktop_samples_malformed_falls_back_to_statusline(self):
+        self._write({
+            "captured_at": 1799999000,
+            "five_hour": {"used_percentage": 23, "resets_at": 1800000000},
+        })
+        self._write_desktop({"version": 2, "samples": [7, "x", {"t": 1}]})
+        data, err = tracker.fetch_usage()
+        self.assertIsNone(err)
+        self.assertEqual(data["five_hour"]["utilization"], 23)
+        self.assertEqual(data["_meta"]["source"], "statusline")
+
+    def test_merge_fresher_windowless_statusline_returns_desktop(self):
+        # fetch_usage never reaches the merge with a windowless statusline
+        # (it reports "waiting" first), so pin _merge_usage's own guard.
+        now = datetime.now(timezone.utc).timestamp()
+        statusline = {"_meta": {"captured_at": now, "source": "statusline"}}
+        desktop = tracker._desktop_sample_to_data(
+            self._sample(int((now - 120) * 1000), fh=55)
+        )
+        merged = tracker._merge_usage(statusline, desktop)
+        self.assertIs(merged, desktop)
+        self.assertEqual(merged["five_hour"]["utilization"], 55)
+        self.assertAlmostEqual(merged["_meta"]["captured_at"], now - 120, delta=1)
 
     def test_merge_fresher_desktop_keeps_future_reset(self):
         future = "2099-01-01T00:00:00+00:00"
@@ -1713,6 +1819,11 @@ class TestRenderIcon(unittest.TestCase):
     def test_renders_clamps_over_100(self):
         p = tracker._render_dynamic_icon(150, 999)
         self.assertTrue(Path(p).exists())
+
+    def test_returns_none_without_pillow(self):
+        # The caller keeps the existing icon when no PNG can be drawn.
+        with patch.object(tracker, "_PILLOW_AVAILABLE", False):
+            self.assertIsNone(tracker._render_dynamic_icon(50, 30))
 
 
 # ---------------------------------------------------------------------------
