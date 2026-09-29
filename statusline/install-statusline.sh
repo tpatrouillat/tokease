@@ -27,6 +27,11 @@ if ! command -v claude >/dev/null 2>&1; then
   echo
 fi
 
+if ! command -v python3 >/dev/null 2>&1; then
+  echo "note: 'python3' not found in PATH — the statusLine command runs it (brew install python)."
+  echo
+fi
+
 # Snippet printed when we don't write (missing settings handled, manual snippet).
 print_manual_snippet() {
   cat <<EOF
