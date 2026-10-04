@@ -322,6 +322,20 @@ class TestAppErrorStates(unittest.TestCase):
         app._apply_usage(None, "error")
         self.assertEqual(app.title, "?")
 
+    def test_generic_error_clears_stale_rows(self):
+        # A good tick then an error tick: the dropdown must not keep showing
+        # the previous numbers next to the "?" in the menu bar.
+        app = self._make_app()
+        app._apply_usage(_make_usage(five_hour_pct=77, seven_day_pct=42), None)
+        stale = (app.m5h.title, app.m7d.title, app.mupd.title)
+        app._apply_usage(None, "error")
+        self.assertEqual(app.title, "?")
+        self.assertEqual(app.m5h.title, tracker.FIVE_HOUR_DEFAULT)
+        self.assertEqual(app.m7d.title, tracker.WEEKLY_DEFAULT)
+        self.assertIn("Couldn't read usage data", app.mupd.title)
+        for before, after in zip(stale, (app.m5h.title, app.m7d.title, app.mupd.title)):
+            self.assertNotEqual(before, after)
+
     def test_none_data_no_error(self):
         app = self._make_app()
         app._apply_usage(None, None)

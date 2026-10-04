@@ -869,7 +869,12 @@ class App(rumps.App):
             return
 
         if err or not data:
+            # Don't leave the last good readings in the dropdown: they would
+            # contradict the "?" and pass stale numbers off as current.
             self.title = "?"
+            self.m5h.title = FIVE_HOUR_DEFAULT
+            self.m7d.title = WEEKLY_DEFAULT
+            self.mupd.title = "Couldn't read usage data, retrying…"
             return
 
         self._update_display(data)
