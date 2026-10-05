@@ -40,6 +40,7 @@ if [[ -f "$SETTINGS" ]] && grep -q "$STATUSLINE_MARK" "$SETTINGS" 2>/dev/null; t
     backup="$SETTINGS.bak.$(date +%Y%m%d-%H%M%S)"
     cp "$SETTINGS" "$backup"
     tmp="$SETTINGS.tokease.tmp"
+    cp -p "$SETTINGS" "$tmp"   # seed tmp with settings.json's mode so the redirect below doesn't widen it
     if jq 'del(.statusLine)' "$SETTINGS" > "$tmp"; then
       mv "$tmp" "$SETTINGS"
       echo "✓ statusLine block removed from $SETTINGS (backup: $backup)"

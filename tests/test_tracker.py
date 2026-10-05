@@ -12,6 +12,8 @@ management.
 import ast
 import json
 import os
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -1707,6 +1709,64 @@ class TestStatuslineRenderLine(unittest.TestCase):
             "seven_day": {"used_percentage": 5},
         })
         self.assertEqual(line, "⛁ 7d 5%")
+
+
+# ---------------------------------------------------------------------------
+# Tests: settings.json rewrites keep the file's mode (may hold API keys)
+# ---------------------------------------------------------------------------
+@unittest.skipUnless(shutil.which("jq") and shutil.which("bash"), "jq/bash required")
+class TestSettingsModePreserved(unittest.TestCase):
+    """install-statusline.sh and uninstall.sh rewrite ~/.claude/settings.json
+    through a temp file; a 0600 settings.json must not come back 0644."""
+
+    ROOT = Path(__file__).resolve().parent.parent
+
+    def _setup(self, settings):
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        tmp_root = os.path.realpath(td.name)
+        home = Path(tmp_root) / "home"
+        bin_dir = Path(tmp_root) / "bin"
+        (home / ".claude").mkdir(parents=True)
+        bin_dir.mkdir()
+        settings_path = home / ".claude" / "settings.json"
+        settings_path.write_text(json.dumps(settings), encoding="utf-8")
+        settings_path.chmod(0o600)
+        return tmp_root, home, bin_dir, settings_path
+
+    def _run(self, script, home, stdin_text):
+        return subprocess.run(
+            ["bash", "-c", 'umask 022; exec bash "$0"', str(script)],
+            env={**os.environ, "HOME": str(home)}, input=stdin_text,
+            capture_output=True, text=True, timeout=30,
+        )
+
+    def test_install_statusline_keeps_settings_mode(self):
+        _, home, bin_dir, settings_path = self._setup({"theme": "dark"})
+        for name in ("install-statusline.sh", "tokease-statusline.py"):
+            shutil.copy(self.ROOT / "statusline" / name, bin_dir / name)
+        proc = self._run(bin_dir / "install-statusline.sh", home, "y\n")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(stat.S_IMODE(settings_path.stat().st_mode), 0o600)
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+        self.assertIn("tokease-statusline.py", data["statusLine"]["command"])
+        self.assertEqual(data["theme"], "dark")
+
+    def test_uninstall_keeps_settings_mode(self):
+        tmp_root, home, bin_dir, settings_path = self._setup({
+            "theme": "dark",
+            "statusLine": {"type": "command",
+                           "command": "python3 ~/.tokease/tokease-statusline.py"},
+        })
+        # uninstall.sh runs `rm -rf "$HOME/.tokease"`: never against a real HOME.
+        self.assertTrue(str(home).startswith(tmp_root + os.sep))
+        shutil.copy(self.ROOT / "uninstall.sh", bin_dir / "uninstall.sh")
+        proc = self._run(bin_dir / "uninstall.sh", home, "")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(stat.S_IMODE(settings_path.stat().st_mode), 0o600)
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+        self.assertNotIn("statusLine", data)
+        self.assertEqual(data["theme"], "dark")
 
 
 # ---------------------------------------------------------------------------
