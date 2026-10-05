@@ -1700,6 +1700,14 @@ class TestStatuslineRenderLine(unittest.TestCase):
     def test_missing_percentage_key_is_skipped(self):
         self.assertEqual(self._render({"five_hour": {"resets_at": 1}}), "")
 
+    def test_infinite_percentage_is_skipped_not_fatal(self):
+        # json.loads turns 1e400 into inf; int(inf) raises OverflowError.
+        line = self._render({
+            "five_hour": {"used_percentage": float("inf")},
+            "seven_day": {"used_percentage": 5},
+        })
+        self.assertEqual(line, "⛁ 7d 5%")
+
 
 # ---------------------------------------------------------------------------
 # Tests: real icon rendering (Pillow) — otherwise this prod code never runs
