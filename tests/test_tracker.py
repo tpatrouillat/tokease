@@ -77,7 +77,7 @@ fake_rumps.Timer = FakeTimer
 fake_rumps.quit_application = lambda: None
 sys.modules["rumps"] = fake_rumps
 
-import tracker  # noqa: E402 — must come after rumps mock
+import tracker
 
 # Neutralise settings persistence so tests don't pick up stored UserDefaults
 # values from prior runs (interval, alerts, display_mode).
@@ -1461,7 +1461,7 @@ class TestStatuslineScript(unittest.TestCase):
         env = {**os.environ, "HOME": td.name, "TOKEASE_STATUSLINE_QUIET": "1"}
         proc = subprocess.run(
             [sys.executable, str(self.SCRIPT)],
-            input=stdin_text, capture_output=True, text=True, env=env, timeout=10,
+            input=stdin_text, capture_output=True, text=True, env=env, timeout=10, check=False,
         )
         out_file = Path(td.name) / ".tokease" / "usage.json"
         payload = json.loads(out_file.read_text(encoding="utf-8")) if out_file.exists() else None
@@ -1484,7 +1484,7 @@ class TestStatuslineScript(unittest.TestCase):
         env = {**os.environ, "HOME": home, "TOKEASE_STATUSLINE_QUIET": "1"}
         proc = subprocess.run(
             [sys.executable, str(self.SCRIPT)],
-            input=stdin_text, capture_output=True, text=True, env=env, timeout=10,
+            input=stdin_text, capture_output=True, text=True, env=env, timeout=10, check=False,
         )
         out_file = Path(home) / ".tokease" / "usage.json"
         payload = json.loads(out_file.read_text(encoding="utf-8")) if out_file.exists() else None
@@ -1622,7 +1622,7 @@ class TestStatuslineScript(unittest.TestCase):
         env = {**os.environ, "HOME": td.name, "TOKEASE_STATUSLINE_QUIET": "1"}
         proc = subprocess.run(
             [sys.executable, str(self.SCRIPT)], input=json.dumps({"model": {"id": "x"}}),
-            capture_output=True, text=True, env=env, timeout=10,
+            capture_output=True, text=True, env=env, timeout=10, check=False,
         )
         self.assertEqual(proc.returncode, 0)
         kept = json.loads(good.read_text(encoding="utf-8"))
@@ -1657,7 +1657,7 @@ class TestStatuslineScript(unittest.TestCase):
         env = {**os.environ, "HOME": td.name, "TOKEASE_STATUSLINE_QUIET": "1"}
         proc = subprocess.run(
             [sys.executable, str(self.SCRIPT)], input="not json {{{",
-            capture_output=True, text=True, env=env, timeout=10,
+            capture_output=True, text=True, env=env, timeout=10, check=False,
         )
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(json.loads(good.read_text())["five_hour"]["used_percentage"], 42)

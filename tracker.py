@@ -251,7 +251,7 @@ def _is_login_item():
         result = subprocess.run(
             ["/usr/bin/osascript", "-e",
              'tell application "System Events" to get the name of every login item'],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, timeout=5, check=False,
         )
         return LOGIN_ITEM_NAME in (result.stdout or "")
     except (OSError, subprocess.TimeoutExpired):
@@ -277,7 +277,7 @@ def _set_login_item(enabled, app_path):
             )
         subprocess.run(
             ["/usr/bin/osascript", "-e", script],
-            capture_output=True, timeout=5,
+            capture_output=True, timeout=5, check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
         pass
