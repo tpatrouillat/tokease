@@ -251,7 +251,7 @@ def _is_login_item():
         result = subprocess.run(
             ["/usr/bin/osascript", "-e",
              'tell application "System Events" to get the name of every login item'],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, timeout=5, check=False,
         )
         return LOGIN_ITEM_NAME in (result.stdout or "")
     except (OSError, subprocess.TimeoutExpired):
@@ -277,7 +277,7 @@ def _set_login_item(enabled, app_path):
             )
         subprocess.run(
             ["/usr/bin/osascript", "-e", script],
-            capture_output=True, timeout=5,
+            capture_output=True, timeout=5, check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
         pass
@@ -869,7 +869,12 @@ class App(rumps.App):
             return
 
         if err or not data:
+            # Don't leave the last good readings in the dropdown: they would
+            # contradict the "?" and pass stale numbers off as current.
             self.title = "?"
+            self.m5h.title = FIVE_HOUR_DEFAULT
+            self.m7d.title = WEEKLY_DEFAULT
+            self.mupd.title = "Couldn't read usage data, retrying…"
             return
 
         self._update_display(data)

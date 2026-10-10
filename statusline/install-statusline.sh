@@ -62,6 +62,7 @@ write_with_jq() {
   local backup="$SETTINGS.bak.$(date +%Y%m%d-%H%M%S)"
   cp "$SETTINGS" "$backup"
   local tmp="$SETTINGS.tokease.tmp"
+  cp -p "$SETTINGS" "$tmp"   # seed tmp with settings.json's mode so the redirect below doesn't widen it
   if jq --arg cmd "$COMMAND" \
         '.statusLine = {"type": "command", "command": $cmd}' \
         "$SETTINGS" > "$tmp"; then
