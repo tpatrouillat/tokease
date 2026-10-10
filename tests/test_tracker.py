@@ -77,7 +77,7 @@ fake_rumps.Timer = FakeTimer
 fake_rumps.quit_application = lambda: None
 sys.modules["rumps"] = fake_rumps
 
-import tracker
+import tracker  # noqa: E402 — must come after rumps mock
 
 # Neutralise settings persistence so tests don't pick up stored UserDefaults
 # values from prior runs (interval, alerts, display_mode).
