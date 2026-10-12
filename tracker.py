@@ -120,7 +120,7 @@ def _render_dynamic_icon(session_pct, weekly_pct):
         draw.ellipse(bbox, outline=(0, 0, 0, _TRACK_ALPHA), width=stroke)
         if pct is None:
             continue
-        pct_clamped = max(0, min(100, int(pct)))
+        pct_clamped = max(0, min(100, round(pct)))
         if pct_clamped > 0:
             sweep = (pct_clamped / 100.0) * 360.0
             draw.arc(bbox, start=-90, end=-90 + sweep,
