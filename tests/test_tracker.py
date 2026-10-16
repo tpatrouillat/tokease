@@ -12,6 +12,8 @@ management.
 import ast
 import json
 import os
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -321,6 +323,20 @@ class TestAppErrorStates(unittest.TestCase):
         app = self._make_app()
         app._apply_usage(None, "error")
         self.assertEqual(app.title, "?")
+
+    def test_generic_error_clears_stale_rows(self):
+        # A good tick then an error tick: the dropdown must not keep showing
+        # the previous numbers next to the "?" in the menu bar.
+        app = self._make_app()
+        app._apply_usage(_make_usage(five_hour_pct=77, seven_day_pct=42), None)
+        stale = (app.m5h.title, app.m7d.title, app.mupd.title)
+        app._apply_usage(None, "error")
+        self.assertEqual(app.title, "?")
+        self.assertEqual(app.m5h.title, tracker.FIVE_HOUR_DEFAULT)
+        self.assertEqual(app.m7d.title, tracker.WEEKLY_DEFAULT)
+        self.assertIn("Couldn't read usage data", app.mupd.title)
+        for before, after in zip(stale, (app.m5h.title, app.m7d.title, app.mupd.title)):
+            self.assertNotEqual(before, after)
 
     def test_none_data_no_error(self):
         app = self._make_app()
@@ -1445,7 +1461,7 @@ class TestStatuslineScript(unittest.TestCase):
         env = {**os.environ, "HOME": td.name, "TOKEASE_STATUSLINE_QUIET": "1"}
         proc = subprocess.run(
             [sys.executable, str(self.SCRIPT)],
-            input=stdin_text, capture_output=True, text=True, env=env, timeout=10,
+            input=stdin_text, capture_output=True, text=True, env=env, timeout=10, check=False,
         )
         out_file = Path(td.name) / ".tokease" / "usage.json"
         payload = json.loads(out_file.read_text(encoding="utf-8")) if out_file.exists() else None
@@ -1468,7 +1484,7 @@ class TestStatuslineScript(unittest.TestCase):
         env = {**os.environ, "HOME": home, "TOKEASE_STATUSLINE_QUIET": "1"}
         proc = subprocess.run(
             [sys.executable, str(self.SCRIPT)],
-            input=stdin_text, capture_output=True, text=True, env=env, timeout=10,
+            input=stdin_text, capture_output=True, text=True, env=env, timeout=10, check=False,
         )
         out_file = Path(home) / ".tokease" / "usage.json"
         payload = json.loads(out_file.read_text(encoding="utf-8")) if out_file.exists() else None
@@ -1606,7 +1622,7 @@ class TestStatuslineScript(unittest.TestCase):
         env = {**os.environ, "HOME": td.name, "TOKEASE_STATUSLINE_QUIET": "1"}
         proc = subprocess.run(
             [sys.executable, str(self.SCRIPT)], input=json.dumps({"model": {"id": "x"}}),
-            capture_output=True, text=True, env=env, timeout=10,
+            capture_output=True, text=True, env=env, timeout=10, check=False,
         )
         self.assertEqual(proc.returncode, 0)
         kept = json.loads(good.read_text(encoding="utf-8"))
@@ -1641,7 +1657,7 @@ class TestStatuslineScript(unittest.TestCase):
         env = {**os.environ, "HOME": td.name, "TOKEASE_STATUSLINE_QUIET": "1"}
         proc = subprocess.run(
             [sys.executable, str(self.SCRIPT)], input="not json {{{",
-            capture_output=True, text=True, env=env, timeout=10,
+            capture_output=True, text=True, env=env, timeout=10, check=False,
         )
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(json.loads(good.read_text())["five_hour"]["used_percentage"], 42)
@@ -1685,6 +1701,72 @@ class TestStatuslineRenderLine(unittest.TestCase):
 
     def test_missing_percentage_key_is_skipped(self):
         self.assertEqual(self._render({"five_hour": {"resets_at": 1}}), "")
+
+    def test_infinite_percentage_is_skipped_not_fatal(self):
+        # json.loads turns 1e400 into inf; int(inf) raises OverflowError.
+        line = self._render({
+            "five_hour": {"used_percentage": float("inf")},
+            "seven_day": {"used_percentage": 5},
+        })
+        self.assertEqual(line, "⛁ 7d 5%")
+
+
+# ---------------------------------------------------------------------------
+# Tests: settings.json rewrites keep the file's mode (may hold API keys)
+# ---------------------------------------------------------------------------
+@unittest.skipUnless(shutil.which("jq") and shutil.which("bash"), "jq/bash required")
+class TestSettingsModePreserved(unittest.TestCase):
+    """install-statusline.sh and uninstall.sh rewrite ~/.claude/settings.json
+    through a temp file; a 0600 settings.json must not come back 0644."""
+
+    ROOT = Path(__file__).resolve().parent.parent
+
+    def _setup(self, settings):
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        tmp_root = os.path.realpath(td.name)
+        home = Path(tmp_root) / "home"
+        bin_dir = Path(tmp_root) / "bin"
+        (home / ".claude").mkdir(parents=True)
+        bin_dir.mkdir()
+        settings_path = home / ".claude" / "settings.json"
+        settings_path.write_text(json.dumps(settings), encoding="utf-8")
+        settings_path.chmod(0o600)
+        return tmp_root, home, bin_dir, settings_path
+
+    def _run(self, script, home, stdin_text):
+        return subprocess.run(
+            ["bash", "-c", 'umask 022; exec bash "$0"', str(script)],
+            env={**os.environ, "HOME": str(home)}, input=stdin_text,
+            capture_output=True, text=True, timeout=30,
+        )
+
+    def test_install_statusline_keeps_settings_mode(self):
+        _, home, bin_dir, settings_path = self._setup({"theme": "dark"})
+        for name in ("install-statusline.sh", "tokease-statusline.py"):
+            shutil.copy(self.ROOT / "statusline" / name, bin_dir / name)
+        proc = self._run(bin_dir / "install-statusline.sh", home, "y\n")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(stat.S_IMODE(settings_path.stat().st_mode), 0o600)
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+        self.assertIn("tokease-statusline.py", data["statusLine"]["command"])
+        self.assertEqual(data["theme"], "dark")
+
+    def test_uninstall_keeps_settings_mode(self):
+        tmp_root, home, bin_dir, settings_path = self._setup({
+            "theme": "dark",
+            "statusLine": {"type": "command",
+                           "command": "python3 ~/.tokease/tokease-statusline.py"},
+        })
+        # uninstall.sh runs `rm -rf "$HOME/.tokease"`: never against a real HOME.
+        self.assertTrue(str(home).startswith(tmp_root + os.sep))
+        shutil.copy(self.ROOT / "uninstall.sh", bin_dir / "uninstall.sh")
+        proc = self._run(bin_dir / "uninstall.sh", home, "")
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(stat.S_IMODE(settings_path.stat().st_mode), 0o600)
+        data = json.loads(settings_path.read_text(encoding="utf-8"))
+        self.assertNotIn("statusLine", data)
+        self.assertEqual(data["theme"], "dark")
 
 
 # ---------------------------------------------------------------------------
