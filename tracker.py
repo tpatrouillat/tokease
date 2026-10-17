@@ -880,9 +880,14 @@ class App(rumps.App):
             self.title = pct_text
             self.icon = None
         elif self.display_mode == DISPLAY_ICON:
-            self.title = ""
             if icon_path:
+                self.title = ""
                 self.icon = str(icon_path)
+            else:
+                # No fresh icon (render failed, or Pillow missing). An empty
+                # title with no icon leaves a zero-width, unclickable item and
+                # no way back short of killing the process: show the text.
+                self.title = pct_text
         else:  # DISPLAY_BOTH
             self.title = f"{_TITLE_SPACER}{pct_text}"
             if icon_path:
