@@ -334,6 +334,64 @@ class TestAppErrorStates(unittest.TestCase):
         self.assertEqual(app.title, "77%")
 
 
+class TestStaleRowsOnError(unittest.TestCase):
+    """A failed refresh after a good one kept the last numbers in the dropdown
+    with nothing saying they were no longer current."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def _rows(self, app):
+        return (app.m5h.title, app.m7d.title, app.mupd.title)
+
+    def test_error_after_reading_marks_rows_stale(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(five_hour_pct=42, seven_day_pct=18), None)
+        good = self._rows(app)
+        app._apply_usage(None, "error")
+        for before, after in zip(good, self._rows(app)):
+            self.assertEqual(after, before + tracker.STALE_ROW_SUFFIX)
+
+    def test_none_data_marks_rows_stale(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(), None)
+        app._apply_usage(None, None)
+        for row in self._rows(app):
+            self.assertTrue(row.endswith(tracker.STALE_ROW_SUFFIX), row)
+
+    def test_repeated_errors_do_not_stack_suffix(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(), None)
+        app._apply_usage(None, "error")
+        once = self._rows(app)
+        app._apply_usage(None, "error")
+        self.assertEqual(self._rows(app), once)
+
+    def test_next_good_refresh_clears_marker(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(), None)
+        app._apply_usage(None, "error")
+        app._apply_usage(_make_usage(five_hour_pct=50), None)
+        for row in self._rows(app):
+            self.assertNotIn(tracker.STALE_ROW_SUFFIX, row)
+
+    def test_no_marker_without_a_prior_reading(self):
+        app = self._make_app()
+        startup = self._rows(app)
+        app._apply_usage(None, "error")
+        self.assertEqual(self._rows(app), startup)
+
+    def test_no_marker_on_setup_text(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(), None)
+        app._apply_usage(None, "nostatusline")
+        setup = self._rows(app)
+        app._apply_usage(None, "error")
+        self.assertEqual(self._rows(app), setup)
+
+
 # ---------------------------------------------------------------------------
 # Tests: Interval management
 # ---------------------------------------------------------------------------
@@ -1747,7 +1805,6 @@ class TestIconModeWithoutIcon(unittest.TestCase):
         app._apply_display("42%", "stub-icon.png")
         self.assertEqual(app.title, "")
         self.assertEqual(app.icon, "stub-icon.png")
-
 
 
 # ---------------------------------------------------------------------------

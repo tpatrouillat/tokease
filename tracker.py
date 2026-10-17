@@ -202,6 +202,9 @@ WEEKLY_DEFAULT = "Weekly: --"
 UPDATED_DEFAULT = "Updated: --"
 # A reading whose capture time is missing or unreadable: R1 has no exception.
 UPDATED_UNKNOWN = "⚠ capture time unknown"
+# Appended to the dropdown rows when a refresh fails after a good reading: the
+# numbers stay on screen (better than nothing) but must not pass as current.
+STALE_ROW_SUFFIX = " (stale)"
 
 # ---------------------------------------------------------------------------
 # Settings persistence (NSUserDefaults)
@@ -615,6 +618,9 @@ class App(rumps.App):
         self.m5h   = rumps.MenuItem("5-hour: ...")
         self.m7d   = rumps.MenuItem("Weekly: ...")
         self.mupd  = rumps.MenuItem(UPDATED_DEFAULT)
+        # True while the rows above hold a real reading (not setup/waiting
+        # text), so a failed refresh knows whether there is anything to flag.
+        self._rows_hold_reading = False
 
         # --- Settings submenu --------------------------------------------
         # Launch at login (only meaningful when running as a .app bundle)
@@ -857,6 +863,7 @@ class App(rumps.App):
             self.m5h.title = "Easiest: open the Claude desktop app (auto-detected)"
             self.m7d.title = "Or wire the CLI: run statusline/install-statusline.sh"
             self.mupd.title = "then message in Claude Code (Pro or Max plan required)"
+            self._rows_hold_reading = False
             return
 
         if err == "waiting":
@@ -866,13 +873,27 @@ class App(rumps.App):
             self.title = "…"
             self.m5h.title = "Waiting for Claude Code activity…"
             self.m7d.title = "Quota data only exists on Pro or Max plans"
+            self._rows_hold_reading = False
             return
 
         if err or not data:
             self.title = "?"
+            self._mark_rows_stale()
             return
 
         self._update_display(data)
+
+    def _mark_rows_stale(self):
+        """Flag the last good reading in the dropdown after a failed refresh.
+
+        Only the row text changes: the data path is untouched, and the next
+        successful refresh rewrites every row, which drops the suffix.
+        """
+        if not self._rows_hold_reading:
+            return
+        for item in (self.m5h, self.m7d, self.mupd):
+            if not item.title.endswith(STALE_ROW_SUFFIX):
+                item.title = f"{item.title}{STALE_ROW_SUFFIX}"
 
     def _apply_display(self, pct_text, icon_path):
         """Apply the title + icon according to the user's display_mode preference."""
@@ -982,6 +1003,7 @@ class App(rumps.App):
         self.mupd.title = self._freshness_label(
             meta.get("captured_at"), now, meta.get("source")
         )
+        self._rows_hold_reading = True
 
         # % already clamped 0..100 in _window_row (see bug #52326).
         icon_path = _render_dynamic_icon(session_pct, weekly_pct)
