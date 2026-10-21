@@ -24,8 +24,9 @@ Knowledge graph at `graphify-out/`.
 
 ```bash
 python -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
+pip install "ruff==0.15.22"
 ruff check .
+pip install "pytest==9.1.1" "Pillow==12.3.0"   # rumps is mocked in tests; no PyObjC/macOS needed
 python -m pytest
 ```
 
