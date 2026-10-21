@@ -334,6 +334,64 @@ class TestAppErrorStates(unittest.TestCase):
         self.assertEqual(app.title, "77%")
 
 
+class TestStaleRowsOnError(unittest.TestCase):
+    """A failed refresh after a good one kept the last numbers in the dropdown
+    with nothing saying they were no longer current."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def _rows(self, app):
+        return (app.m5h.title, app.m7d.title, app.mupd.title)
+
+    def test_error_after_reading_marks_rows_stale(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(five_hour_pct=42, seven_day_pct=18), None)
+        good = self._rows(app)
+        app._apply_usage(None, "error")
+        for before, after in zip(good, self._rows(app)):
+            self.assertEqual(after, before + tracker.STALE_ROW_SUFFIX)
+
+    def test_none_data_marks_rows_stale(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(), None)
+        app._apply_usage(None, None)
+        for row in self._rows(app):
+            self.assertTrue(row.endswith(tracker.STALE_ROW_SUFFIX), row)
+
+    def test_repeated_errors_do_not_stack_suffix(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(), None)
+        app._apply_usage(None, "error")
+        once = self._rows(app)
+        app._apply_usage(None, "error")
+        self.assertEqual(self._rows(app), once)
+
+    def test_next_good_refresh_clears_marker(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(), None)
+        app._apply_usage(None, "error")
+        app._apply_usage(_make_usage(five_hour_pct=50), None)
+        for row in self._rows(app):
+            self.assertNotIn(tracker.STALE_ROW_SUFFIX, row)
+
+    def test_no_marker_without_a_prior_reading(self):
+        app = self._make_app()
+        startup = self._rows(app)
+        app._apply_usage(None, "error")
+        self.assertEqual(self._rows(app), startup)
+
+    def test_no_marker_on_setup_text(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(), None)
+        app._apply_usage(None, "nostatusline")
+        setup = self._rows(app)
+        app._apply_usage(None, "error")
+        self.assertEqual(self._rows(app), setup)
+
+
 # ---------------------------------------------------------------------------
 # Tests: Interval management
 # ---------------------------------------------------------------------------
@@ -1713,6 +1771,40 @@ class TestRenderIcon(unittest.TestCase):
     def test_renders_clamps_over_100(self):
         p = tracker._render_dynamic_icon(150, 999)
         self.assertTrue(Path(p).exists())
+
+
+class TestIconModeWithoutIcon(unittest.TestCase):
+    """Icon-only mode with no icon to show (render failed, Pillow missing, or
+    an error just cleared it) used to leave an empty title and no icon: a
+    zero-width menu bar item, impossible to click, so impossible to quit."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            app = tracker.App()
+        app.display_mode = tracker.DISPLAY_ICON
+        return app
+
+    def test_missing_icon_falls_back_to_text(self):
+        app = self._make_app()
+        app.icon = None
+        app._apply_display("42%", None)
+        self.assertEqual(app.title, "42%")
+
+    def test_render_failure_after_error_stays_visible(self):
+        app = self._make_app()
+        app._apply_usage(None, "error")  # clears the icon
+        self.assertIsNone(app.icon)
+        with patch.object(tracker, "_render_dynamic_icon", return_value=None):
+            app._apply_usage(_make_usage(five_hour_pct=42), None)
+        self.assertEqual(app.title, "42%")
+        self.assertIsNone(app.icon)
+
+    def test_icon_present_keeps_title_empty(self):
+        app = self._make_app()
+        app._apply_display("42%", "stub-icon.png")
+        self.assertEqual(app.title, "")
+        self.assertEqual(app.icon, "stub-icon.png")
 
 
 # ---------------------------------------------------------------------------

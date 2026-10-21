@@ -11,12 +11,14 @@ git clone https://github.com/tpatrouillat/tokease.git
 cd tokease
 python3 -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
-pip install ruff pytest        # dev tools
+pip install "ruff==0.15.22" pytest   # dev tools (ruff pinned to match CI)
 ```
 
 ## Before opening a PR
 
-- **Lint:** `ruff check .` (must pass — includes basic security rules).
+- **Lint:** `ruff check .` (must pass — includes basic security rules). Use the
+  ruff version pinned in `.github/workflows/ci.yml`: newer releases enable more
+  default rules and report findings CI does not.
 - **Tests:** `python -m pytest -q` (must stay green; add tests for new behavior).
 - Keep `tracker.py` readable and dependency-light (currently `rumps` + `Pillow`).
   New runtime dependencies need a strong justification.
