@@ -129,6 +129,10 @@ def _render_dynamic_icon(session_pct, weekly_pct):
     img = img.resize((_ICON_SIZE_FINAL, _ICON_SIZE_FINAL), Image.LANCZOS)
     try:
         _TOKEASE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        try:
+            _TOKEASE_DIR.chmod(0o700)
+        except OSError:
+            pass
         img.save(_DYNAMIC_ICON_PATH)
     except OSError as exc:  # full disk, read-only or deleted ~/.tokease: keep the last icon
         print(f"tokease: cannot write icon: {exc!r}", file=sys.stderr)
@@ -202,6 +206,9 @@ WEEKLY_DEFAULT = "Weekly: --"
 UPDATED_DEFAULT = "Updated: --"
 # A reading whose capture time is missing or unreadable: R1 has no exception.
 UPDATED_UNKNOWN = "⚠ capture time unknown"
+# Appended to the dropdown rows when a refresh fails after a good reading: the
+# numbers stay on screen (better than nothing) but must not pass as current.
+STALE_ROW_SUFFIX = " (stale)"
 
 # ---------------------------------------------------------------------------
 # Settings persistence (NSUserDefaults)
@@ -615,6 +622,9 @@ class App(rumps.App):
         self.m5h   = rumps.MenuItem("5-hour: ...")
         self.m7d   = rumps.MenuItem("Weekly: ...")
         self.mupd  = rumps.MenuItem(UPDATED_DEFAULT)
+        # True while the rows above hold a real reading (not setup/waiting
+        # text), so a failed refresh knows whether there is anything to flag.
+        self._rows_hold_reading = False
 
         # --- Settings submenu --------------------------------------------
         # Launch at login (only meaningful when running as a .app bundle)
@@ -857,6 +867,7 @@ class App(rumps.App):
             self.m5h.title = "Easiest: open the Claude desktop app (auto-detected)"
             self.m7d.title = "Or wire the CLI: run statusline/install-statusline.sh"
             self.mupd.title = "then message in Claude Code (Pro or Max plan required)"
+            self._rows_hold_reading = False
             return
 
         if err == "waiting":
@@ -866,13 +877,27 @@ class App(rumps.App):
             self.title = "…"
             self.m5h.title = "Waiting for Claude Code activity…"
             self.m7d.title = "Quota data only exists on Pro or Max plans"
+            self._rows_hold_reading = False
             return
 
         if err or not data:
             self.title = "?"
+            self._mark_rows_stale()
             return
 
         self._update_display(data)
+
+    def _mark_rows_stale(self):
+        """Flag the last good reading in the dropdown after a failed refresh.
+
+        Only the row text changes: the data path is untouched, and the next
+        successful refresh rewrites every row, which drops the suffix.
+        """
+        if not self._rows_hold_reading:
+            return
+        for item in (self.m5h, self.m7d, self.mupd):
+            if not item.title.endswith(STALE_ROW_SUFFIX):
+                item.title = f"{item.title}{STALE_ROW_SUFFIX}"
 
     def _apply_display(self, pct_text, icon_path):
         """Apply the title + icon according to the user's display_mode preference."""
@@ -880,9 +905,14 @@ class App(rumps.App):
             self.title = pct_text
             self.icon = None
         elif self.display_mode == DISPLAY_ICON:
-            self.title = ""
             if icon_path:
+                self.title = ""
                 self.icon = str(icon_path)
+            else:
+                # No fresh icon (render failed, or Pillow missing). An empty
+                # title with no icon leaves a zero-width, unclickable item and
+                # no way back short of killing the process: show the text.
+                self.title = pct_text
         else:  # DISPLAY_BOTH
             self.title = f"{_TITLE_SPACER}{pct_text}"
             if icon_path:
@@ -977,6 +1007,7 @@ class App(rumps.App):
         self.mupd.title = self._freshness_label(
             meta.get("captured_at"), now, meta.get("source")
         )
+        self._rows_hold_reading = True
 
         # % already clamped 0..100 in _window_row (see bug #52326).
         icon_path = _render_dynamic_icon(session_pct, weekly_pct)

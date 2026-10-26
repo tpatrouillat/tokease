@@ -334,6 +334,64 @@ class TestAppErrorStates(unittest.TestCase):
         self.assertEqual(app.title, "77%")
 
 
+class TestStaleRowsOnError(unittest.TestCase):
+    """A failed refresh after a good one kept the last numbers in the dropdown
+    with nothing saying they were no longer current."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def _rows(self, app):
+        return (app.m5h.title, app.m7d.title, app.mupd.title)
+
+    def test_error_after_reading_marks_rows_stale(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(five_hour_pct=42, seven_day_pct=18), None)
+        good = self._rows(app)
+        app._apply_usage(None, "error")
+        for before, after in zip(good, self._rows(app)):
+            self.assertEqual(after, before + tracker.STALE_ROW_SUFFIX)
+
+    def test_none_data_marks_rows_stale(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(), None)
+        app._apply_usage(None, None)
+        for row in self._rows(app):
+            self.assertTrue(row.endswith(tracker.STALE_ROW_SUFFIX), row)
+
+    def test_repeated_errors_do_not_stack_suffix(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(), None)
+        app._apply_usage(None, "error")
+        once = self._rows(app)
+        app._apply_usage(None, "error")
+        self.assertEqual(self._rows(app), once)
+
+    def test_next_good_refresh_clears_marker(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(), None)
+        app._apply_usage(None, "error")
+        app._apply_usage(_make_usage(five_hour_pct=50), None)
+        for row in self._rows(app):
+            self.assertNotIn(tracker.STALE_ROW_SUFFIX, row)
+
+    def test_no_marker_without_a_prior_reading(self):
+        app = self._make_app()
+        startup = self._rows(app)
+        app._apply_usage(None, "error")
+        self.assertEqual(self._rows(app), startup)
+
+    def test_no_marker_on_setup_text(self):
+        app = self._make_app()
+        app._apply_usage(_make_usage(), None)
+        app._apply_usage(None, "nostatusline")
+        setup = self._rows(app)
+        app._apply_usage(None, "error")
+        self.assertEqual(self._rows(app), setup)
+
+
 # ---------------------------------------------------------------------------
 # Tests: Interval management
 # ---------------------------------------------------------------------------
@@ -1715,6 +1773,40 @@ class TestRenderIcon(unittest.TestCase):
         self.assertTrue(Path(p).exists())
 
 
+class TestIconModeWithoutIcon(unittest.TestCase):
+    """Icon-only mode with no icon to show (render failed, Pillow missing, or
+    an error just cleared it) used to leave an empty title and no icon: a
+    zero-width menu bar item, impossible to click, so impossible to quit."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            app = tracker.App()
+        app.display_mode = tracker.DISPLAY_ICON
+        return app
+
+    def test_missing_icon_falls_back_to_text(self):
+        app = self._make_app()
+        app.icon = None
+        app._apply_display("42%", None)
+        self.assertEqual(app.title, "42%")
+
+    def test_render_failure_after_error_stays_visible(self):
+        app = self._make_app()
+        app._apply_usage(None, "error")  # clears the icon
+        self.assertIsNone(app.icon)
+        with patch.object(tracker, "_render_dynamic_icon", return_value=None):
+            app._apply_usage(_make_usage(five_hour_pct=42), None)
+        self.assertEqual(app.title, "42%")
+        self.assertIsNone(app.icon)
+
+    def test_icon_present_keeps_title_empty(self):
+        app = self._make_app()
+        app._apply_display("42%", "stub-icon.png")
+        self.assertEqual(app.title, "")
+        self.assertEqual(app.icon, "stub-icon.png")
+
+
 # ---------------------------------------------------------------------------
 # Tests: freshness label with a malformed captured_at
 # ---------------------------------------------------------------------------
@@ -2222,6 +2314,127 @@ class ResetDateIsLocalTest(unittest.TestCase):
         self.assertEqual(west, "Sep 05", "the Americas see the reset a day earlier")
         self.assertEqual(east, "Sep 06", "Asia sees it on the UTC date")
         self.assertNotEqual(west, east, "the date must depend on the timezone")
+
+
+# ---------------------------------------------------------------------------
+# Tests: login-item management (osascript is always mocked, never spawned)
+# ---------------------------------------------------------------------------
+class TestGetAppPath(unittest.TestCase):
+    def test_running_from_source_returns_none(self):
+        with patch.object(tracker.sys, "frozen", False, create=True):
+            self.assertIsNone(tracker._get_app_path())
+
+    def test_frozen_bundle_returns_the_app_directory(self):
+        exe = "/Applications/Tokease.app/Contents/MacOS/Tokease"
+        with patch.object(tracker.sys, "frozen", "macosx_app", create=True), \
+             patch.object(tracker.sys, "executable", exe):
+            self.assertEqual(tracker._get_app_path(), "/Applications/Tokease.app")
+
+    def test_frozen_without_an_app_parent_returns_none(self):
+        with patch.object(tracker.sys, "frozen", "macosx_app", create=True), \
+             patch.object(tracker.sys, "executable", "/usr/local/bin/python3"):
+            self.assertIsNone(tracker._get_app_path())
+
+    def test_resolve_failure_returns_none(self):
+        with patch.object(tracker.sys, "frozen", "macosx_app", create=True), \
+             patch.object(tracker.Path, "resolve", side_effect=OSError):
+            self.assertIsNone(tracker._get_app_path())
+
+
+class TestIsLoginItem(unittest.TestCase):
+    def _run_returning(self, stdout):
+        return patch("tracker.subprocess.run",
+                     return_value=SimpleNamespace(stdout=stdout))
+
+    def test_listed_login_item_is_detected(self):
+        with self._run_returning("Dropbox, Tokease, Slack\n") as run:
+            self.assertTrue(tracker._is_login_item())
+        argv = run.call_args.args[0]
+        self.assertEqual(argv[0], "/usr/bin/osascript")
+        self.assertIn("login item", argv[-1])
+
+    def test_absent_login_item_is_false(self):
+        with self._run_returning("Dropbox, Slack\n"):
+            self.assertFalse(tracker._is_login_item())
+
+    def test_none_stdout_is_false(self):
+        with self._run_returning(None):
+            self.assertFalse(tracker._is_login_item())
+
+    def test_oserror_falls_back_to_false(self):
+        with patch("tracker.subprocess.run", side_effect=OSError):
+            self.assertFalse(tracker._is_login_item())
+
+    def test_timeout_falls_back_to_false(self):
+        err = subprocess.TimeoutExpired(cmd="osascript", timeout=5)
+        with patch("tracker.subprocess.run", side_effect=err):
+            self.assertFalse(tracker._is_login_item())
+
+
+class TestSetLoginItem(unittest.TestCase):
+    APP = "/Applications/Tokease.app"
+
+    def test_unsafe_paths_never_reach_osascript(self):
+        for bad in ('/Apps/To"kease.app', "/Apps/To\\kease.app", "/Apps/To\nkease.app"):
+            for enabled in (True, False):
+                with self.subTest(path=bad, enabled=enabled), \
+                     patch("tracker.subprocess.run") as run:
+                    tracker._set_login_item(enabled, bad)
+                    run.assert_not_called()
+
+    def test_enable_makes_a_login_item_for_the_app_path(self):
+        with patch("tracker.subprocess.run") as run:
+            tracker._set_login_item(True, self.APP)
+        run.assert_called_once()
+        argv = run.call_args.args[0]
+        self.assertEqual(argv[:2], ["/usr/bin/osascript", "-e"])
+        self.assertIn("make login item", argv[2])
+        self.assertIn(f'path:"{self.APP}"', argv[2])
+
+    def test_disable_deletes_the_named_login_item(self):
+        with patch("tracker.subprocess.run") as run:
+            tracker._set_login_item(False, self.APP)
+        run.assert_called_once()
+        script = run.call_args.args[0][2]
+        self.assertIn(f'delete login item "{tracker.LOGIN_ITEM_NAME}"', script)
+        self.assertNotIn(self.APP, script)
+
+    def test_osascript_failures_are_swallowed(self):
+        for err in (OSError(), subprocess.TimeoutExpired(cmd="osascript", timeout=5)):
+            with self.subTest(err=type(err).__name__), \
+                 patch("tracker.subprocess.run", side_effect=err):
+                tracker._set_login_item(True, self.APP)  # must not raise
+
+
+class TestToggleLogin(unittest.TestCase):
+    APP = "/Applications/Tokease.app"
+
+    def _toggle(self, initial_state, now_listed):
+        owner = SimpleNamespace(_app_path=self.APP)
+        sender = FakeMenuItem("Launch at login")
+        sender.state = initial_state
+        with patch("tracker._set_login_item") as set_item, \
+             patch("tracker._is_login_item", return_value=now_listed) as is_item:
+            tracker.App._toggle_login(owner, sender)
+        return sender, set_item, is_item
+
+    def test_off_to_on_requests_enable_and_shows_checked(self):
+        sender, set_item, is_item = self._toggle(0, now_listed=True)
+        set_item.assert_called_once_with(True, self.APP)
+        is_item.assert_called_once_with()
+        self.assertEqual(sender.state, 1)
+
+    def test_on_to_off_requests_disable_and_shows_unchecked(self):
+        sender, set_item, _ = self._toggle(1, now_listed=False)
+        set_item.assert_called_once_with(False, self.APP)
+        self.assertEqual(sender.state, 0)
+
+    def test_state_reflects_system_events_not_the_request(self):
+        # Automation permission denied: enable was requested but nothing changed.
+        sender, set_item, _ = self._toggle(0, now_listed=False)
+        set_item.assert_called_once_with(True, self.APP)
+        self.assertEqual(sender.state, 0)
+
 
 if __name__ == "__main__":
     unittest.main()
