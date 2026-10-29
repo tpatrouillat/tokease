@@ -717,6 +717,19 @@ class TestApplyDisplayModes(unittest.TestCase):
         self.assertEqual(app._display_items[tracker.DISPLAY_ICON].state, 1)
         self.assertEqual(app._display_items[tracker.DISPLAY_BOTH].state, 0)
 
+    def test_toggle_title_weekly_persists_and_flips_state(self):
+        app = self._make_app()
+        app.title_weekly = False
+        sender = FakeMenuItem("Add weekly % (5h / weekly)")
+        sender.state = 0
+        with patch("tracker._settings_set") as save, \
+             patch.object(app, "_refresh") as refresh:
+            app._toggle_title_weekly(sender)
+        self.assertTrue(app.title_weekly)
+        self.assertEqual(sender.state, 1)
+        save.assert_called_once_with(tracker._KEY_TITLE_WEEKLY, True)
+        refresh.assert_called_once_with(None)
+
 
 # ---------------------------------------------------------------------------
 # Tests: pre-reset guard (ADR 0004, scenario C7)
