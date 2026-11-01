@@ -12,6 +12,7 @@ management.
 import ast
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -1699,6 +1700,32 @@ class TestStatuslineRenderLine(unittest.TestCase):
     def test_missing_percentage_key_is_skipped(self):
         self.assertEqual(self._render({"five_hour": {"resets_at": 1}}), "")
 
+    def test_infinite_percentage_is_skipped_not_fatal(self):
+        # int(float("inf")) raises OverflowError, not ValueError.
+        line = self._render({
+            "five_hour": {"used_percentage": float("inf")},
+            "seven_day": {"used_percentage": 7},
+        })
+        self.assertEqual(line, "⛁ 7d 7%")
+
+
+class TestStatuslineAtomicWrite(unittest.TestCase):
+    """usage.json is private data: it must not be readable by other accounts."""
+
+    def test_usage_file_is_owner_only(self):
+        import importlib.util
+        path = Path(__file__).resolve().parent.parent / "statusline" / "tokease-statusline.py"
+        spec = importlib.util.spec_from_file_location("tokease_statusline", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        base = Path(td.name) / ".tokease"
+        with patch.object(mod, "_DIR", base), \
+                patch.object(mod, "_OUT", base / "usage.json"):
+            mod._atomic_write({"schema": 1})
+        self.assertEqual(stat.S_IMODE(os.stat(base / "usage.json").st_mode), 0o600)
+
 
 # ---------------------------------------------------------------------------
 # Tests: real icon rendering (Pillow) — otherwise this prod code never runs
@@ -2065,11 +2092,14 @@ class TokenFreeInvariantTest(unittest.TestCase):
         # PyObjC bridge to the Keychain. objc/Quartz/CoreGraphics stay
         # allowed: the roadmap plans to draw the icon with them.
         "Security",
+        # Other ways to reach the Security framework / CoreFoundation at runtime.
+        "ctypes", "importlib",
     })
     # Reading a credential back, whether through the CLI or the Security
     # framework that PyObjC puts within reach.
     FORBIDDEN_STRINGS = ("find-generic-password", "SecItemCopyMatching",
-                         "NSURLSession", "Claude Code-credentials")
+                         "NSURLSession", "Claude Code-credentials",
+                         "CFNetwork", "NSURLConnection")
 
     @staticmethod
     def _shipped():

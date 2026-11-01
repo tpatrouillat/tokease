@@ -97,6 +97,7 @@ def _atomic_write(payload):
     try:
         with open(tmp, "w", encoding="utf-8") as fh:
             json.dump(payload, fh)
+        tmp.chmod(0o600)  # usage is private: not readable by other local accounts
         os.replace(tmp, _OUT)
     except (OSError, TypeError, ValueError):
         tmp.unlink(missing_ok=True)
@@ -112,7 +113,7 @@ def _render_line(payload):
             continue
         try:  # a non-numeric % must not wipe out the whole output
             bits.append(f"{lbl} {int(float(win['used_percentage']))}%")
-        except (KeyError, TypeError, ValueError):
+        except (KeyError, TypeError, ValueError, OverflowError):  # int(inf)
             pass
     return "⛁ " + " · ".join(bits) if bits else ""
 
