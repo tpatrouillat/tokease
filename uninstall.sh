@@ -19,6 +19,17 @@ TOKEASE_DIR="$HOME/.tokease"
 SETTINGS="$HOME/.claude/settings.json"
 STATUSLINE_MARK="tokease-statusline.py"
 
+# True only when settings.json's statusLine.command itself runs our script: a
+# mere mention elsewhere (e.g. a permissions allow-list) must not cost the user
+# their own statusLine. Without jq, fall back to the plain string search.
+statusline_is_ours() {
+  if command -v jq >/dev/null 2>&1; then
+    jq -e --arg m "$STATUSLINE_MARK" '(.statusLine.command? // "") | tostring | contains($m)' "$SETTINGS" >/dev/null 2>&1
+  else
+    grep -q "$STATUSLINE_MARK" "$SETTINGS" 2>/dev/null
+  fi
+}
+
 echo "Tokease — uninstall"
 echo
 
@@ -35,7 +46,7 @@ SELF_DIR_RE=$(printf '%s' "$SELF_DIR/tracker.py" | sed 's/[.[\$()*+?{|^]/\\&/g')
 pkill -f "$SELF_DIR_RE" 2>/dev/null || true
 
 # 2. statusLine block in settings.json — only if it is ours
-if [[ -f "$SETTINGS" ]] && grep -q "$STATUSLINE_MARK" "$SETTINGS" 2>/dev/null; then
+if [[ -f "$SETTINGS" ]] && statusline_is_ours; then
   if command -v jq >/dev/null 2>&1; then
     backup="$SETTINGS.bak.$(date +%Y%m%d-%H%M%S)"
     cp "$SETTINGS" "$backup"

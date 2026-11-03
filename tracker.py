@@ -814,7 +814,7 @@ class App(rumps.App):
         if soonest is None:
             return
 
-        # +5s buffer so Anthropic's backend has rolled the window before we re-poll.
+        # +5s buffer so the window has clearly rolled over before we re-read the local files.
         # Marshal _refresh onto the main thread — it sets self.title and would
         # otherwise inherit the threading.Timer's background thread (crash risk).
         delay = (soonest - now).total_seconds() + 5
