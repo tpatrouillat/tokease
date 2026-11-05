@@ -91,6 +91,7 @@ create_settings() {
 }
 EOF
   fi
+  chmod 600 "$SETTINGS"
   echo "✓ $SETTINGS created with the statusLine block."
 }
 
