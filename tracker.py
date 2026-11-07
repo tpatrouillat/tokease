@@ -120,7 +120,7 @@ def _render_dynamic_icon(session_pct, weekly_pct):
         draw.ellipse(bbox, outline=(0, 0, 0, _TRACK_ALPHA), width=stroke)
         if pct is None:
             continue
-        pct_clamped = max(0, min(100, int(pct)))
+        pct_clamped = max(0, min(100, round(pct)))
         if pct_clamped > 0:
             sweep = (pct_clamped / 100.0) * 360.0
             draw.arc(bbox, start=-90, end=-90 + sweep,
@@ -253,7 +253,7 @@ def _is_login_item():
              'tell application "System Events" to get the name of every login item'],
             capture_output=True, text=True, timeout=5,
         )
-        return LOGIN_ITEM_NAME in (result.stdout or "")
+        return LOGIN_ITEM_NAME in [n.strip() for n in (result.stdout or "").split(",")]
     except (OSError, subprocess.TimeoutExpired):
         return False
 
@@ -814,7 +814,7 @@ class App(rumps.App):
         if soonest is None:
             return
 
-        # +5s buffer so Anthropic's backend has rolled the window before we re-poll.
+        # +5s buffer so the window has clearly rolled over before we re-read the local files.
         # Marshal _refresh onto the main thread — it sets self.title and would
         # otherwise inherit the threading.Timer's background thread (crash risk).
         delay = (soonest - now).total_seconds() + 5
@@ -869,7 +869,12 @@ class App(rumps.App):
             return
 
         if err or not data:
+            # Don't leave the last good readings in the dropdown: they would
+            # contradict the "?" and pass stale numbers off as current.
             self.title = "?"
+            self.m5h.title = FIVE_HOUR_DEFAULT
+            self.m7d.title = WEEKLY_DEFAULT
+            self.mupd.title = "Couldn't read usage data, retrying…"
             return
 
         self._update_display(data)
@@ -880,9 +885,13 @@ class App(rumps.App):
             self.title = pct_text
             self.icon = None
         elif self.display_mode == DISPLAY_ICON:
-            self.title = ""
             if icon_path:
                 self.icon = str(icon_path)
+            # Blank the title only when something is actually drawn. With no
+            # icon to fall back on (error tick cleared it, no Pillow, render
+            # failed), an empty title leaves a zero-width, invisible menu bar
+            # item with no way back: show the text instead.
+            self.title = "" if self.icon else pct_text
         else:  # DISPLAY_BOTH
             self.title = f"{_TITLE_SPACER}{pct_text}"
             if icon_path:
