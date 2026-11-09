@@ -51,6 +51,7 @@ if [[ -f "$SETTINGS" ]] && statusline_is_ours; then
     backup="$SETTINGS.bak.$(date +%Y%m%d-%H%M%S)"
     cp "$SETTINGS" "$backup"
     tmp="$SETTINGS.tokease.tmp"
+    cp -p "$SETTINGS" "$tmp"   # inherit settings.json mode/owner (often 0600), not the umask default
     if jq 'del(.statusLine)' "$SETTINGS" > "$tmp"; then
       mv "$tmp" "$SETTINGS"
       echo "✓ statusLine block removed from $SETTINGS (backup: $backup)"
