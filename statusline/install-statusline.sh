@@ -62,6 +62,7 @@ write_with_jq() {
   local backup="$SETTINGS.bak.$(date +%Y%m%d-%H%M%S)"
   cp "$SETTINGS" "$backup"
   local tmp="$SETTINGS.tokease.tmp"
+  cp -p "$SETTINGS" "$tmp"   # inherit settings.json mode/owner (often 0600), not the umask default
   if jq --arg cmd "$COMMAND" \
         '.statusLine = {"type": "command", "command": $cmd}' \
         "$SETTINGS" > "$tmp"; then
@@ -91,6 +92,7 @@ create_settings() {
 }
 EOF
   fi
+  chmod 600 "$SETTINGS"
   echo "✓ $SETTINGS created with the statusLine block."
 }
 

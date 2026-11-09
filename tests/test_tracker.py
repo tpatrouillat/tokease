@@ -12,6 +12,7 @@ management.
 import ast
 import json
 import os
+import stat
 import subprocess
 import sys
 import tempfile
@@ -716,6 +717,19 @@ class TestApplyDisplayModes(unittest.TestCase):
         save.assert_called_once_with(tracker._KEY_DISPLAY_MODE, tracker.DISPLAY_ICON)
         self.assertEqual(app._display_items[tracker.DISPLAY_ICON].state, 1)
         self.assertEqual(app._display_items[tracker.DISPLAY_BOTH].state, 0)
+
+    def test_toggle_title_weekly_persists_and_flips_state(self):
+        app = self._make_app()
+        app.title_weekly = False
+        sender = FakeMenuItem("Add weekly % (5h / weekly)")
+        sender.state = 0
+        with patch("tracker._settings_set") as save, \
+             patch.object(app, "_refresh") as refresh:
+            app._toggle_title_weekly(sender)
+        self.assertTrue(app.title_weekly)
+        self.assertEqual(sender.state, 1)
+        save.assert_called_once_with(tracker._KEY_TITLE_WEEKLY, True)
+        refresh.assert_called_once_with(None)
 
 
 # ---------------------------------------------------------------------------
@@ -1686,6 +1700,32 @@ class TestStatuslineRenderLine(unittest.TestCase):
     def test_missing_percentage_key_is_skipped(self):
         self.assertEqual(self._render({"five_hour": {"resets_at": 1}}), "")
 
+    def test_infinite_percentage_is_skipped_not_fatal(self):
+        # int(float("inf")) raises OverflowError, not ValueError.
+        line = self._render({
+            "five_hour": {"used_percentage": float("inf")},
+            "seven_day": {"used_percentage": 7},
+        })
+        self.assertEqual(line, "⛁ 7d 7%")
+
+
+class TestStatuslineAtomicWrite(unittest.TestCase):
+    """usage.json is private data: it must not be readable by other accounts."""
+
+    def test_usage_file_is_owner_only(self):
+        import importlib.util
+        path = Path(__file__).resolve().parent.parent / "statusline" / "tokease-statusline.py"
+        spec = importlib.util.spec_from_file_location("tokease_statusline", path)
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        base = Path(td.name) / ".tokease"
+        with patch.object(mod, "_DIR", base), \
+                patch.object(mod, "_OUT", base / "usage.json"):
+            mod._atomic_write({"schema": 1})
+        self.assertEqual(stat.S_IMODE(os.stat(base / "usage.json").st_mode), 0o600)
+
 
 # ---------------------------------------------------------------------------
 # Tests: real icon rendering (Pillow) — otherwise this prod code never runs
@@ -2052,11 +2092,14 @@ class TokenFreeInvariantTest(unittest.TestCase):
         # PyObjC bridge to the Keychain. objc/Quartz/CoreGraphics stay
         # allowed: the roadmap plans to draw the icon with them.
         "Security",
+        # Other ways to reach the Security framework / CoreFoundation at runtime.
+        "ctypes", "importlib",
     })
     # Reading a credential back, whether through the CLI or the Security
     # framework that PyObjC puts within reach.
     FORBIDDEN_STRINGS = ("find-generic-password", "SecItemCopyMatching",
-                         "NSURLSession", "Claude Code-credentials")
+                         "NSURLSession", "Claude Code-credentials",
+                         "CFNetwork", "NSURLConnection")
 
     @staticmethod
     def _shipped():
