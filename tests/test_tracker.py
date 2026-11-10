@@ -2028,6 +2028,80 @@ class TestStrategyGaps(unittest.TestCase):
         self.assertEqual(render.call_args[0][0], 42)
 
 
+class TestLoginItem(unittest.TestCase):
+    """Login-item helpers: AppleScript via osascript, no real subprocess."""
+
+    APP = "/Applications/Tokease.app"
+
+    def test_set_rejects_injection_unsafe_paths(self):
+        for bad in ('/Applications/To"kease.app',
+                    "/Applications/To\\kease.app",
+                    "/Applications/To\nkease.app"):
+            with self.subTest(path=bad), \
+                    patch.object(tracker.subprocess, "run") as run:
+                tracker._set_login_item(True, bad)
+                run.assert_not_called()
+
+    def test_set_enabled_adds_login_item_with_path(self):
+        with patch.object(tracker.subprocess, "run") as run:
+            tracker._set_login_item(True, self.APP)
+        run.assert_called_once()
+        argv = run.call_args.args[0]
+        self.assertEqual(argv[0], "/usr/bin/osascript")
+        self.assertEqual(argv[1], "-e")
+        self.assertIn(f'path:"{self.APP}"', argv[2])
+
+    def test_set_disabled_deletes_login_item_by_name(self):
+        with patch.object(tracker.subprocess, "run") as run:
+            tracker._set_login_item(False, self.APP)
+        run.assert_called_once()
+        script = run.call_args.args[0][2]
+        self.assertIn("delete login item", script)
+        self.assertIn(f'"{tracker.LOGIN_ITEM_NAME}"', script)
+
+    def test_set_swallows_subprocess_errors(self):
+        for exc in (OSError("boom"),
+                    subprocess.TimeoutExpired("osascript", 5)):
+            with self.subTest(exc=type(exc).__name__), \
+                    patch.object(tracker.subprocess, "run", side_effect=exc):
+                self.assertIsNone(tracker._set_login_item(True, self.APP))
+
+    def test_is_login_item_true_when_name_listed(self):
+        out = SimpleNamespace(stdout=f"Dropbox, {tracker.LOGIN_ITEM_NAME}, Slack\n")
+        with patch.object(tracker.subprocess, "run", return_value=out):
+            self.assertTrue(tracker._is_login_item())
+
+    def test_is_login_item_false_on_empty_or_missing_stdout(self):
+        for stdout in ("", None):
+            with self.subTest(stdout=stdout), \
+                    patch.object(tracker.subprocess, "run",
+                                 return_value=SimpleNamespace(stdout=stdout)):
+                self.assertFalse(tracker._is_login_item())
+
+    def test_is_login_item_false_on_subprocess_errors(self):
+        for exc in (OSError("boom"),
+                    subprocess.TimeoutExpired("osascript", 5)):
+            with self.subTest(exc=type(exc).__name__), \
+                    patch.object(tracker.subprocess, "run", side_effect=exc):
+                self.assertFalse(tracker._is_login_item())
+
+    def test_get_app_path_none_when_not_frozen(self):
+        with patch.object(tracker.sys, "frozen", False, create=True):
+            self.assertIsNone(tracker._get_app_path())
+
+    def test_get_app_path_finds_enclosing_bundle_when_frozen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            exe = Path(tmp) / "Tokease.app" / "Contents" / "MacOS" / "Tokease"
+            exe.parent.mkdir(parents=True)
+            exe.touch()
+            with patch.object(tracker.sys, "frozen", "macosx_app",
+                              create=True), \
+                    patch.object(tracker.sys, "executable", str(exe)):
+                result = tracker._get_app_path()
+        self.assertTrue(result.endswith("Tokease.app"), result)
+        self.assertEqual(Path(result), exe.resolve().parents[2])
+
+
 class TokenFreeInvariantTest(unittest.TestCase):
     """The product's public promise, enforced instead of documented.
 
@@ -2054,9 +2128,13 @@ class TokenFreeInvariantTest(unittest.TestCase):
         "Security",
     })
     # Reading a credential back, whether through the CLI or the Security
-    # framework that PyObjC puts within reach.
+    # framework that PyObjC puts within reach. The two file names are the
+    # credential files of Claude Code (~/.claude/.credentials.json) and the
+    # Claude desktop app (Application Support/Claude/config.json), so a plain
+    # file read of them is caught, not just Keychain API names.
     FORBIDDEN_STRINGS = ("find-generic-password", "SecItemCopyMatching",
-                         "NSURLSession", "Claude Code-credentials")
+                         "NSURLSession", "Claude Code-credentials",
+                         ".credentials.json", "config.json")
 
     @staticmethod
     def _shipped():
