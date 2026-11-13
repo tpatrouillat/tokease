@@ -12,6 +12,7 @@ management.
 import ast
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -496,6 +497,27 @@ class TestConstants(unittest.TestCase):
     def test_two_rings_only(self):
         # Icon geometry = 2 rings (outer 5h, inner weekly).
         self.assertEqual(len(tracker._RING_RADII), 2)
+
+    def test_version_matches_setup_py(self):
+        # The Support submenu and the bundle's Info.plist must name the same
+        # build, or a bug report points at the wrong release.
+        setup_py = Path(__file__).resolve().parent.parent / "setup.py"
+        tree = ast.parse(setup_py.read_text())
+        found = {}
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Dict):
+                for key, value in zip(node.keys, node.values):
+                    if (isinstance(key, ast.Constant)
+                            and key.value in {"CFBundleVersion",
+                                              "CFBundleShortVersionString"}
+                            and isinstance(value, ast.Constant)):
+                        found[key.value] = value.value
+        self.assertEqual(
+            found,
+            {"CFBundleVersion": tracker.__version__,
+             "CFBundleShortVersionString": tracker.__version__},
+            "setup.py and tracker.__version__ disagree; bump both together.",
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -2052,11 +2074,21 @@ class TokenFreeInvariantTest(unittest.TestCase):
         # PyObjC bridge to the Keychain. objc/Quartz/CoreGraphics stay
         # allowed: the roadmap plans to draw the icon with them.
         "Security",
+        # Other ways out: third-party clients, raw FFI, the CoreFoundation
+        # network stack, and dynamic import (which would hide all of the above).
+        "urllib3", "websockets", "websocket", "pycurl", "ctypes", "importlib",
+        "CFNetwork", "paramiko", "telnetlib3",
     })
     # Reading a credential back, whether through the CLI or the Security
     # framework that PyObjC puts within reach.
     FORBIDDEN_STRINGS = ("find-generic-password", "SecItemCopyMatching",
-                         "NSURLSession", "Claude Code-credentials")
+                         "NSURLSession", "Claude Code-credentials",
+                         "NSURLConnection", "CFNetwork", "do shell script")
+    # Where Claude clients keep a token or a session: naming the file is the
+    # first step to reading it, so no shipped file may name one.
+    FORBIDDEN_PATH_FRAGMENTS = (".credentials.json", "Cookies", "config.json",
+                                "claudeAiOauth", "tokenCache", "Local Storage",
+                                ".claude.json")
 
     @staticmethod
     def _shipped():
@@ -2066,6 +2098,7 @@ class TokenFreeInvariantTest(unittest.TestCase):
             "statusline/tokease-statusline.py",
             "assets/build-logos.py",
             "assets/build-menubar-icon.py",
+            "setup.py",
         }, root
 
     def _trees(self):
@@ -2075,6 +2108,24 @@ class TokenFreeInvariantTest(unittest.TestCase):
             self.assertTrue(path.is_file(), f"{name} is missing")
             source = path.read_text()
             yield name, source, ast.parse(source)
+
+    @staticmethod
+    def _string_literals(tree):
+        """Every str constant in the tree, docstrings excluded."""
+        docstrings = {
+            id(n.body[0].value)
+            for n in ast.walk(tree)
+            if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef,
+                              ast.AsyncFunctionDef))
+            and n.body and isinstance(n.body[0], ast.Expr)
+            and isinstance(n.body[0].value, ast.Constant)
+            and isinstance(n.body[0].value.value, str)
+        }
+        return [
+            n.value for n in ast.walk(tree)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str)
+            and id(n) not in docstrings
+        ]
 
     def test_the_guard_covers_every_shipped_python_file(self):
         # A closed list silently stops guarding the day code moves into a
@@ -2086,7 +2137,7 @@ class TokenFreeInvariantTest(unittest.TestCase):
         ).stdout.split()
         shipped = {
             f for f in tracked
-            if not f.startswith(("tests/", "build/")) and f != "setup.py"
+            if not f.startswith(("tests/", "build/"))
         }
         self.assertEqual(
             shipped, names,
@@ -2112,20 +2163,7 @@ class TokenFreeInvariantTest(unittest.TestCase):
 
     def test_no_shipped_file_names_a_credential_api(self):
         for name, _source, tree in self._trees():
-            docstrings = {
-                id(n.body[0].value)
-                for n in ast.walk(tree)
-                if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef,
-                                  ast.AsyncFunctionDef))
-                and n.body and isinstance(n.body[0], ast.Expr)
-                and isinstance(n.body[0].value, ast.Constant)
-                and isinstance(n.body[0].value.value, str)
-            }
-            literals = [
-                n.value for n in ast.walk(tree)
-                if isinstance(n, ast.Constant) and isinstance(n.value, str)
-                and id(n) not in docstrings
-            ]
+            literals = self._string_literals(tree)
             attributes = [
                 n.attr for n in ast.walk(tree) if isinstance(n, ast.Attribute)
             ]
@@ -2137,6 +2175,62 @@ class TokenFreeInvariantTest(unittest.TestCase):
                         f"a credential (ADR 0002).",
                     )
                 self.assertNotIn(needle, attributes, f"{name} calls {needle}.")
+
+    def test_no_shipped_file_names_a_credential_store(self):
+        for name, _source, tree in self._trees():
+            literals = self._string_literals(tree)
+            for needle in self.FORBIDDEN_PATH_FRAGMENTS:
+                for text in literals:
+                    self.assertNotIn(
+                        needle, text,
+                        f"{name} names {needle!r}, where a Claude client keeps "
+                        f"a token or a session (ADR 0002).",
+                    )
+
+    def test_no_shipped_file_imports_dynamically(self):
+        # __import__("soc" + "ket") or importlib.import_module(...) would
+        # walk straight past the import denylist above.
+        for name, _source, tree in self._trees():
+            for node in ast.walk(tree):
+                self.assertFalse(
+                    isinstance(node, ast.Name) and node.id == "__import__",
+                    f"{name} calls __import__: imports must stay static so "
+                    f"the denylist can see them.",
+                )
+                self.assertFalse(
+                    isinstance(node, ast.Attribute)
+                    and node.attr == "import_module",
+                    f"{name} calls import_module: imports must stay static so "
+                    f"the denylist can see them.",
+                )
+
+    def test_no_shell_script_reads_a_credential_or_fetches(self):
+        # The install scripts run with the user's privileges too. Raw text,
+        # not an AST: a shell comment naming these is still worth a look.
+        # ".claude", "settings.json" and "token" are legitimate here (the
+        # statusline installer edits ~/.claude/settings.json).
+        _names, root = self._shipped()
+        scripts = set(subprocess.run(
+            ["git", "ls-files", "*.sh"], cwd=root,
+            capture_output=True, text=True, check=True,
+        ).stdout.split())
+        self.assertEqual(
+            scripts,
+            {"build.sh", "install.sh", "uninstall.sh",
+             "statusline/install-statusline.sh"},
+            "the set of shell scripts changed; review the new one and update "
+            "this list.",
+        )
+        for name in sorted(scripts):
+            text = (root / name).read_text()
+            for needle in ("find-generic-password", "Claude Code-credentials",
+                           ".credentials.json", "Keychain", "keychain",
+                           "Cookies", "curl", "wget"):
+                self.assertNotIn(
+                    needle, text,
+                    f"{name} contains {needle!r}: no script may read a "
+                    f"credential or fetch from the network (ADR 0002).",
+                )
 
     def test_the_only_binary_any_shipped_file_spawns_is_osascript(self):
         # Every shipped file, not just tracker.py: a curl added to the
@@ -2222,6 +2316,94 @@ class ResetDateIsLocalTest(unittest.TestCase):
         self.assertEqual(west, "Sep 05", "the Americas see the reset a day earlier")
         self.assertEqual(east, "Sep 06", "Asia sees it on the UTC date")
         self.assertNotEqual(west, east, "the date must depend on the timezone")
+
+
+class TestLoginItemHelpers(unittest.TestCase):
+    """Login-item registration goes through osascript with an interpolated
+    path, so the quoting guard and the error swallowing are worth pinning."""
+
+    APP = "/Applications/Tokease.app"
+
+    def test_rejects_paths_that_break_out_of_the_applescript_string(self):
+        for bad in ('/Applications/To"kease.app', "/Applications/To\\kease.app",
+                    "/Applications/To\nkease.app"):
+            with self.subTest(path=bad), \
+                    patch("tracker.subprocess.run") as run:
+                tracker._set_login_item(True, bad)
+                run.assert_not_called()
+
+    def test_enable_runs_osascript_with_the_app_path(self):
+        with patch("tracker.subprocess.run") as run:
+            tracker._set_login_item(True, self.APP)
+        run.assert_called_once()
+        argv = run.call_args[0][0]
+        self.assertEqual(argv[0], "/usr/bin/osascript")
+        self.assertEqual(argv[1], "-e")
+        self.assertIn(f'path:"{self.APP}"', argv[2])
+
+    def test_disable_deletes_the_login_item_by_name(self):
+        with patch("tracker.subprocess.run") as run:
+            tracker._set_login_item(False, self.APP)
+        run.assert_called_once()
+        self.assertIn('delete login item "Tokease"', run.call_args[0][0][2])
+
+    def test_osascript_failures_are_swallowed(self):
+        for error in (OSError("boom"), subprocess.TimeoutExpired("osascript", 5)):
+            with self.subTest(error=type(error).__name__), \
+                    patch("tracker.subprocess.run", side_effect=error):
+                tracker._set_login_item(True, self.APP)  # must not raise
+                self.assertFalse(tracker._is_login_item())
+
+    def test_is_login_item_reads_the_names_list(self):
+        with patch("tracker.subprocess.run") as run:
+            run.return_value = SimpleNamespace(stdout="Dropbox, Tokease\n")
+            self.assertTrue(tracker._is_login_item())
+            run.return_value = SimpleNamespace(stdout="Dropbox\n")
+            self.assertFalse(tracker._is_login_item())
+
+    def test_app_path_is_none_from_source(self):
+        with patch.object(tracker.sys, "frozen", False, create=True):
+            self.assertIsNone(tracker._get_app_path())
+
+    def test_app_path_is_the_enclosing_bundle_when_frozen(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            exe = Path(tmp) / "Tokease.app" / "Contents" / "MacOS" / "Tokease"
+            with patch.object(tracker.sys, "frozen", True, create=True), \
+                    patch.object(tracker.sys, "executable", str(exe)):
+                self.assertEqual(tracker._get_app_path(),
+                                 str(Path(tmp).resolve() / "Tokease.app"))
+
+    def test_app_path_is_none_when_frozen_outside_a_bundle(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            exe = Path(tmp) / "bin" / "python"
+            with patch.object(tracker.sys, "frozen", True, create=True), \
+                    patch.object(tracker.sys, "executable", str(exe)):
+                self.assertIsNone(tracker._get_app_path())
+
+
+class PublicLineCountClaimTest(unittest.TestCase):
+    """README and the landing page promise a file small enough to read: that
+    promise names exact line counts, so it must follow the code."""
+
+    def test_public_line_counts_match_the_files(self):
+        root = Path(__file__).resolve().parent.parent
+        n_tracker = len((root / "tracker.py").read_text().splitlines())
+        n_statusline = len(
+            (root / "statusline" / "tokease-statusline.py").read_text().splitlines()
+        )
+        claimed = set()
+        for doc in ("README.md", "docs/index.html"):
+            text = (root / doc).read_text()
+            for match in re.finditer(r"(\d[\d,]*)[- ]lines?\b", text):
+                claimed.add(int(match.group(1).replace(",", "")))
+        self.assertEqual(
+            claimed, {n_tracker, n_statusline},
+            f"README.md / docs/index.html claim {sorted(claimed)} lines, but "
+            f"tracker.py has {n_tracker} and tokease-statusline.py has "
+            f"{n_statusline}. Update every public line-count claim in the "
+            f"same commit as the code change.",
+        )
+
 
 if __name__ == "__main__":
     unittest.main()
