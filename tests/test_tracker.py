@@ -2381,6 +2381,84 @@ class TestLoginItemHelpers(unittest.TestCase):
                 self.assertIsNone(tracker._get_app_path())
 
 
+class TestMenuWiring(unittest.TestCase):
+    """Menu callbacks and the icon lookup: thin, but each one is a click a
+    user makes, so a renamed helper or a dropped refresh should fail here."""
+
+    def _make_app(self):
+        with patch.object(tracker.App, "_start_timer"), \
+             patch.object(tracker.App, "_refresh"):
+            return tracker.App()
+
+    def test_icon_path_from_source_is_next_to_the_script(self):
+        with patch.object(tracker.sys, "frozen", False, create=True):
+            self.assertEqual(
+                tracker._resolve_icon_path(),
+                Path(tracker.__file__).resolve().parent / "assets" / "menubar-template.png",
+            )
+
+    def test_icon_path_when_frozen_comes_from_resourcepath(self):
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch.object(tracker.sys, "frozen", True, create=True), \
+                patch.dict(os.environ, {"RESOURCEPATH": tmp}):
+            self.assertEqual(
+                tracker._resolve_icon_path(),
+                Path(tmp) / "assets" / "menubar-template.png",
+            )
+
+    def test_open_star_opens_the_repo_url(self):
+        app = self._make_app()
+        with patch("tracker.webbrowser.open") as open_url:
+            app._open_star(None)
+        open_url.assert_called_once_with(tracker.STAR_URL)
+
+    def test_toggle_login_enables_and_reads_back_the_state(self):
+        app = self._make_app()
+        app._app_path = "/Applications/Tokease.app"
+        sender = FakeMenuItem("Launch at login")
+        sender.state = 0
+        with patch("tracker._set_login_item") as set_item, \
+             patch("tracker._is_login_item", return_value=True):
+            app._toggle_login(sender)
+        set_item.assert_called_once_with(True, "/Applications/Tokease.app")
+        self.assertEqual(sender.state, 1)
+
+    def test_toggle_login_reflects_a_denied_permission(self):
+        app = self._make_app()
+        app._app_path = "/Applications/Tokease.app"
+        sender = FakeMenuItem("Launch at login")
+        sender.state = 0
+        with patch("tracker._set_login_item") as set_item, \
+             patch("tracker._is_login_item", return_value=False):
+            app._toggle_login(sender)
+        set_item.assert_called_once_with(True, "/Applications/Tokease.app")
+        self.assertEqual(sender.state, 0, "the checkmark follows System Events")
+
+    def test_toggle_title_weekly_persists_flips_state_and_refreshes(self):
+        app = self._make_app()
+        app.title_weekly = False
+        sender = FakeMenuItem("Add weekly %")
+        sender.state = 0
+        with patch("tracker._settings_set") as save, \
+             patch.object(app, "_refresh") as refresh:
+            app._toggle_title_weekly(sender)
+        self.assertTrue(app.title_weekly)
+        self.assertEqual(sender.state, 1)
+        save.assert_called_once_with(tracker._KEY_TITLE_WEEKLY, True)
+        refresh.assert_called_once_with(None)
+
+    def test_update_display_menu_checks_only_the_current_mode(self):
+        app = self._make_app()
+        modes = (tracker.DISPLAY_BOTH, tracker.DISPLAY_PCT, tracker.DISPLAY_ICON)
+        self.assertEqual(set(app._display_items), set(modes))
+        for mode in modes:
+            with self.subTest(mode=mode):
+                app.display_mode = mode
+                app._update_display_menu()
+                for other, item in app._display_items.items():
+                    self.assertEqual(item.state, 1 if other == mode else 0)
+
+
 class PublicLineCountClaimTest(unittest.TestCase):
     """README and the landing page promise a file small enough to read: that
     promise names exact line counts, so it must follow the code."""
