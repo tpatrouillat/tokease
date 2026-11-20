@@ -651,7 +651,7 @@ class App(rumps.App):
         # Notification toggle. macOS keys the banner on the bundle identifier, so
         # only the .app build shows one: brew and source runs carry the Python
         # interpreter's identity and nothing appears. Say so in the label.
-        alerts_label = f"Alert at {NOTIFY_THRESHOLDS[0]}% / {NOTIFY_THRESHOLDS[1]}%"
+        alerts_label = f"Alert at {NOTIFY_THRESHOLDS[0]}% / {NOTIFY_THRESHOLDS[1]}% (5-hour only)"
         if not self._app_path:
             alerts_label += " (.app build only)"
         self.m_alerts = rumps.MenuItem(alerts_label, callback=self._toggle_alerts)
