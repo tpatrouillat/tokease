@@ -129,6 +129,7 @@ def _render_dynamic_icon(session_pct, weekly_pct):
     img = img.resize((_ICON_SIZE_FINAL, _ICON_SIZE_FINAL), Image.LANCZOS)
     try:
         _TOKEASE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        _TOKEASE_DIR.chmod(0o700)  # mkdir's mode is ignored when the dir pre-exists
         img.save(_DYNAMIC_ICON_PATH)
     except OSError as exc:  # full disk, read-only or deleted ~/.tokease: keep the last icon
         print(f"tokease: cannot write icon: {exc!r}", file=sys.stderr)
@@ -752,7 +753,7 @@ class App(rumps.App):
         now = datetime.now(timezone.utc)
         previous = self._last_pct
         seen = _parse_iso(self._last_reset)
-        self._last_pct = pct
+        self._last_pct = pct if self.alerts_enabled else previous  # frozen while alerts are off
         if resets_at is not None:
             self._last_reset = resets_at
         elif seen is not None and seen <= now:

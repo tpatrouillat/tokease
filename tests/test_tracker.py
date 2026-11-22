@@ -672,7 +672,34 @@ class TestMaybeNotify(unittest.TestCase):
         app._last_pct = 50
         calls = self._fire(app, [99])
         self.assertEqual(calls, [])
-        self.assertEqual(app._last_pct, 99)
+        # Baseline frozen while alerts are off (see test_reenable_fires_...).
+        self.assertEqual(app._last_pct, 50)
+
+    def test_reenable_fires_for_threshold_crossed_while_disabled(self):
+        # Bug: _last_pct advanced while alerts were off, so after re-enabling
+        # the next refresh saw previous == pct and the 80% alert was lost.
+        app = self._make_app()
+        app.alerts_enabled = True
+        app._last_pct = 50
+        app.alerts_enabled = False
+        self.assertEqual(self._fire(app, [70, 85]), [])
+        app.alerts_enabled = True
+        calls = self._fire(app, [86])
+        self.assertEqual(len(calls), 1)
+        self.assertIn("80%", calls[0]["message"])
+        self.assertEqual(app._last_pct, 86)
+
+    def test_enabled_throughout_unchanged_by_freeze(self):
+        # Regression guard: with alerts on all along, normal crossing detection
+        # still works and a plateau above the threshold never double-notifies.
+        app = self._make_app()
+        app.alerts_enabled = True
+        app._last_pct = 50
+        calls = self._fire(app, [70, 85, 86, 90, 96, 97])
+        self.assertEqual(len(calls), 2)
+        self.assertIn("80%", calls[0]["message"])
+        self.assertIn("95%", calls[1]["message"])
+        self.assertEqual(app._last_pct, 97)
 
     def test_notification_exception_swallowed(self):
         app = self._make_app()
@@ -1735,6 +1762,19 @@ class TestRenderIcon(unittest.TestCase):
     def test_renders_clamps_over_100(self):
         p = tracker._render_dynamic_icon(150, 999)
         self.assertTrue(Path(p).exists())
+
+    def test_retightens_preexisting_loose_dir_to_0700(self):
+        # mkdir(mode=0o700) is a no-op on an existing dir: like the statusline
+        # script's _ensure_dir, the render path must chmod it back to 0700.
+        with tempfile.TemporaryDirectory() as tmp:
+            d = Path(tmp) / ".tokease"
+            d.mkdir(mode=0o755)
+            d.chmod(0o755)  # umask-proof
+            with patch.object(tracker, "_TOKEASE_DIR", d), \
+                 patch.object(tracker, "_DYNAMIC_ICON_PATH", d / "tokease-icon.png"):
+                p = tracker._render_dynamic_icon(50, 30)
+            self.assertEqual(p, d / "tokease-icon.png")
+            self.assertEqual(d.stat().st_mode & 0o777, 0o700)
 
 
 # ---------------------------------------------------------------------------
