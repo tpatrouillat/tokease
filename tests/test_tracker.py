@@ -1052,6 +1052,15 @@ class TestStatuslineSource(unittest.TestCase):
         _, err = tracker.fetch_usage()
         self.assertEqual(err, "error")
 
+    def test_error_on_unknown_schema(self):
+        # A future capture format must not be misread as today's: same gate
+        # as the desktop reader's version check (ADR 0003).
+        self._write({
+            "schema": 2, "captured_at": 1799999000,
+            "five_hour": {"used_percentage": 23.5, "resets_at": 1800000000},
+        })
+        self.assertEqual(tracker._read_statusline_usage(), (None, "error"))
+
     def test_normalizes_both_windows(self):
         self._write({
             "schema": 1, "captured_at": 1799999000,
@@ -1495,6 +1504,7 @@ class TestStatuslineScript(unittest.TestCase):
         proc = subprocess.run(
             [sys.executable, str(self.SCRIPT)],
             input=stdin_text, capture_output=True, text=True, env=env, timeout=10,
+            check=False,
         )
         out_file = Path(td.name) / ".tokease" / "usage.json"
         payload = json.loads(out_file.read_text(encoding="utf-8")) if out_file.exists() else None
@@ -1518,6 +1528,7 @@ class TestStatuslineScript(unittest.TestCase):
         proc = subprocess.run(
             [sys.executable, str(self.SCRIPT)],
             input=stdin_text, capture_output=True, text=True, env=env, timeout=10,
+            check=False,
         )
         out_file = Path(home) / ".tokease" / "usage.json"
         payload = json.loads(out_file.read_text(encoding="utf-8")) if out_file.exists() else None
@@ -1655,7 +1666,7 @@ class TestStatuslineScript(unittest.TestCase):
         env = {**os.environ, "HOME": td.name, "TOKEASE_STATUSLINE_QUIET": "1"}
         proc = subprocess.run(
             [sys.executable, str(self.SCRIPT)], input=json.dumps({"model": {"id": "x"}}),
-            capture_output=True, text=True, env=env, timeout=10,
+            capture_output=True, text=True, env=env, timeout=10, check=False,
         )
         self.assertEqual(proc.returncode, 0)
         kept = json.loads(good.read_text(encoding="utf-8"))
@@ -1690,7 +1701,7 @@ class TestStatuslineScript(unittest.TestCase):
         env = {**os.environ, "HOME": td.name, "TOKEASE_STATUSLINE_QUIET": "1"}
         proc = subprocess.run(
             [sys.executable, str(self.SCRIPT)], input="not json {{{",
-            capture_output=True, text=True, env=env, timeout=10,
+            capture_output=True, text=True, env=env, timeout=10, check=False,
         )
         self.assertEqual(proc.returncode, 0)
         self.assertEqual(json.loads(good.read_text())["five_hour"]["used_percentage"], 42)

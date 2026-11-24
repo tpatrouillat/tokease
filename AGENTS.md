@@ -29,6 +29,8 @@ ruff check .
 python -m pytest
 ```
 
+> `pip install -r requirements.txt` needs macOS: rumps' PyObjC dependency shells out to `/usr/bin/sw_vers` during its pip build. CI avoids this by mocking `rumps` in the tests instead of installing it (see `.github/workflows/ci.yml`).
+
 ## Things to watch
 
 - The quota reader must **never** read an authentication token: that is the product's public promise ([ADR 0002](docs/adr/0002-retrait-mode-endpoint.md)), verified in CI by `TokenFreeInvariantTest` (tests/test_tracker.py), which reads the AST of every shipped file. It is a regression tripwire, not a proof: the file staying small enough to read remains the real argument.
