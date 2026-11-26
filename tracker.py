@@ -129,6 +129,7 @@ def _render_dynamic_icon(session_pct, weekly_pct):
     img = img.resize((_ICON_SIZE_FINAL, _ICON_SIZE_FINAL), Image.LANCZOS)
     try:
         _TOKEASE_DIR.mkdir(parents=True, exist_ok=True, mode=0o700)
+        _TOKEASE_DIR.chmod(0o700)  # mkdir's mode is ignored when the dir pre-exists
         img.save(_DYNAMIC_ICON_PATH)
     except OSError as exc:  # full disk, read-only or deleted ~/.tokease: keep the last icon
         print(f"tokease: cannot write icon: {exc!r}", file=sys.stderr)
@@ -162,7 +163,7 @@ _KEY_INTERVAL = "interval_secs"
 _KEY_TITLE_WEEKLY = "title_weekly"
 
 # File written by the Claude Code statusline capture script
-# (statusline/tokease-statusline.py). Read on every refresh in statusline mode.
+# (statusline/tokease-statusline.py). Read on every refresh.
 _STATUSLINE_FILE = _TOKEASE_DIR / "usage.json"
 
 # Quota history sampled by the Claude desktop app (median 5 min, p90 45 min).
@@ -251,7 +252,7 @@ def _is_login_item():
         result = subprocess.run(
             ["/usr/bin/osascript", "-e",
              'tell application "System Events" to get the name of every login item'],
-            capture_output=True, text=True, timeout=5,
+            capture_output=True, text=True, timeout=5, check=False,
         )
         return LOGIN_ITEM_NAME in (result.stdout or "")
     except (OSError, subprocess.TimeoutExpired):
@@ -277,7 +278,7 @@ def _set_login_item(enabled, app_path):
             )
         subprocess.run(
             ["/usr/bin/osascript", "-e", script],
-            capture_output=True, timeout=5,
+            capture_output=True, timeout=5, check=False,
         )
     except (OSError, subprocess.TimeoutExpired):
         pass
@@ -365,6 +366,8 @@ def _read_statusline_usage():
     except (json.JSONDecodeError, UnicodeDecodeError):
         return None, "error"
     if not isinstance(payload, dict):
+        return None, "error"
+    if payload.get("schema", 1) != 1:
         return None, "error"
 
     data = {}
@@ -651,7 +654,7 @@ class App(rumps.App):
         # Notification toggle. macOS keys the banner on the bundle identifier, so
         # only the .app build shows one: brew and source runs carry the Python
         # interpreter's identity and nothing appears. Say so in the label.
-        alerts_label = f"Alert at {NOTIFY_THRESHOLDS[0]}% / {NOTIFY_THRESHOLDS[1]}%"
+        alerts_label = f"Alert at {NOTIFY_THRESHOLDS[0]}% / {NOTIFY_THRESHOLDS[1]}% (5-hour only)"
         if not self._app_path:
             alerts_label += " (.app build only)"
         self.m_alerts = rumps.MenuItem(alerts_label, callback=self._toggle_alerts)
@@ -752,7 +755,7 @@ class App(rumps.App):
         now = datetime.now(timezone.utc)
         previous = self._last_pct
         seen = _parse_iso(self._last_reset)
-        self._last_pct = pct
+        self._last_pct = pct if self.alerts_enabled else previous  # frozen while alerts are off
         if resets_at is not None:
             self._last_reset = resets_at
         elif seen is not None and seen <= now:
