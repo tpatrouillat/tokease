@@ -15,6 +15,7 @@ invert with the theme) — this file only governs brand/marketing assets.
 Run: venv/bin/python assets/build-logos.py
 """
 from pathlib import Path
+
 from PIL import Image, ImageDraw, ImageFont
 
 SIZE_FINAL = 512         # Base size for logo variants
@@ -35,7 +36,7 @@ TRACK = (127, 127, 127, 60)  # faint neutral track behind partial arcs
 DEMO_USAGE = [77, 35]
 
 
-def render_rings(size_final: int, scale: int = 4, fill_pcts: list = None) -> Image.Image:
+def render_rings(size_final: int, scale: int = 4, fill_pcts: list | None = None) -> Image.Image:
     """
     Render the 2-ring design at any size, in brand colors.
 
